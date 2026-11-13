@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.svg" width="112" alt="Limitful logo: a star whose every ray is stopped by a bar"></p>
+
 # Limitful
 
 An open-source desktop client for the Limitless Pendant. It pulls recordings off

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="t">
+  <title id="t">Limitful</title>
+  <!-- A star whose every ray runs into a limit. -->
+  <g stroke-linecap="round" fill="none">
+    <g transform="rotate(0 64 64)">
+      <line x1="64" y1="64" x2="64" y2="18" stroke="#0b6b58" stroke-width="7.5"/>
+      <line x1="52.0" y1="18" x2="76.0" y2="18" stroke="#f4c63a" stroke-width="9.5"/>
+    </g>
+    <g transform="rotate(45 64 64)">
+      <line x1="64" y1="64" x2="64" y2="33" stroke="#0b6b58" stroke-width="7.5"/>
+      <line x1="56.0" y1="33" x2="72.0" y2="33" stroke="#f4c63a" stroke-width="9.5"/>
+    </g>
+    <g transform="rotate(90 64 64)">
+      <line x1="64" y1="64" x2="64" y2="18" stroke="#0b6b58" stroke-width="7.5"/>
+      <line x1="52.0" y1="18" x2="76.0" y2="18" stroke="#f4c63a" stroke-width="9.5"/>
+    </g>
+    <g transform="rotate(135 64 64)">
+      <line x1="64" y1="64" x2="64" y2="33" stroke="#0b6b58" stroke-width="7.5"/>
+      <line x1="56.0" y1="33" x2="72.0" y2="33" stroke="#f4c63a" stroke-width="9.5"/>
+    </g>
+    <g transform="rotate(180 64 64)">
+      <line x1="64" y1="64" x2="64" y2="18" stroke="#0b6b58" stroke-width="7.5"/>
+      <line x1="52.0" y1="18" x2="76.0" y2="18" stroke="#f4c63a" stroke-width="9.5"/>
+    </g>
+    <g transform="rotate(225 64 64)">
+      <line x1="64" y1="64" x2="64" y2="33" stroke="#0b6b58" stroke-width="7.5"/>
+      <line x1="56.0" y1="33" x2="72.0" y2="33" stroke="#f4c63a" stroke-width="9.5"/>
+    </g>
+    <g transform="rotate(270 64 64)">
+      <line x1="64" y1="64" x2="64" y2="18" stroke="#0b6b58" stroke-width="7.5"/>
+      <line x1="52.0" y1="18" x2="76.0" y2="18" stroke="#f4c63a" stroke-width="9.5"/>
+    </g>
+    <g transform="rotate(315 64 64)">
+      <line x1="64" y1="64" x2="64" y2="33" stroke="#0b6b58" stroke-width="7.5"/>
+      <line x1="56.0" y1="33" x2="72.0" y2="33" stroke="#f4c63a" stroke-width="9.5"/>
+    </g>
+  </g>
+</svg>
