@@ -201,9 +201,10 @@ uv run limitful retime            # add --device mps on Apple Silicon to go fast
 This listens to each imported recording with local Whisper, finds where each
 line's words are actually said, and moves the line there. Limitless's text and
 speakers are kept; only the times change, and the original times are saved.
-It takes roughly a quarter of the audio's length, works newest first, and can
-be stopped and run again. Lines too short to find on their own move with the
-nearest line that was found.
+It takes roughly a fifth of the audio's length, works newest first, and can be
+stopped and run again. In testing about a quarter to two fifths of lines were
+found by their words; lines too short or too different to find move with the
+nearest line that was. `limitful retime --undo` puts everything back.
 
 Chats and account settings are not imported.
 

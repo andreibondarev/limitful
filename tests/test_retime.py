@@ -24,6 +24,14 @@ def test_lines_are_found_by_their_words():
     assert locate_lines([(3.0, "anything long enough to try")], []) == [None]
 
 
+def test_a_repeated_phrase_is_placed_at_the_nearest_occurrence():
+    # "yeah I think so too" is said three times; the line claims 21 s, so it is the
+    # one at 20 s (lines run about a second late), not the first one heard.
+    words = heard((14.0, "yeah I think so too"), (20.0, "yeah I think so too"), (26.0, "yeah I think so too"))
+    assert locate_lines([(21.0, "Yeah, I think so too.")], words) == [20.0]
+    assert locate_lines([(26.8, "Yeah, I think so too.")], words) == [26.0]
+
+
 def test_retime_moves_lines_headings_and_the_conversation(tmp_path):
     store = Store(tmp_path / "data")
     import_limitless(store, make_zip(tmp_path / "export.zip"), log=quiet)
@@ -52,4 +60,14 @@ def test_retime_moves_lines_headings_and_the_conversation(tmp_path):
     assert store.retime_recording(path, words) == (2, 3)
     assert store.db.execute("SELECT start_ms - ? FROM utterances ORDER BY start_ms", (file_start,)).fetchall() == [
         (6800,), (16800,), (67500,)]
+
+    # Undo puts lines, headings and the conversation back where the import had them.
+    assert store.undo_retime() == 3
+    assert [t - file_start for (t,) in store.db.execute("SELECT start_ms FROM utterances ORDER BY start_ms")] == [
+        8000, 18000, 68000]
+    assert store.db.execute("SELECT COUNT(*) FROM utterances WHERE orig_start_ms IS NOT NULL").fetchone() == (0,)
+    (talk,) = store.conversations(T0 - 60_000, T0 + 60_000)
+    assert talk["start"] == file_start + 8000
+    assert [s["start"] - file_start for s in talk["sections"]] == [8000, 68000, 68000]
+    assert len(store.pending_retime()) == 1 and store.undo_retime() == 0
     store.close()

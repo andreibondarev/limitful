@@ -92,6 +92,9 @@ async def _cmd_pair(args) -> int:
 async def _cmd_retime(args) -> int:
     store = Store(args.data_dir)
     try:
+        if args.undo:
+            print(f"Put {store.undo_retime()} line(s) back at their imported times.")
+            return 0
         pending = store.pending_retime()
         if not pending:
             print("Every imported recording is already re-timed.")
@@ -464,7 +467,9 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("retime", help="fix the timing of imported lines against their audio")
     data_args(p)
-    p.add_argument("--minutes", type=float, default=0, help="stop after this many minutes (default: run to the end)")
+    p.add_argument("--minutes", type=float, default=0,
+                   help="start no new recording after this many minutes (default: run to the end)")
+    p.add_argument("--undo", action="store_true", help="put re-timed lines back at their imported times")
     p.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL})")
     p.add_argument("--language", help="language code such as en (default: detect per file)")
     p.add_argument("--device", default="auto", help="auto, cpu, cuda, or mps (experimental Apple GPU support)")

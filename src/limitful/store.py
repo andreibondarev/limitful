@@ -143,6 +143,7 @@ _MIGRATIONS = [
 RETIME_MIN_WORDS = 4       # shorter lines cannot be located reliably on their own
 RETIME_MATCH = 0.75        # how alike the words must be to count as found
 RETIME_WINDOW_S = 10.0     # how far from its timestamp a line may really be
+RETIME_TYPICAL_LATE_S = 1.0  # imported timestamps run about this late (measured)
 
 
 def _plain_words(text: str) -> list[str]:
@@ -152,6 +153,7 @@ def _plain_words(text: str) -> list[str]:
 def locate_lines(lines: list[tuple[float, str]], words: list[tuple[float, str]]) -> list[float | None]:
     """Where each line (its claimed second, its text) really starts, given the
     words heard in the recording and when. None where it could not be found."""
+    import bisect
     import difflib
 
     heard = [(at, plain[0]) for at, word in words for plain in [_plain_words(word)] if plain]
@@ -159,19 +161,24 @@ def locate_lines(lines: list[tuple[float, str]], words: list[tuple[float, str]])
     found: list[float | None] = []
     for claimed, text in lines:
         want = _plain_words(text)
-        best_score, best_at = 0.0, None
+        candidates: list[tuple[float, float]] = []  # (how alike, when)
         if len(want) >= RETIME_MIN_WORDS:
-            import bisect
-
             lo = bisect.bisect_left(times, claimed - RETIME_WINDOW_S)
             hi = bisect.bisect_right(times, claimed + RETIME_WINDOW_S)
             for i in range(lo, hi):
                 got = [w for _, w in heard[i : i + len(want)]]
-                score = difflib.SequenceMatcher(None, want, got, autojunk=False).ratio()
-                # Prefer the candidate nearest the claimed time when two match equally.
-                if score > best_score + 1e-9:
-                    best_score, best_at = score, heard[i][0]
-        found.append(best_at if best_score >= RETIME_MATCH else None)
+                candidates.append(
+                    (difflib.SequenceMatcher(None, want, got, autojunk=False).ratio(), heard[i][0]))
+        top = max((score for score, _at in candidates), default=0.0)
+        if top < RETIME_MATCH:
+            found.append(None)
+            continue
+        # Several places can match about equally (a repeated phrase, or the same
+        # words one position along). Take the one nearest where the line is
+        # expected: taking the first skews every correction early.
+        expected = claimed - RETIME_TYPICAL_LATE_S
+        close = [at for score, at in candidates if score >= top - 0.05]
+        found.append(min(close, key=lambda at: abs(at - expected)))
     return found
 
 _COMMON_WORDS = frozenset("""
@@ -1049,3 +1056,25 @@ class Store:
         self.db.execute("UPDATE segments SET retimed = 1 WHERE path = ?", (path,))
         self.db.commit()
         return len(known), len(rows)
+
+    def undo_retime(self) -> int:
+        """Put every re-timed line, heading and conversation back at its imported time."""
+        (count,) = self.db.execute(
+            "SELECT COUNT(*) FROM utterances WHERE orig_start_ms IS NOT NULL").fetchone()
+        sources = [row[0] for row in self.db.execute(
+            "SELECT DISTINCT source FROM utterances WHERE orig_start_ms IS NOT NULL")]
+        self.db.execute(
+            "UPDATE utterances SET end_ms = orig_start_ms + (end_ms - start_ms), start_ms = orig_start_ms, "
+            "orig_start_ms = NULL WHERE orig_start_ms IS NOT NULL")
+        self.db.execute(
+            "UPDATE sections SET start_ms = orig_start_ms, orig_start_ms = NULL WHERE orig_start_ms IS NOT NULL")
+        for source in sources:
+            first, last = self.db.execute(
+                "SELECT MIN(start_ms), MAX(end_ms) FROM utterances WHERE source = ?", (source,)).fetchone()
+            self.db.execute("UPDATE conversations SET start_ms = ?, end_ms = ? WHERE source = ?",
+                            (first, last, source))
+        self.db.execute("UPDATE segments SET retimed = NULL")
+        self.db.commit()
+        if count:
+            self.rewrite_all_transcripts()
+        return count
