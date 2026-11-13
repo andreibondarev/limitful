@@ -296,6 +296,7 @@ const DAY_MS = 86400000, QUIET_MS = 120000;
 const clock = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" });
 const clockSec = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 const longDay = new Intl.DateTimeFormat([], { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const thisYearDay = new Intl.DateTimeFormat([], { weekday: "long", day: "numeric", month: "long" });
 
 let days = [];        // [{day, lines}] for days that have speech
 let day = null;       // "YYYY-MM-DD" being shown
@@ -438,7 +439,9 @@ function whoRow(speaker) {
 }
 
 function renderDay() {
-  $("title").textContent = longDay.format(new Date(dayStart(day)));
+  // The year is in the date field beside it; only spell it out for other years.
+  const shown = new Date(dayStart(day));
+  $("title").textContent = (shown.getFullYear() === new Date().getFullYear() ? thisYearDay : longDay).format(shown);
   document.title = `Lifelog, ${day}`;
   $("pick").value = day;
   const known = days.map((d) => d.day);
