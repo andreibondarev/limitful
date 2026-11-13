@@ -252,7 +252,29 @@
   .setup .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
   .setup .note { margin: 0.7rem 0 0; font-size: 0.9rem; }
   .setup .note.failed { color: #b3261e; }
-  .setup .row.light { margin-top: 1.1rem; gap: 0.8rem; }
+  .icon { flex: none; vertical-align: -0.18em; }
+  button .icon { margin-right: 0.4rem; vertical-align: -0.2em; }
+  .setup h2 { display: flex; align-items: center; gap: 0.55rem; }
+  .setup h2 .icon { color: var(--accent); }
+  .device {
+    display: grid; grid-template-columns: auto 1fr; gap: 1.6rem; align-items: center;
+    margin: 0 0 0.4rem; padding: 1.2rem 1.4rem; border: 1px solid var(--rule); border-radius: 16px;
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
+  }
+  .readings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.1rem; }
+  .reading { display: flex; align-items: center; gap: 0.6rem; color: var(--accent); }
+  .reading b { display: block; color: var(--ink); font-family: var(--voice); font-size: 1.45rem; font-weight: 400; line-height: 1.1; white-space: nowrap; }
+  .reading small { display: block; color: var(--muted); font-size: 0.78rem; line-height: 1.3; }
+  .meter { height: 4px; margin-top: 0.3rem; border-radius: 2px; background: var(--rule); overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--accent); }
+  .device .note { margin: 0.7rem 0 0; }
+  @media (max-width: 620px) {
+    .device { grid-template-columns: 1fr; justify-items: start; }
+    .readings { grid-template-columns: 1fr; }
+  }
+  .setup .row.light { margin-top: 1.1rem; gap: 0.6rem; color: var(--muted); }
+  .setup .row.light label { color: var(--ink); margin-right: 0.3rem; }
+  .setup .row.light output { color: var(--ink); }
   .setup .row.light input { flex: 0 1 16rem; accent-color: var(--accent); }
   .setup .row.light output { min-width: 3rem; font-variant-numeric: tabular-nums; }
   .setup .small { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
@@ -315,9 +337,9 @@
     <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
     <button class="step" id="next" aria-label="Next day with recordings">›</button>
     <input type="date" id="pick" aria-label="Go to a date">
-    <button id="ask" aria-pressed="false">Ask</button>
-    <button id="remind" aria-pressed="false">Reminders</button>
-    <button id="settings" aria-pressed="false">Settings</button>
+    <button id="ask" aria-pressed="false"><span>Ask</span></button>
+    <button id="remind" aria-pressed="false"><span id="remindLabel">Reminders</span></button>
+    <button id="settings" aria-pressed="false"><span>Settings</span></button>
     <input type="file" id="file" accept=".zip,application/zip" hidden>
     <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said">
   </div>
@@ -370,6 +392,37 @@ const pad = (n) => String(n).padStart(2, "0");
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const dayStart = (key) => { const [y, m, d] = key.split("-").map(Number); return new Date(y, m - 1, d).getTime(); };
 const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
+
+/* Icons: 24-unit line drawings that take the colour of the text around them. */
+const ICONS = {
+  ask: "M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z",
+  reminders: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z M8 12.5l2.8 2.8L16 9.5",
+  settings: "M4 7h9 M17 7h3 M4 17h3 M11 17h9 M15 4.5v5 M9 14.5v5",
+  refresh: "M20 12a8 8 0 1 1-2.6-5.9 M20 4v5h-5",
+  sync: "M12 3v12 M7 10.5l5 5 5-5 M4 20h16",
+  wave: "M3 12v0 M7 8.5v7 M11 5v14 M15 9v6 M19 11v2",
+  room: "M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Z M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
+  dim: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z",
+  bright: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z M12 3v2.5 M12 18.5V21 M3 12h2.5 M18.5 12H21 M5.6 5.6l1.8 1.8 M16.6 16.6l1.8 1.8 M5.6 18.4l1.8-1.8 M16.6 7.4l1.8-1.8",
+  summary: "M5 6h14 M5 11h14 M5 16h9",
+  import: "M12 3v11 M7.5 9.5 12 14l4.5-4.5 M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3",
+  pendant: "M9 4.5h6v4H9Z M12 21a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Z",
+  key: "M14.5 9.5a4 4 0 1 0-3.6 4l1.6 1.5h2v2h2v2h3v-3l-5.2-5.2c.1-.4.2-.9.2-1.3Z",
+};
+const SVG = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs = {}) {
+  const node = document.createElementNS(SVG, tag);
+  for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
+  return node;
+}
+function icon(name, size = 18) {
+  const svg = svgEl("svg", { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor",
+    "stroke-width": 1.7, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", class: "icon" });
+  svg.append(svgEl("path", { d: ICONS[name] }));
+  return svg;
+}
+/* A heading or button label with its icon in front. */
+const withIcon = (name, text, size) => [icon(name, size), el("span", { textContent: text })];
 
 async function get(url) {
   const res = await fetch(url);
@@ -437,7 +490,7 @@ function whereLink(r) {
 async function countReminders() {
   try {
     const waiting = (await get("/api/reminders")).filter((r) => r.status === "suggested").length;
-    $("remind").textContent = waiting ? `Reminders (${waiting})` : "Reminders";
+    $("remindLabel").textContent = waiting ? `Reminders (${waiting})` : "Reminders";
   } catch { /* leave the label as it is */ }
 }
 
@@ -977,7 +1030,8 @@ async function showSettings() {
   const tell = (text, failed) => { note.textContent = text; note.classList.toggle("failed", Boolean(failed)); };
   const save = el("button", { className: "pill main", textContent: "Save" });
   // Only switched on and off by running jobs when there is something to run it with.
-  const run = el("button", { className: now.provider ? "pill busy-off" : "pill", textContent: "Summarise new conversations now", disabled: !now.provider });
+  const run = el("button", { className: now.provider ? "pill busy-off" : "pill", disabled: !now.provider }, ...withIcon("summary", "Summarise new conversations now", 16));
+  run.dataset.label = "Summarise";
   const picked = () => document.querySelector('input[name="provider"]:checked')?.value ?? "";
   const options = el("fieldset", {},
     el("legend", { hidden: true, textContent: "What writes summaries" }),
@@ -1007,21 +1061,58 @@ async function showSettings() {
 
   // --- the pendant: what it reports, its light, and syncing on demand
   const about = el("p", { className: "note", role: "status" });
+
+  // A drawing of the pendant whose light follows the brightness slider.
+  const glow = svgEl("circle", { cx: 60, cy: 52, r: 5, fill: "var(--mark)" });
+  const halo = svgEl("circle", { cx: 60, cy: 52, r: 12, fill: "var(--mark)" });
+  const drawing = svgEl("svg", { viewBox: "0 0 120 132", width: 104, height: 114, role: "img", "aria-label": "The pendant" });
+  drawing.append(
+    svgEl("rect", { x: 42, y: 4, width: 36, height: 42, rx: 12, fill: "var(--ink)", opacity: 0.55 }),
+    svgEl("circle", { cx: 60, cy: 78, r: 46, fill: "var(--ink)" }),
+    svgEl("circle", { cx: 60, cy: 78, r: 34, fill: "none", stroke: "var(--paper)", "stroke-opacity": 0.18, "stroke-width": 1.5, "stroke-dasharray": "1.5 5" }),
+    halo, glow);
+
+  // Battery: an outline that fills to the level, turning amber then red as it runs down.
+  const cell = svgEl("rect", { x: 3.5, y: 8.5, width: 0, height: 7, rx: 1.2, stroke: "none" });
+  const battery = svgEl("svg", { viewBox: "0 0 24 24", width: 30, height: 30, fill: "none", stroke: "currentColor",
+    "stroke-width": 1.6, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" });
+  battery.append(svgEl("rect", { x: 2, y: 7, width: 17, height: 10, rx: 2.5 }), svgEl("path", { d: "M21.5 10.5v3" }), cell);
+
+  const reading = (pic, label) => {
+    const value = el("b", { textContent: "–" });
+    return { value, node: el("div", { className: "reading" }, pic, el("div", {}, value, el("small", { textContent: label }))) };
+  };
+  const power = reading(battery, "battery");
+  const waiting = reading(icon("wave", 30), "waiting to sync");
+  const room = reading(icon("room", 30), "of room left");
+  const used = el("i");
+  const meter = el("div", { className: "meter", title: "How full the pendant's storage is" }, used);
+  room.node.lastChild.append(meter);
+
   const describe = (p) => {
     about.classList.toggle("failed", Boolean(p.error));
+    const known = p.checked && !p.error;
+    power.value.textContent = known && p.battery != null ? `${p.battery}%` : "–";
+    cell.setAttribute("width", known && p.battery != null ? Math.max(1, 14 * p.battery / 100) : 0);
+    cell.setAttribute("fill", !known || p.battery == null ? "none" : p.battery < 15 ? "#b3261e" : p.battery < 30 ? "var(--mark)" : "var(--accent)");
+    waiting.value.textContent = !known ? "–" : p.minutes_waiting < 1 ? "nothing" : lengthOf(p.minutes_waiting * 60000);
+    room.value.textContent = known ? `${Math.round(p.hours_free)} h` : "–";
+    used.style.width = known && p.total_pages ? `${Math.max(1, 100 * (1 - p.free_pages / p.total_pages))}%` : "0";
     if (!p.checked) { about.textContent = "Not checked yet. Checking takes a few seconds over Bluetooth."; return; }
     const ago = Math.max(0, Math.round((Date.now() - p.checked) / 60000));
     const when = ago < 1 ? "just now" : `${ago} min ago`;
-    if (p.error) { about.textContent = `Could not reach it (${when}): ${p.error}.`; return; }
-    const waiting = p.minutes_waiting < 1 ? "Nothing waiting to sync"
-      : `${lengthOf(p.minutes_waiting * 60000)} of audio waiting to sync`;
-    about.textContent = `Battery ${p.battery ?? "?"}%. ${waiting}. Room for about ${Math.round(p.hours_free)} more hours. Checked ${when}.`;
+    about.textContent = p.error ? `Could not reach it (${when}): ${p.error}.` : `Checked ${when}.`;
   };
-  const check = el("button", { className: "pill busy-off", textContent: "Check pendant" });
-  const sync = el("button", { className: "pill busy-off", textContent: "Sync now" });
+  const check = el("button", { className: "pill busy-off" }, ...withIcon("refresh", "Check pendant", 16));
+  const sync = el("button", { className: "pill main busy-off" }, ...withIcon("sync", "Sync now", 16));
   const light = el("input", { type: "range", min: 0, max: 100, step: 5, id: "light", ariaLabel: "Brightness of the pendant's light" });
   const lightValue = el("output", { htmlFor: "light" });
-  const showLight = () => { lightValue.textContent = Number(light.value) === 0 ? "off" : `${light.value}%`; };
+  const showLight = () => {
+    const level = Number(light.value);
+    lightValue.textContent = level === 0 ? "off" : `${level}%`;
+    glow.setAttribute("opacity", level === 0 ? 0.12 : 0.35 + 0.65 * level / 100);
+    halo.setAttribute("opacity", 0.22 * level / 100);
+  };
   check.addEventListener("click", async () => {
     check.disabled = true;
     about.classList.remove("failed");
@@ -1049,24 +1140,28 @@ async function showSettings() {
   showLight();
   describe(pendantNow);
 
-  const pick = el("button", { className: "pill busy-off", textContent: "Choose an export zip" });
+  const pick = el("button", { className: "pill busy-off" }, ...withIcon("import", "Choose an export zip", 16));
   pick.addEventListener("click", () => $("file").click());
   main.replaceChildren(el("div", { className: "setup" },
-    el("h2", { textContent: "Pendant" }),
+    el("h2", {}, ...withIcon("pendant", "Pendant", 22)),
     el("p", { textContent: "Sync pulls new audio off the pendant, frees it there, then transcribes and summarises it. The pendant must be near this computer and not connected to a phone." }),
-    el("div", { className: "row" }, check, sync),
-    about,
-    el("div", { className: "row light" }, el("label", { htmlFor: "light", textContent: "Light" }), light, lightValue),
+    el("div", { className: "device" },
+      drawing,
+      el("div", {},
+        el("div", { className: "readings" }, power.node, waiting.node, room.node),
+        el("div", { className: "row" }, sync, check),
+        about)),
+    el("div", { className: "row light" }, el("label", { htmlFor: "light", textContent: "Light" }), icon("dim", 18), light, icon("bright", 20), lightValue),
     el("p", { className: "small", textContent: pendantNow.brightness == null
       ? "The pendant does not report its brightness, so this shows 100% until you set it here."
       : "The pendant does not report its brightness; this is the last value set from here." }),
     el("p", { className: "small", textContent: "To stop recording, hold the pendant's button for two seconds to switch it off. No command for pausing from here is known." }),
-    el("h2", { textContent: "Summaries" }),
+    el("h2", {}, ...withIcon("summary", "Summaries", 22)),
     el("p", { textContent: "A title, a short summary and suggested reminders for each conversation recorded from the pendant. Conversations imported from Limitless already have theirs." }),
     options,
     el("div", { className: "row" }, save, run, forget),
     note,
-    el("h2", { textContent: "Import from Limitless" }),
+    el("h2", {}, ...withIcon("import", "Import from Limitless", 22)),
     el("p", { textContent: "Bring in a data export: conversations, transcripts, audio and reminders. Importing the same export twice adds nothing." }),
     el("div", { className: "row" }, pick),
     el("p", { className: "about" }, el("b", { textContent: "*" }), " Limitful", el("br"), el("small", { textContent: "limits apply" }))));
@@ -1251,6 +1346,7 @@ function showAsk() {
 }
 $("ask").addEventListener("click", () => asking ? openDay(day) : showAsk());
 
+for (const id of ["ask", "remind", "settings"]) $(id).prepend(icon(id === "remind" ? "reminders" : id, 16));
 $("remind").addEventListener("click", () => reminding ? openDay(day) : showReminders());
 $("home").addEventListener("click", (e) => {
   e.preventDefault();
