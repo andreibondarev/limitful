@@ -30,6 +30,12 @@ class FakePendant:
     page_indices: list[int] = []
     reported_newest: int | None = None
 
+    @property
+    def is_connected(self):
+        return self.connected
+
+    drops = 0  # how many times to drop the link during the first write
+
     async def connect(self):
         self.connected = True
 
@@ -42,6 +48,10 @@ class FakePendant:
     encryption_failures = 0  # how many writes to reject before "pairing" completes
 
     async def write_gatt_char(self, _uuid, data, response=True):
+        if FakePendant.drops > 0:
+            FakePendant.drops -= 1
+            self.connected = False
+            raise BleakError("Service Discovery has not been performed yet")
         if FakePendant.encryption_failures > 0:
             FakePendant.encryption_failures -= 1
             raise BleakError("(15, 'GATT Protocol Error: Insufficient Encryption')")
@@ -80,6 +90,7 @@ def pendant(monkeypatch):
     FakePendant.page_indices = []
     FakePendant.reported_newest = None
     FakePendant.encryption_failures = 0
+    FakePendant.drops = 0
     monkeypatch.setattr(client_mod, "PAIRING_RETRY_S", 0.01)
     monkeypatch.setattr(client_mod, "PAIRING_TIMEOUT_S", 0.1)
     return FakePendant
@@ -159,6 +170,22 @@ def test_unpaired_pendant_gives_pairing_instructions(pendant, tmp_path):
     with pytest.raises(client_mod.PendantError, match="pairing mode"):
         run_sync(tmp_path)
     assert not pendant.instance.connected
+
+
+def test_reconnects_when_link_drops_during_pairing(pendant, tmp_path):
+    pendant.page_indices = [0, 1]
+    pendant.encryption_failures = 1
+    pendant.drops = 2
+    result, stored = run_sync(tmp_path)
+    assert (result.reason, stored) == ("caught_up", 2)
+    # The successful session started with a fresh encoder: time, status, mode, mode.
+    assert [f for f, _ in pendant.instance.commands] == [6, 21, 8, 8]
+
+
+def test_link_that_never_holds_is_reported(pendant, tmp_path):
+    pendant.drops = 10_000
+    with pytest.raises(client_mod.PendantError, match="dropping the connection"):
+        run_sync(tmp_path)
 
 
 def test_status_timeout_raises(pendant, tmp_path, monkeypatch):

@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .client import Pendant, PendantError, scan
+from .client import Pendant, PendantError, pair, scan
 from .store import Store
 
 
@@ -37,13 +37,29 @@ async def _cmd_scan(args) -> int:
     return 0
 
 
-async def _cmd_status(args) -> int:
-    device = await _resolve(args.address, args.timeout)
-    async with Pendant(device) as pendant:
-        state = await pendant.status()
+def _print_state(state) -> None:
     print(f"stored pages:  {state.page_count} ({state.oldest_flash_page}..{state.newest_flash_page})")
     print(f"free pages:    {state.free_capture_pages} of {state.total_capture_pages}")
     print(f"session:       {state.current_storage_session}")
+
+
+async def _cmd_status(args) -> int:
+    device = await _resolve(args.address, args.timeout)
+    async with Pendant(device) as pendant:
+        _print_state(await pendant.status())
+    return 0
+
+
+async def _cmd_pair(args) -> int:
+    print("Put the pendant in pairing mode now: while a light is visible, press once,")
+    print("then press and hold until the light turns pink, then release.")
+    print(f"Accept the pairing request if your computer shows one. Waiting {args.timeout:.0f} s...")
+    state = await pair(args.timeout)
+    if state is None:
+        print("Gave up: the pendant never accepted this computer.")
+        return 1
+    print("Paired. The pendant accepted this computer.")
+    _print_state(state)
     return 0
 
 
@@ -111,6 +127,10 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("scan", help="list pendants advertising nearby")
     p.add_argument("--timeout", type=float, default=8.0)
     p.set_defaults(func=_cmd_scan)
+
+    p = sub.add_parser("pair", help="pair this computer with the pendant (first use)")
+    p.add_argument("--timeout", type=float, default=180.0, help="how long to wait, in seconds")
+    p.set_defaults(func=_cmd_pair)
 
     p = sub.add_parser("status", help="show how much audio is stored on the pendant")
     device_args(p)

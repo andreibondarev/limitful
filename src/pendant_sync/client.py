@@ -28,7 +28,18 @@ from .store import Store
 STATUS_TIMEOUT_S = 8
 STALL_TIMEOUT_S = 30
 CHECKPOINT_EVERY_PAGES = 25
-PAIRING_TIMEOUT_S = 30
+PAIRING_TIMEOUT_S = 60
+
+_NOT_PAIRED = (
+    "the pendant refused the connection because this computer is not paired "
+    "with it. Put the pendant in pairing mode (while a light is visible, press "
+    "once, then press and hold until the light turns pink, then release), "
+    "accept the pairing request on this computer, and run the command again."
+)
+_DROPPED = (
+    "the pendant kept dropping the connection. Check it is nearby, charged and "
+    "not connected to a phone, then run the command again."
+)
 PAIRING_RETRY_S = 2
 _SETTLE_S = 1.0  # the pendant needs a moment after connect and after subscribing
 
@@ -57,55 +68,97 @@ async def scan(timeout: float = 8.0) -> list[tuple[BLEDevice, int]]:
     return sorted(pendants, key=lambda item: -item[1])
 
 
+async def pair(
+    timeout: float = 180.0, log: Callable[[str], None] = print
+) -> StorageState | None:
+    """Keep trying to reach the pendant while the user puts it in pairing mode.
+
+    Returns the storage status once an encrypted command succeeds, or None if
+    the time runs out. Logs what the pendant advertises whenever it changes, so
+    a change of mode is visible even when the connection is still refused.
+    """
+    deadline = time.monotonic() + timeout
+    last_seen: str | None = None
+    while time.monotonic() < deadline:
+        found = await BleakScanner.discover(timeout=3.0, return_adv=True)
+        target = None
+        for device, adv in found.values():
+            name = (adv.local_name or device.name or "").lower()
+            if SERVICE_UUID in [u.lower() for u in adv.service_uuids] or "pendant" in name:
+                target = (device, adv)
+                break
+        if target is None:
+            seen = "not advertising"
+        else:
+            data = ", ".join(f"{k:#06x}={v.hex()}" for k, v in target[1].manufacturer_data.items())
+            seen = f"advertising ({data or 'no manufacturer data'})"
+        if seen != last_seen:
+            log(f"pendant: {seen}")
+            last_seen = seen
+        if target is None:
+            continue
+        try:
+            async with Pendant(target[0], pairing_timeout=6) as pendant:
+                return await pendant.status()
+        except PendantError:
+            continue  # still refused or dropped; keep waiting
+        except (BleakError, asyncio.TimeoutError) as err:
+            log(f"connection attempt failed: {err}")
+    return None
+
+
 class Pendant:
     """One connection to a pendant. Use as an async context manager."""
 
-    def __init__(self, device: BLEDevice | str) -> None:
+    def __init__(self, device: BLEDevice | str, *, pairing_timeout: float | None = None) -> None:
         self._client = BleakClient(device)
+        self._pairing_timeout = PAIRING_TIMEOUT_S if pairing_timeout is None else pairing_timeout
         self._encoder = CommandEncoder()
         self._reassembler = Reassembler()
         self._status_waiter: asyncio.Future[StorageState] | None = None
         self._pages: asyncio.Queue[FlashPage] | None = None
 
     async def __aenter__(self) -> "Pendant":
-        await self._client.connect()
+        """Connect, subscribe and set the clock.
+
+        Setting the clock is the first encrypted write, so it is what triggers
+        pairing. The pendant rejects it until the link is encrypted, and may
+        drop the link while the operating system pairs (macOS shows a dialog),
+        so keep reconnecting and retrying until the write goes through.
+        """
+        deadline = time.monotonic() + self._pairing_timeout
         try:
-            await asyncio.sleep(_SETTLE_S)
-            await self._client.start_notify(RX_CHAR_UUID, self._on_notify)
-            await asyncio.sleep(_SETTLE_S)
-            await self._first_write()
+            while True:
+                try:
+                    if not self._client.is_connected:
+                        self._encoder = CommandEncoder()  # a reconnect is a new session
+                        self._reassembler.clear()
+                        await self._client.connect()
+                        await asyncio.sleep(_SETTLE_S)
+                        await self._client.start_notify(RX_CHAR_UUID, self._on_notify)
+                        await asyncio.sleep(_SETTLE_S)
+                    await self._write(self._encoder.set_time(int(time.time() * 1000)))
+                    return self
+                except (BleakError, asyncio.TimeoutError) as err:
+                    text = str(err).lower()
+                    refused = "encryption" in text or "authentication" in text
+                    if not refused and self._client.is_connected:
+                        raise
+                    if time.monotonic() >= deadline:
+                        raise PendantError(_NOT_PAIRED if refused else _DROPPED) from None
+                    await asyncio.sleep(PAIRING_RETRY_S)
         except BaseException:
-            await self._client.disconnect()
+            await self._disconnect_quietly()
             raise
-        return self
 
     async def __aexit__(self, *exc) -> None:
-        await self._client.disconnect()
+        await self._disconnect_quietly()
 
-    async def _first_write(self) -> None:
-        """Set the clock. This is the first encrypted write, so it triggers pairing.
-
-        The pendant rejects writes until the link is encrypted. The operating
-        system then starts pairing (macOS shows a dialog); retry while it does.
-        """
-        deadline = time.monotonic() + PAIRING_TIMEOUT_S
-        while True:
-            try:
-                await self._write(self._encoder.set_time(int(time.time() * 1000)))
-                return
-            except BleakError as err:
-                text = str(err).lower()
-                if "encryption" not in text and "authentication" not in text:
-                    raise
-                if time.monotonic() >= deadline:
-                    raise PendantError(
-                        "the pendant refused the connection because this computer is "
-                        "not paired with it. Put the pendant in pairing mode (while a "
-                        "light is visible, press once, then press and hold until the "
-                        "light turns pink, then release), accept the pairing request "
-                        "on this computer, and run the command again."
-                    ) from None
-                await asyncio.sleep(PAIRING_RETRY_S)
+    async def _disconnect_quietly(self) -> None:
+        try:
+            await self._client.disconnect()
+        except (BleakError, asyncio.TimeoutError):
+            pass
 
     async def _write(self, packet: bytes) -> None:
         await self._client.write_gatt_char(TX_CHAR_UUID, packet, response=True)

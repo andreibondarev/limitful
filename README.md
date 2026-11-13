@@ -25,6 +25,7 @@ off Bluetooth on your phone (or quit the Limitless app) first.
 
 ```sh
 uv run pendant-sync scan      # find the pendant
+uv run pendant-sync pair      # first use only: pair this computer with it
 uv run pendant-sync status    # how much audio is stored on it
 uv run pendant-sync sync      # download everything into ./data
 ```
