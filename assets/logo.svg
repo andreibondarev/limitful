@@ -1,15 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="t">
   <title id="t">Limitful</title>
-  <!-- L with a footnote mark. The footnote reads: limits apply. -->
   <rect x="4" y="4" width="120" height="120" rx="28" fill="#0b6b58"/>
-  <path d="M 34 30 h 15 v 54 h 34 v 14 h -49 Z" fill="#eef2ef"/>
-  <g transform="translate(84 44)" fill="#f4c63a">
-    <path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(0)"/>
-    <path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(60)"/>
-    <path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(120)"/>
-    <path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(180)"/>
-    <path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(240)"/>
-    <path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(300)"/>
-    <circle r="2.31"/>
+  <g transform="translate(64.0 64.0)" fill="#f4c63a">
+    <path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(0)"/>
+    <path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(60)"/>
+    <path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(120)"/>
+    <path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(180)"/>
+    <path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(240)"/>
+    <path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(300)"/>
+    <circle r="4.41"/>
   </g>
 </svg>

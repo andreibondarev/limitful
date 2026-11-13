@@ -1,9 +1,4 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.svg">
-    <img src="assets/wordmark.svg" width="340" alt="Limitful*, with the footnote: limits apply">
-  </picture>
-</p>
+<p align="center"><img src="assets/banner.svg" width="560" alt="Limitful. Fine print: limits apply."></p>
 
 # Limitful
 
@@ -257,6 +252,9 @@ uv run pytest
 The pendant's Bluetooth protocol was reverse-engineered by the
 [Omi](https://github.com/BasedHardware/omi) project (MIT licence). This is an
 independent implementation of the same wire format.
+
+The wordmark is set in [Outfit](https://github.com/Outfitio/Outfit-Fonts) (SIL Open Font
+License), drawn as outlines; `assets/make_logo.py` rebuilds the logo files.
 
 Not affiliated with or endorsed by Limitless or Meta.
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lifelog</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22><rect x=%224%22 y=%224%22 width=%22120%22 height=%22120%22 rx=%2228%22 fill=%22%230b6b58%22/><path d=%22M 34 30 h 15 v 54 h 34 v 14 h -49 Z%22 fill=%22%23eef2ef%22/><g transform=%22translate(84 44)%22 fill=%22%23f4c63a%22><path d=%22M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z%22 transform=%22rotate(0)%22/><path d=%22M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z%22 transform=%22rotate(60)%22/><path d=%22M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z%22 transform=%22rotate(120)%22/><path d=%22M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z%22 transform=%22rotate(180)%22/><path d=%22M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z%22 transform=%22rotate(240)%22/><path d=%22M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z%22 transform=%22rotate(300)%22/><circle r=%222.31%22/></g></svg>">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22><rect x=%224%22 y=%224%22 width=%22120%22 height=%22120%22 rx=%2228%22 fill=%22%230b6b58%22/><g transform=%22translate(64.0 64.0)%22 fill=%22%23f4c63a%22><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(0)%22/><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(60)%22/><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(120)%22/><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(180)%22/><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(240)%22/><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(300)%22/><circle r=%224.41%22/></g></svg>">
 <style>
   :root {
     --paper: #eef2ef;
@@ -210,9 +210,9 @@
   .setup .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
   .setup .note { margin: 0.7rem 0 0; font-size: 0.9rem; }
   .setup .note.failed { color: #b3261e; }
-  .setup .about { margin: 3rem 0 0; font-family: var(--voice); font-size: 1.3rem; color: var(--muted); line-height: 1.3; }
-  .setup .about sup { color: var(--mark); font-family: var(--chrome); font-weight: 700; }
-  .setup .about small { font-family: var(--chrome); font-size: 0.8rem; }
+  .setup .about { margin: 3rem 0 0; font-size: 1.25rem; font-weight: 600; line-height: 1.3; }
+  .setup .about b { color: var(--mark); font-size: 1.5em; line-height: 0; vertical-align: -0.18em; }
+  .setup .about small { font-size: 0.8rem; font-weight: 400; color: var(--muted); margin-left: 1.45rem; }
   #remind[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .quiet {
     margin: 0.9rem 0 0.9rem var(--gutter);
@@ -264,7 +264,7 @@
 <body>
 <header>
   <div class="bar">
-    <a id="home" href="#" aria-label="Limitful: go to the latest day" title="Limitful* (*limits apply)"><svg viewBox="0 0 128 128" width="36" height="36" aria-hidden="true"><rect x="4" y="4" width="120" height="120" rx="28" fill="#0b6b58"/><path d="M 34 30 h 15 v 54 h 34 v 14 h -49 Z" fill="#eef2ef"/><g transform="translate(84 44)" fill="#f4c63a"><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(0)"/><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(60)"/><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(120)"/><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(180)"/><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(240)"/><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(300)"/><circle r="2.31"/></g></svg></a>
+    <a id="home" href="#" aria-label="Limitful: go to the latest day" title="Limitful (*limits apply)"><svg viewBox="0 0 128 128" width="36" height="36" aria-hidden="true"><rect x="4" y="4" width="120" height="120" rx="28" fill="#0b6b58"/><g transform="translate(64.0 64.0)" fill="#f4c63a"><path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(0)"/><path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(60)"/><path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(120)"/><path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(180)"/><path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(240)"/><path d="M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z" transform="rotate(300)"/><circle r="4.41"/></g></svg></a>
     <h1 id="title">Lifelog</h1>
     <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
     <button class="step" id="next" aria-label="Next day with recordings">›</button>
@@ -941,7 +941,7 @@ async function showSettings() {
     el("h2", { textContent: "Import from Limitless" }),
     el("p", { textContent: "Bring in a data export: conversations, transcripts, audio and reminders. Importing the same export twice adds nothing." }),
     el("div", { className: "row" }, pick),
-    el("p", { className: "about" }, "Limitful", el("sup", { textContent: "*" }), el("br"), el("small", {}, el("sup", { textContent: "*" }), "limits apply"))));
+    el("p", { className: "about" }, el("b", { textContent: "*" }), " Limitful", el("br"), el("small", { textContent: "limits apply" }))));
   showKey();
   watchJob();
 }
