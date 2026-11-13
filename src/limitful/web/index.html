@@ -85,7 +85,7 @@
   #hours span { position: absolute; top: 0.15rem; }
   #hours span:not(:first-child) { transform: translateX(-50%); }
 
-  main { padding: 1.5rem clamp(1rem, 4vw, 3rem) 7rem; max-width: 60rem; }
+  main { padding: 1.5rem clamp(1rem, 4vw, 3rem) 9rem; max-width: 60rem; }
   .line {
     display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr);
     align-items: baseline;
@@ -197,10 +197,21 @@
 
   #player {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 3;
-    display: flex; align-items: center; gap: 0.9rem;
-    padding: 0.7rem clamp(1rem, 4vw, 3rem);
+    display: flex; flex-direction: column; gap: 0.45rem;
+    padding: 0.65rem clamp(1rem, 4vw, 3rem) 0.75rem;
     background: var(--ink); color: var(--paper);
   }
+  #transport { display: flex; align-items: center; gap: 0.7rem; }
+  #seek { flex: 1; min-width: 5rem; height: 1.4rem; margin: 0; accent-color: var(--mark); cursor: pointer; }
+  #at, #total { font-size: 0.82rem; font-variant-numeric: tabular-nums; opacity: 0.8; min-width: 2.6rem; }
+  #at { text-align: right; }
+  .skip {
+    border: 1px solid color-mix(in srgb, var(--paper) 35%, transparent); border-radius: 999px;
+    background: transparent; color: inherit; padding: 0.3rem 0.65rem; cursor: pointer;
+    font-size: 0.82rem; white-space: nowrap;
+  }
+  .skip:hover { border-color: var(--mark); color: var(--mark); }
+  #player :focus-visible { outline-color: var(--mark); }
   #player[hidden] { display: none; }
   #toggle {
     border: 0; border-radius: 999px; padding: 0.4rem 1rem; cursor: pointer;
@@ -234,8 +245,15 @@
 </header>
 <main id="main" aria-live="polite"></main>
 <div id="player" hidden>
-  <button id="toggle">Pause</button>
   <div id="now"></div>
+  <div id="transport">
+    <button id="toggle">Pause</button>
+    <button class="skip" id="back" aria-label="Back 10 seconds">−10 s</button>
+    <button class="skip" id="ahead" aria-label="Forward 10 seconds">+10 s</button>
+    <span id="at">0:00</span>
+    <input type="range" id="seek" min="0" max="0" step="0.1" value="0" aria-label="Position in this conversation">
+    <span id="total">0:00</span>
+  </div>
 </div>
 <audio id="audio" preload="auto"></audio>
 
@@ -595,19 +613,74 @@ async function runSearch(query) {
   main.replaceChildren(...nodes);
 }
 
-/* Playback: one audio element, highlighted line follows the sound. */
+/* Playback. One audio element plays a "track": the recordings behind one conversation,
+   end to end, so the timeline covers the whole conversation and not one short file. */
+let track = null;  // { key, last, pieces: [{ audio, from, to, base }], total, at }
+const seek = $("seek");
+let scrubbing = false;
+
+function buildTrack(u) {
+  const g = groups.find((x) => x.own.some((v) => v.id === u.id));
+  const own = (g ? g.own : [u]).filter((v) => v.audio);
+  const pieces = [];
+  for (const v of own) {
+    const from = v.offset / 1000, to = (v.offset + (v.end - v.start)) / 1000 + 1;
+    const last = pieces[pieces.length - 1];
+    if (last && last.audio === v.audio) last.to = Math.max(last.to, to);
+    else pieces.push({ audio: v.audio, from, to });
+  }
+  let base = 0;
+  for (const p of pieces) { p.base = base; base += p.to - p.from; }
+  return { key: g ? g.key : `u${u.id}`, last: own[own.length - 1], pieces, total: base, at: 0 };
+}
+
+/* Move the audio element to a time in a recording, loading the file if needed. */
+function cue(path, time, start) {
+  const go = () => { audio.currentTime = time; if (start) audio.play(); };
+  if (audio.dataset.src !== path) {
+    audio.dataset.src = path;
+    audio.src = path;
+    audio.addEventListener("loadedmetadata", go, { once: true });
+  } else go();
+}
+
 function play(u) {
   if (!u.audio) return;  // imported line with no recording
-  const start = () => { audio.currentTime = u.offset / 1000; audio.play(); };
   playing = u;
-  if (audio.dataset.src !== u.audio) {
-    audio.dataset.src = u.audio;
-    audio.src = u.audio;
-    audio.addEventListener("loadedmetadata", start, { once: true });
-  } else {
-    start();
-  }
+  const g = groups.find((x) => x.own.some((v) => v.id === u.id));
+  if (!track || track.key !== (g ? g.key : `u${u.id}`)) track = buildTrack(u);
+  track.at = Math.max(0, track.pieces.findIndex((p) => p.audio === u.audio));
+  cue(u.audio, u.offset / 1000, true);
   markPlaying();
+  showPosition();
+}
+
+/* Where we are in the conversation, in seconds from its start. */
+function position() {
+  const p = track.pieces[track.at];
+  return p.base + Math.min(Math.max(0, audio.currentTime - p.from), p.to - p.from);
+}
+
+function jumpTo(seconds) {
+  if (!track) return;
+  const want = Math.min(Math.max(0, seconds), Math.max(0, track.total - 0.3));
+  let i = track.pieces.findIndex((p) => want < p.base + (p.to - p.from));
+  if (i < 0) i = track.pieces.length - 1;
+  const p = track.pieces[i];
+  track.at = i;
+  cue(p.audio, p.from + (want - p.base), !audio.paused);
+}
+
+/* The end of a recording, or of this conversation's part of it: carry on with what follows. */
+function advance() {
+  if (track.at + 1 < track.pieces.length) {
+    track.at += 1;
+    const p = track.pieces[track.at];
+    cue(p.audio, p.from, true);
+    return;
+  }
+  const next = lines.find((u) => u.audio && u.start > track.last.start);
+  if (next) play(next); else { playing = null; track = null; markPlaying(); }
 }
 
 function markPlaying() {
@@ -620,18 +693,38 @@ function markPlaying() {
   $("now").replaceChildren(el("time", { textContent: clockSec.format(t) }), playing.text);
 }
 
+const stamp = (seconds) => {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+};
+
+function showPosition() {
+  if (!track) return;
+  seek.max = track.total;
+  $("total").textContent = stamp(track.total);
+  if (scrubbing) return;  // the reader's hand wins over the playhead
+  const at = position();
+  seek.value = at;
+  $("at").textContent = stamp(at);
+  seek.setAttribute("aria-valuetext", `${stamp(at)} of ${stamp(track.total)}`);
+}
+
 audio.addEventListener("timeupdate", () => {
-  if (!playing) return;
+  if (!playing || !track) return;
+  const piece = track.pieces[track.at];
+  if (!audio.seeking && audio.dataset.src === piece.audio && audio.currentTime > piece.to + 0.25) {
+    advance();
+    return;
+  }
   const at = audio.currentTime * 1000;
-  const same = lines.filter((u) => u.audio === playing.audio && u.offset <= at + 150);
+  const same = lines.filter((u) => u.audio === audio.dataset.src && u.offset <= at + 150);
   const current = same[same.length - 1];
   if (current && current.id !== playing.id) { playing = current; markPlaying(); }
+  showPosition();
 });
-audio.addEventListener("ended", () => {
-  // Carry on into the next recording, so a conversation plays through.
-  const next = lines.find((u) => u.start > playing.start && u.audio !== playing.audio);
-  if (next) play(next); else { playing = null; markPlaying(); }
-});
+audio.addEventListener("seeked", showPosition);
+audio.addEventListener("ended", () => { if (track) advance(); });
 audio.addEventListener("play", () => { $("toggle").textContent = "Pause"; });
 audio.addEventListener("pause", () => { $("toggle").textContent = "Play"; });
 audio.addEventListener("error", () => {
@@ -639,6 +732,10 @@ audio.addEventListener("error", () => {
   $("now").textContent = "This recording could not be played. Chrome and Firefox play these files; older Safari does not.";
 });
 $("toggle").addEventListener("click", () => audio.paused ? audio.play() : audio.pause());
+seek.addEventListener("input", () => { scrubbing = true; $("at").textContent = stamp(seek.value); });
+seek.addEventListener("change", () => { scrubbing = false; jumpTo(Number(seek.value)); });
+$("back").addEventListener("click", () => jumpTo(position() - 10));
+$("ahead").addEventListener("click", () => jumpTo(position() + 10));
 
 strip.addEventListener("click", (e) => {
   if (!lines.length) return;
@@ -719,6 +816,8 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && (searching || reminding)) { openDay(day); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "/") { e.preventDefault(); $("search").focus(); }
+  else if (e.shiftKey && track && e.key === "ArrowLeft") jumpTo(position() - 10);
+  else if (e.shiftKey && track && e.key === "ArrowRight") jumpTo(position() + 10);
   else if (e.key === "ArrowLeft") step(-1);
   else if (e.key === "ArrowRight") step(1);
   else if (e.key === " " && playing && !e.target.matches("button")) { e.preventDefault(); $("toggle").click(); }
