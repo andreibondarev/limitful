@@ -240,6 +240,18 @@ class Library:
     def rename_speaker(self, speaker_id: int, name: str) -> int:
         return self._with_store(lambda store: store.rename_speaker(speaker_id, name))
 
+    def chats(self) -> list[dict]:
+        return self._with_store(lambda store: store.chats())
+
+    def chat(self, chat_id: int) -> list[dict]:
+        return self._with_store(lambda store: store.chat_messages(chat_id))
+
+    def delete_chat(self, chat_id: int) -> None:
+        self._with_store(lambda store: store.delete_chat(chat_id))
+
+    def save_exchange(self, chat_id, question: str, answer: str, lines: dict) -> int:
+        return self._with_store(lambda store: store.save_exchange(chat_id, question, answer, lines))
+
     def assign_line_speaker(self, utterance_id: int, name: str) -> int:
         return self._with_store(lambda store: store.assign_line_speaker(utterance_id, name))
 
@@ -301,6 +313,11 @@ def make_handler(library: Library):
                     return self._json(library.job)
                 if path == "/api/settings":
                     return self._json(library.settings())
+                if path == "/api/chats":
+                    return self._json(library.chats())
+                found = re.match(r"^/api/chats/(\d+)$", path)
+                if found:
+                    return self._json(library.chat(int(found.group(1))))
                 if path == "/api/search":
                     query = parse_qs(url.query).get("q", [""])[0].strip()
                     return self._json(library.search(query) if query else [])
@@ -327,6 +344,10 @@ def make_handler(library: Library):
                 return self._import()
             if path == "/api/ask":
                 return self._ask()
+            found = re.match(r"^/api/chats/(\d+)/delete$", path)
+            if found:
+                library.delete_chat(int(found.group(1)))
+                return self._json({"deleted": int(found.group(1))})
             if path in ("/api/settings", "/api/digest"):
                 try:
                     length = min(int(self.headers.get("Content-Length") or 0), 8192)
@@ -371,14 +392,23 @@ def make_handler(library: Library):
             """Answer a question, sending progress as it happens.
 
             The reply is one JSON object per line: {"step": ...} while Claude looks
-            things up, then {"answer": ..., "lines": ...} or {"error": ...}.
+            things up, {"text": ...} for each piece of the answer as it is written
+            ({"text": null} means discard what came so far), then the whole
+            {"answer": ..., "lines": ..., "chat": thread id}, or {"error": ...}.
+            Send {"question": ..., "chat": thread id or null}.
             """
             try:
                 length = min(int(self.headers.get("Content-Length") or 0), 1 << 20)
                 body = json.loads(self.rfile.read(length) or b"{}")
-                history = body.get("messages") if isinstance(body, dict) else None
-                if not isinstance(history, list) or not history:
+                if not isinstance(body, dict):
+                    raise ValueError("send a JSON object")
+                question = body.get("question")
+                if not isinstance(question, str) or not question.strip():
                     raise ValueError("ask a question first")
+                question = question.strip()[:4000]
+                chat_id = body.get("chat")
+                if chat_id is not None and (not isinstance(chat_id, int) or isinstance(chat_id, bool)):
+                    raise ValueError("chat must be a thread id")
             except ValueError as err:
                 return self._text(HTTPStatus.BAD_REQUEST, str(err))
             if config.provider() != "claude":
@@ -399,8 +429,17 @@ def make_handler(library: Library):
                     pass  # the reader left; let the answer finish quietly
 
             try:
-                emit(ask_mod.answer(library.data_dir, history[-40:], config.api_key(),
-                                    on_step=lambda step: emit({"step": step})))
+                # The thread so far comes from the database, not from the page.
+                earlier = library.chat(chat_id) if chat_id is not None else []
+                history = [{"role": m["role"], "content": m["content"]} for m in earlier][-40:]
+                history.append({"role": "user", "content": question})
+                result = ask_mod.answer(library.data_dir, history, config.api_key(),
+                                        on_step=lambda step: emit({"step": step}),
+                                        on_text=lambda text: emit({"text": text}))
+                # Saved only once answered, so a failed question leaves no half-thread.
+                result["chat"] = library.save_exchange(
+                    chat_id, question, result["answer"], result["lines"])
+                emit(result)
             except digest_mod.DigestError as err:
                 emit({"error": str(err)})
             except Exception as err:  # never leave the page waiting on a broken stream

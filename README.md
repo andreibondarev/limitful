@@ -167,16 +167,19 @@ Chats and account settings are not imported.
 The Lifelog's Ask page answers questions about what was said: "what did I agree
 to with Joseph?", "what did they say a session costs?". Claude looks through
 your transcripts with three tools (search lines, list conversations, read a
-conversation), then answers. Each fact carries a small link showing when it was
+conversation), then answers. You see what it is looking up, and the answer
+appears as it is written. Each fact carries a small link showing when it was
 said; clicking it opens that line and plays it, so you can check the answer
-against the recording. Follow-up questions keep the thread's context.
+against the recording. Follow-up questions keep the thread's context, and
+threads are saved in your data folder: reopen or delete them under "Earlier
+chats".
 
 From the command line: `uv run limitful ask "what did I agree to this week?"`.
 
 Ask needs Claude chosen in Settings. Your questions and the transcript lines
 Claude reads are sent to Anthropic. Search is by literal words, not meaning,
 so Claude tries several phrasings; it can still miss things said in unexpected
-words. The thread lives in the page and is gone when you reload it.
+words.
 
 ### Running in the background
 

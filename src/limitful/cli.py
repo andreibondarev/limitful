@@ -250,13 +250,24 @@ async def _cmd_ask(args) -> int:
         raise PendantError("ask needs Claude: pass --provider claude or choose it in Settings. "
                            "Your question and the transcripts it reads are sent to Anthropic.")
     Store(args.data_dir).close()  # make sure the database is up to date
+    written = []
+
+    def on_text(text: str | None) -> None:
+        if text is None:  # a remark before another lookup: start the answer again
+            if written:
+                print("\n", flush=True)
+            written.clear()
+        else:
+            written.append(text)
+            print(text, end="", flush=True)
+
     try:
-        result = await asyncio.to_thread(
+        await asyncio.to_thread(
             ask.answer, args.data_dir, [{"role": "user", "content": args.question}], config.api_key(),
-            args.llm_model or ask.CLAUDE_MODEL, lambda step: print(f"  {step}", file=sys.stderr))
+            args.llm_model or ask.CLAUDE_MODEL, lambda step: print(f"  {step}", file=sys.stderr), on_text)
     except DigestError as err:
         raise PendantError(str(err)) from None
-    print(result["answer"])
+    print()
     return 0
 
 

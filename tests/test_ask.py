@@ -87,10 +87,15 @@ def test_ask_endpoint_streams_steps_then_the_answer(tmp_path, monkeypatch):
 
     from limitful.web import make_server
 
-    def fake_answer(data_dir, history, api_key=None, model=None, on_step=lambda s: None):
+    def fake_answer(data_dir, history, api_key=None, model=None, on_step=lambda s: None,
+                    on_text=lambda t: None):
+        on_text("Let me look.")
+        on_text(None)
         on_step("Searching for “budget”")
         if history[-1]["content"] == "break":
             raise digest.DigestError("could not reach the Anthropic API")
+        on_text("You asked: ")
+        on_text("something")
         return {"answer": f"You asked: {history[-1]['content']} [L1]", "lines": {"1": {"day": "2026-11-08"}}}
 
     monkeypatch.setattr(ask, "answer", fake_answer)
@@ -107,18 +112,48 @@ def test_ask_endpoint_streams_steps_then_the_answer(tmp_path, monkeypatch):
         except urllib.error.HTTPError as err:
             return err.code, err.read().decode()
 
-    question = {"messages": [{"role": "user", "content": "what about the budget?"}]}
+    def get(path):
+        with urllib.request.urlopen(url.replace("/api/ask", path)) as res:
+            return json.loads(res.read())
+
+    question = {"question": "what about the budget?"}
     status, body = post(question)
     assert status == 400 and "Choose Claude in Settings" in body  # nothing is sent until Claude is chosen
 
     config.update(provider="claude")
     assert post(question) == (200, [
+        {"text": "Let me look."}, {"text": None},
         {"step": "Searching for “budget”"},
-        {"answer": "You asked: what about the budget? [L1]", "lines": {"1": {"day": "2026-11-08"}}}])
-    assert post({"messages": [{"role": "user", "content": "break"}]})[1][-1] == {
-        "error": "could not reach the Anthropic API"}
-    assert post({"messages": []})[0] == 400
+        {"text": "You asked: "}, {"text": "something"},
+        {"answer": "You asked: what about the budget? [L1]", "lines": {"1": {"day": "2026-11-08"}}, "chat": 1}])
+
+    # The thread is saved, and a follow-up is answered with it as context.
+    assert [(c["id"], c["title"], c["questions"]) for c in get("/api/chats")] == [(1, "what about the budget?", 1)]
+    seen = []
+    monkeypatch.setattr(ask, "answer", lambda d, history, *a, **k: seen.append(history) or {"answer": "Friday", "lines": {}})
+    assert post({"question": "and when?", "chat": 1})[1][-1]["chat"] == 1
+    assert [m["content"] for m in seen[0]] == ["what about the budget?", "You asked: what about the budget? [L1]", "and when?"]
+    thread = get("/api/chats/1")
+    assert [(m["role"], m["content"]) for m in thread] == [
+        ("user", "what about the budget?"), ("assistant", "You asked: what about the budget? [L1]"),
+        ("user", "and when?"), ("assistant", "Friday")]
+    assert thread[1]["lines"] == {"1": {"day": "2026-11-08"}}
+    assert get("/api/chats")[0]["questions"] == 2
+
+    # A question that fails is not saved.
+    monkeypatch.setattr(ask, "answer", fake_answer)
+    assert post({"question": "break"})[1][-1] == {"error": "could not reach the Anthropic API"}
+    assert len(get("/api/chats")) == 1
+
+    assert post({"question": "  "})[0] == 400
+    assert post({"question": "x", "chat": "one"})[0] == 400
     assert post(question, {"Content-Type": "text/plain"})[0] == 415
     assert post(question, {"Content-Type": "application/json", "Host": "evil.example"})[0] == 403
+
+    req = urllib.request.Request(url.replace("/api/ask", "/api/chats/1/delete"), data=b"{}",
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req) as res:
+        assert json.loads(res.read()) == {"deleted": 1}
+    assert get("/api/chats") == [] and get("/api/chats/1") == []
     server.shutdown()
     server.server_close()

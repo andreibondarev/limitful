@@ -90,6 +90,21 @@ CREATE TABLE IF NOT EXISTS sections (
     title           TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sections_conversation ON sections (conversation_id);
+CREATE TABLE IF NOT EXISTS chats (
+    id         INTEGER PRIMARY KEY,
+    title      TEXT    NOT NULL,        -- the first question, shortened
+    created_ms INTEGER NOT NULL,
+    updated_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id         INTEGER PRIMARY KEY,
+    chat_id    INTEGER NOT NULL,
+    role       TEXT    NOT NULL,        -- user or assistant
+    content    TEXT    NOT NULL,
+    lines      TEXT,                    -- JSON: where each cited line is, for an answer
+    created_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS chat_messages_chat ON chat_messages (chat_id);
 CREATE TABLE IF NOT EXISTS reminders (
     id              INTEGER PRIMARY KEY,
     conversation_id INTEGER NOT NULL,
@@ -852,4 +867,42 @@ class Store:
         cur = self.db.execute("UPDATE reminders SET status = ? WHERE id = ?", (status, reminder_id))
         if cur.rowcount == 0:
             raise ValueError(f"there is no reminder {reminder_id}")
+        self.db.commit()
+
+    # --- Ask threads ------------------------------------------------------------------
+
+    def save_exchange(self, chat_id: int | None, question: str, answer: str, lines: dict) -> int:
+        """Store a question and its answer, starting a new thread when chat_id is None."""
+        now = int(time.time() * 1000)
+        if chat_id is None or self.db.execute(
+                "SELECT 1 FROM chats WHERE id = ?", (chat_id,)).fetchone() is None:
+            title = " ".join(question.split())
+            title = title if len(title) <= 80 else title[:79].rstrip() + "…"
+            chat_id = self.db.execute(
+                "INSERT INTO chats (title, created_ms, updated_ms) VALUES (?, ?, ?)",
+                (title, now, now)).lastrowid
+        self.db.executemany(
+            "INSERT INTO chat_messages (chat_id, role, content, lines, created_ms) VALUES (?, ?, ?, ?, ?)",
+            [(chat_id, "user", question, None, now), (chat_id, "assistant", answer, json.dumps(lines), now)])
+        self.db.execute("UPDATE chats SET updated_ms = ? WHERE id = ?", (now, chat_id))
+        self.db.commit()
+        return chat_id
+
+    def chats(self) -> list[dict]:
+        """Saved threads, most recently used first."""
+        return [{"id": cid, "title": title, "updated": updated, "questions": count}
+                for cid, title, updated, count in self.db.execute(
+                    "SELECT c.id, c.title, c.updated_ms, "
+                    "(SELECT COUNT(*) FROM chat_messages m WHERE m.chat_id = c.id AND m.role = 'user') "
+                    "FROM chats c ORDER BY c.updated_ms DESC, c.id DESC")]
+
+    def chat_messages(self, chat_id: int) -> list[dict]:
+        return [{"role": role, "content": content, "lines": json.loads(lines) if lines else {}}
+                for role, content, lines in self.db.execute(
+                    "SELECT role, content, lines FROM chat_messages WHERE chat_id = ? ORDER BY id",
+                    (chat_id,))]
+
+    def delete_chat(self, chat_id: int) -> None:
+        self.db.execute("DELETE FROM chat_messages WHERE chat_id = ?", (chat_id,))
+        self.db.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
         self.db.commit()

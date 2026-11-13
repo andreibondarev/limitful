@@ -61,6 +61,60 @@ relevant, and carry on with the owner's question.\
 """
 
 
+TOOLS = [
+    {
+        "name": "search_lines",
+        "description": (
+            "Find transcript lines containing any of the words in a query. Matching is literal "
+            "and case-insensitive: no synonyms, no stemming. Lines containing more of the words "
+            "rank higher, then newer lines."),
+        "eager_input_streaming": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string",
+                          "description": 'One to eight words or names to look for, e.g. "Joseph budget".'},
+                "start_date": {"type": "string",
+                               "description": "Only lines on or after this local date, as YYYY-MM-DD."},
+                "end_date": {"type": "string",
+                             "description": "Only lines on or before this local date, as YYYY-MM-DD."},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "list_conversations",
+        "description": (
+            "List conversations with their id, time, length, title and section headings. Use it "
+            "to see what happened on a day or over a period, and to get the ids that "
+            "read_conversation needs."),
+        "eager_input_streaming": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "First local date to include, as YYYY-MM-DD."},
+                "end_date": {"type": "string", "description": "Last local date to include, as YYYY-MM-DD."},
+            },
+        },
+    },
+    {
+        "name": "read_conversation",
+        "description": "Read a conversation's transcript, 250 lines at a time, each line with its id.",
+        "eager_input_streaming": True,
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "conversation_id": {"type": "integer",
+                                    "description": "The id from search_lines or list_conversations."},
+                "skip": {"type": "integer",
+                         "description": "Lines to skip from the start, for reading on in a long conversation."},
+            },
+            "required": ["conversation_id"],
+        },
+    },
+]
+
+
 def _day_bounds(start_date: str, end_date: str) -> tuple[int, int]:
     """Milliseconds covering local dates start..end inclusive; '' means open-ended."""
     lo = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000) if start_date else 0
@@ -180,89 +234,99 @@ def answer(
     api_key: str | None = None,
     model: str = CLAUDE_MODEL,
     on_step: Callable[[str], None] = lambda step: None,
+    on_text: Callable[[str | None], None] = lambda text: None,
 ) -> dict:
     """Answer the last question in `history` ([{role, content}], oldest first).
+
+    `on_step` hears what Claude is looking up. `on_text` hears the answer as it
+    is written, piece by piece; it is called with None when what was written so
+    far turns out to be a remark before another lookup and should be discarded.
 
     Returns {"answer": text, "lines": {id: where it is}}. Raises DigestError
     with a plain explanation if Claude cannot be reached or declines.
     """
     import anthropic
-    from anthropic import beta_tool
 
-    messages = [{"role": m["role"], "content": m["content"]} for m in history
-                if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)
-                and m["content"].strip()]
+    messages: list[dict] = [
+        {"role": m["role"], "content": m["content"]} for m in history
+        if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)
+        and m["content"].strip()]
     if not messages or messages[-1]["role"] != "user":
         raise DigestError("ask a question first")
     lookup = Lookup(data_dir)
 
-    @beta_tool
-    def search_lines(query: str, start_date: str = "", end_date: str = "") -> str:
-        """Find transcript lines containing any of the words in a query.
-
-        Matching is literal and case-insensitive: no synonyms, no stemming. Lines
-        containing more of the words rank higher, then newer lines.
-
-        Args:
-            query: One to eight words or names to look for, e.g. "Joseph budget".
-            start_date: Only lines on or after this local date, as YYYY-MM-DD. Empty for no limit.
-            end_date: Only lines on or before this local date, as YYYY-MM-DD. Empty for no limit.
-        """
-        on_step(f"Searching for “{query}”" + (f" from {start_date}" if start_date else "")
-                + (f" to {end_date}" if end_date else ""))
-        return lookup.search(query, start_date, end_date)
-
-    @beta_tool
-    def list_conversations(start_date: str = "", end_date: str = "") -> str:
-        """List conversations with their id, time, length, title and section headings.
-
-        Use it to see what happened on a day or over a period, and to get the ids
-        that read_conversation needs.
-
-        Args:
-            start_date: First local date to include, as YYYY-MM-DD. Empty for no limit.
-            end_date: Last local date to include, as YYYY-MM-DD. Empty for no limit.
-        """
-        span = " to ".join(d for d in (start_date, end_date) if d) or "all dates"
-        on_step(f"Looking at conversations, {span}")
-        return lookup.conversations(start_date, end_date)
-
-    @beta_tool
-    def read_conversation(conversation_id: int, skip: int = 0) -> str:
-        """Read a conversation's transcript, 250 lines at a time, each line with its id.
-
-        Args:
-            conversation_id: The id from search_lines or list_conversations.
-            skip: How many lines to skip from the start, for reading on in a long conversation.
-        """
-        title = lookup.db.execute(
-            "SELECT title FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
-        on_step(f"Reading “{title[0]}”" if title else f"Reading conversation {conversation_id}")
-        return lookup.read(conversation_id, skip)
+    def run_tool(name: str, given: object) -> str:
+        """Carry out one lookup. Inputs are checked here: they arrive unvalidated."""
+        if not isinstance(given, dict):
+            return "The input must be an object."
+        text = lambda key: given.get(key) if isinstance(given.get(key), str) else ""  # noqa: E731
+        if name == "search_lines":
+            query, start_date, end_date = text("query"), text("start_date"), text("end_date")
+            on_step(f"Searching for “{query}”" + (f" from {start_date}" if start_date else "")
+                    + (f" to {end_date}" if end_date else ""))
+            return lookup.search(query, start_date, end_date)
+        if name == "list_conversations":
+            start_date, end_date = text("start_date"), text("end_date")
+            span = " to ".join(d for d in (start_date, end_date) if d) or "all dates"
+            on_step(f"Looking at conversations, {span}")
+            return lookup.conversations(start_date, end_date)
+        if name == "read_conversation":
+            cid, skip = given.get("conversation_id"), given.get("skip", 0)
+            if not isinstance(cid, int) or isinstance(cid, bool):
+                return "conversation_id must be a whole number."
+            title = lookup.db.execute("SELECT title FROM conversations WHERE id = ?", (cid,)).fetchone()
+            on_step(f"Reading “{title[0]}”" if title else f"Reading conversation {cid}")
+            return lookup.read(cid, skip if isinstance(skip, int) and not isinstance(skip, bool) else 0)
+        return f"There is no tool called {name}."
 
     now = datetime.now()
     system = (f"{SYSTEM}\n\nToday is {now.strftime('%A, %Y-%m-%d')}. {lookup.coverage()}")
     try:
         client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
-        runner = client.beta.messages.tool_runner(
-            model=model,
-            max_tokens=16000,
-            system=system,
-            tools=[search_lines, list_conversations, read_conversation],
-            messages=messages,
-            max_iterations=MAX_TURNS,
-            output_config={"effort": "medium"},
-            # If a safety classifier declines, let the API retry on another model.
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-        )
         final = None
-        for message in runner:
-            final = message
+        garbled = 0
+        for _turn in range(MAX_TURNS):
+            wrote = False
+            try:
+                with client.beta.messages.stream(
+                    model=model,
+                    max_tokens=16000,
+                    system=system,
+                    tools=TOOLS,
+                    messages=messages,
+                    output_config={"effort": "medium"},
+                    # If a safety classifier declines, let the API retry on another model.
+                    betas=["server-side-fallback-2026-07-01"],
+                    fallbacks="default",
+                ) as stream:
+                    for event in stream:
+                        if event.type == "content_block_delta" and event.delta.type == "text_delta":
+                            on_text(event.delta.text)
+                            wrote = True
+                    final = stream.get_final_message()
+            except ValueError:
+                # A tool call arrived as JSON that could not be read; ask for the turn again.
+                garbled += 1
+                if wrote:
+                    on_text(None)
+                if garbled > 2:
+                    raise DigestError("Claude's lookups kept coming through garbled; ask again") from None
+                continue
+            if final.stop_reason != "tool_use":
+                break
+            if wrote:
+                on_text(None)  # that was a remark before a lookup, not the answer
+            # Hand the turn back unchanged, then every result in one message.
+            messages.append({"role": "assistant", "content": final.content})
+            messages.append({"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": block.id, "content": run_tool(block.name, block.input)}
+                for block in final.content if block.type == "tool_use"]})
         if final is None:
             raise DigestError("Claude returned nothing")
         if final.stop_reason == "refusal":
             raise DigestError("Claude declined to answer that")
+        if final.stop_reason == "max_tokens":
+            raise DigestError("the answer was cut off for length; ask something narrower")
         text = "\n\n".join(b.text for b in final.content if b.type == "text").strip()
         if final.stop_reason == "tool_use" or not text:
             raise DigestError("Claude kept looking things up and ran out of turns; try a narrower question")
