@@ -92,14 +92,29 @@ class Library:
             db.close()
         return [dict(_utterance(r), day=_day_of(r[1])) for r in rows]
 
-    def rename_speaker(self, speaker_id: int, name: str) -> int:
+    def _with_store(self, action):
         from .store import Store
 
         store = Store(self.data_dir)
         try:
-            return store.rename_speaker(speaker_id, name)
+            return action(store)
         finally:
             store.close()
+
+    def rename_speaker(self, speaker_id: int, name: str) -> int:
+        return self._with_store(lambda store: store.rename_speaker(speaker_id, name))
+
+    def conversations(self, day: str) -> list[dict]:
+        start = datetime.strptime(day, "%Y-%m-%d")
+        lo = int(start.timestamp() * 1000)
+        hi = int((start + timedelta(days=1)).timestamp() * 1000)
+        return self._with_store(lambda store: store.conversations(lo, hi))
+
+    def reminders(self) -> list[dict]:
+        return self._with_store(lambda store: store.reminders())
+
+    def set_reminder_status(self, reminder_id: int, status: str) -> None:
+        self._with_store(lambda store: store.set_reminder_status(reminder_id, status))
 
     def audio_path(self, url_path: str) -> Path | None:
         """Resolve /audio/... to a file, refusing anything outside the audio folder."""
@@ -133,6 +148,13 @@ def make_handler(library: Library):
                     if not _DAY.match(day):
                         return self._text(HTTPStatus.BAD_REQUEST, "Day must be YYYY-MM-DD.")
                     return self._json(library.day(day))
+                if path.startswith("/api/conversations/"):
+                    day = path.removeprefix("/api/conversations/")
+                    if not _DAY.match(day):
+                        return self._text(HTTPStatus.BAD_REQUEST, "Day must be YYYY-MM-DD.")
+                    return self._json(library.conversations(day))
+                if path == "/api/reminders":
+                    return self._json(library.reminders())
                 if path == "/api/search":
                     query = parse_qs(url.query).get("q", [""])[0].strip()
                     return self._json(library.search(query) if query else [])
@@ -143,7 +165,7 @@ def make_handler(library: Library):
             self._text(HTTPStatus.NOT_FOUND, "Not found.")
 
         def do_POST(self) -> None:
-            """Name a speaker: POST /api/speakers/<id> with {"name": "..."}."""
+            """POST /api/speakers/<id> {"name": ...} or /api/reminders/<id> {"status": ...}."""
             host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
             if host not in _LOCAL_HOSTS:
                 return self._text(HTTPStatus.FORBIDDEN, "This app only answers on localhost.")
@@ -151,20 +173,29 @@ def make_handler(library: Library):
             # permission, which this server never gives.
             if (self.headers.get("Content-Type") or "").split(";")[0].strip() != "application/json":
                 return self._text(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "Send JSON.")
-            match = re.match(r"^/api/speakers/(\d+)$", urlparse(self.path).path)
+            match = re.match(r"^/api/(speakers|reminders)/(\d+)$", urlparse(self.path).path)
             if not match:
                 return self._text(HTTPStatus.NOT_FOUND, "Not found.")
+            kind, item = match.group(1), int(match.group(2))
             try:
                 length = min(int(self.headers.get("Content-Length") or 0), 4096)
-                name = json.loads(self.rfile.read(length) or b"{}").get("name", "")
-                if not isinstance(name, str):
-                    raise ValueError("a speaker needs a name")
-                kept = library.rename_speaker(int(match.group(1)), name[:80])
-            except (ValueError, AttributeError) as err:
+                body = json.loads(self.rfile.read(length) or b"{}")
+                if not isinstance(body, dict):
+                    raise ValueError("send a JSON object")
+                if kind == "speakers":
+                    name = body.get("name", "")
+                    if not isinstance(name, str):
+                        raise ValueError("a speaker needs a name")
+                    return self._json({"id": library.rename_speaker(item, name[:80])})
+                status = body.get("status")
+                if not isinstance(status, str):
+                    raise ValueError("a reminder needs a status")
+                library.set_reminder_status(item, status)
+                return self._json({"id": item, "status": status})
+            except ValueError as err:
                 return self._text(HTTPStatus.BAD_REQUEST, str(err))
             except sqlite3.Error as err:
                 return self._text(HTTPStatus.INTERNAL_SERVER_ERROR, f"Could not save: {err}")
-            self._json({"id": kept})
 
         def _send(self, status: int, body: bytes, content_type: str, extra: dict | None = None) -> None:
             self.send_response(status)

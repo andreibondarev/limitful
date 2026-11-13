@@ -50,7 +50,7 @@
   h1 {
     font-family: var(--voice);
     font-weight: 400;
-    font-size: clamp(1.6rem, 4.2vw, 2.6rem);
+    font-size: clamp(1.6rem, 3.6vw, 2.3rem);
     line-height: 1.1;
     letter-spacing: -0.01em;
     margin: 0 auto 0 0;
@@ -67,7 +67,7 @@
     border: 1px solid var(--rule); border-radius: 999px;
     background: transparent; padding: 0.4rem 0.85rem;
   }
-  #search { width: min(100%, 17rem); }
+  #search { width: min(100%, 13rem); }
   #search::placeholder { color: var(--muted); }
 
   /* The day as a strip: one mark for every stretch of speech. */
@@ -117,6 +117,26 @@
     padding: 0.1rem 0.4rem; width: 12rem; font-weight: 600;
   }
   .who small { color: var(--muted); margin-left: 0.6rem; font-size: 0.8rem; }
+  .talk { margin: 2.2rem 0 0.6rem var(--gutter); max-width: 68ch; }
+  .talk:first-child { margin-top: 0.4rem; }
+  .talk h2 { margin: 0 0 0.35rem; font-size: 1.55rem; line-height: 1.2; }
+  .talk ul { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.95rem; line-height: 1.5; }
+  .todo {
+    display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap;
+    margin-top: 0.5rem; padding: 0.45rem 0.7rem;
+    border-left: 3px solid var(--mark); background: color-mix(in srgb, var(--mark) 14%, transparent);
+    border-radius: 0 4px 4px 0; max-width: 68ch;
+  }
+  .todo p { margin: 0; flex: 1 1 14rem; }
+  .todo small { color: var(--muted); flex-basis: 100%; }
+  .todo.accepted { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+  .todo button, #remind {
+    border: 1px solid var(--rule); border-radius: 999px; background: transparent;
+    padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
+  }
+  .todo button:hover, #remind:hover { border-color: var(--accent); color: var(--accent); }
+  #remind { padding: 0.4rem 0.85rem; font-size: inherit; }
+  #remind[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .quiet {
     margin: 0.9rem 0 0.9rem var(--gutter);
     color: var(--muted); font-size: 0.82rem;
@@ -160,6 +180,7 @@
     <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
     <button class="step" id="next" aria-label="Next day with recordings">›</button>
     <input type="date" id="pick" aria-label="Go to a date">
+    <button id="remind" aria-pressed="false">Reminders</button>
     <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said">
   </div>
   <div id="strip" role="img" aria-label="When speech was recorded during this day"></div>
@@ -186,6 +207,8 @@ let lines = [];       // utterances of that day
 let playing = null;   // utterance being played
 let wanted = null;    // utterance id to reveal after loading a day
 let searching = false;
+let talks = [];       // summarised conversations of the day
+let reminding = false;
 
 const pad = (n) => String(n).padStart(2, "0");
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -215,6 +238,70 @@ function lineButton(u, showDay, sameMinute) {
   return b;
 }
 
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+/* A reminder with the actions that fit its state. `after` runs once it is saved. */
+function todoRow(r, after, source) {
+  const row = el("div", { className: `todo ${r.status}` }, el("p", { textContent: r.text }));
+  const act = (label, status) => {
+    const b = el("button", { textContent: label });
+    b.addEventListener("click", async () => {
+      try { await post(`/api/reminders/${r.id}`, { status }); r.status = status; after(); }
+      catch (err) { row.append(el("small", { textContent: `Could not save. ${err.message}` })); }
+    });
+    return b;
+  };
+  if (r.status === "suggested") row.append(act("Accept", "accepted"), act("Dismiss", "dismissed"));
+  else if (r.status === "accepted") row.append(act("Done", "done"), act("Dismiss", "dismissed"));
+  if (source) row.append(el("small", { textContent: source }));
+  return row;
+}
+
+function talkBlock(talk) {
+  const block = el("section", { className: "talk" }, el("h2", { textContent: talk.title }));
+  if (talk.summary.length) block.append(el("ul", {}, ...talk.summary.map((t) => el("li", { textContent: t }))));
+  const open = talk.reminders.filter((r) => r.status === "suggested" || r.status === "accepted");
+  block.append(...open.map((r) => todoRow(r, () => { renderDay(); countReminders(); })));
+  return block;
+}
+
+async function countReminders() {
+  try {
+    const waiting = (await get("/api/reminders")).filter((r) => r.status === "suggested").length;
+    $("remind").textContent = waiting ? `Reminders (${waiting})` : "Reminders";
+  } catch { /* leave the label as it is */ }
+}
+
+async function showReminders() {
+  reminding = true;
+  history.replaceState(null, "", "#reminders");
+  $("remind").setAttribute("aria-pressed", "true");
+  $("title").textContent = "Reminders";
+  strip.replaceChildren();
+  let all;
+  try { all = await get("/api/reminders"); }
+  catch (err) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Could not load reminders. ${err.message}` }));
+    return;
+  }
+  const source = (r) => `${longDay.format(new Date(r.when))}, from “${r.from}”`;
+  const group = (heading, status) => {
+    const rows = all.filter((r) => r.status === status);
+    return rows.length ? [el("h2", { textContent: heading }), ...rows.map((r) => todoRow(r, showReminders, source(r)))] : [];
+  };
+  const nodes = [...group("To review", "suggested"), ...group("Accepted", "accepted")];
+  main.replaceChildren(...(nodes.length ? nodes : [el("div", { className: "empty" },
+    el("p", { textContent: "No reminders to review." }),
+    el("p", {}, "They are suggested when conversations are summarised. Run ", el("code", { textContent: "pendant-sync digest" }), "."))]));
+  countReminders();
+}
+
 function whoRow(speaker) {
   if (!speaker) return el("div", { className: "who unknown", textContent: "Not identified" });
   const row = el("div", { className: "who" });
@@ -234,11 +321,7 @@ function whoRow(speaker) {
       if (!value || value === speaker.name) { cancel(); return; }
       done = true;
       try {
-        const res = await fetch(`/api/speakers/${speaker.id}`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: value }),
-        });
-        if (!res.ok) throw new Error(await res.text());
+        await post(`/api/speakers/${speaker.id}`, { name: value });
         lines = await get(`/api/day/${day}`);
         renderDay();
       } catch (err) {
@@ -280,10 +363,16 @@ function renderDay() {
   }
   const nodes = [];
   const labelled = lines.some((u) => u.speaker);
+  const upcoming = [...talks];
   lines.forEach((u, n) => {
     const before = lines[n - 1];
     const gap = before && u.start - before.end > QUIET_MS;
     if (gap) nodes.push(el("div", { className: "quiet", textContent: quietFor(u.start - before.end) }));
+    // A summarised conversation gets its title and summary above its first line.
+    while (upcoming.length && upcoming[0].start <= u.start) {
+      const talk = upcoming.shift();
+      if (u.start <= talk.end) nodes.push(talkBlock(talk));
+    }
     // Say who is speaking whenever it changes (or after a silence).
     const changed = !before || gap || (before.speaker?.id ?? 0) !== (u.speaker?.id ?? 0);
     if (labelled && changed) nodes.push(whoRow(u.speaker));
@@ -301,12 +390,14 @@ function renderDay() {
 
 async function openDay(key, revealId) {
   searching = false;
+  reminding = false;
+  $("remind").setAttribute("aria-pressed", "false");
   $("search").value = "";
   day = key;
   wanted = revealId || null;
   history.replaceState(null, "", `#${key}`);
   try {
-    lines = await get(`/api/day/${key}`);
+    [lines, talks] = await Promise.all([get(`/api/day/${key}`), get(`/api/conversations/${key}`)]);
     renderDay();
   } catch (err) {
     main.replaceChildren(el("p", { className: "empty", textContent: `Could not load this day. ${err.message}` }));
@@ -323,6 +414,8 @@ function step(direction) {
 
 async function runSearch(query) {
   searching = true;
+  reminding = false;
+  $("remind").setAttribute("aria-pressed", "false");
   $("title").textContent = "Search";
   strip.replaceChildren();
   let results;
@@ -405,6 +498,7 @@ strip.addEventListener("click", (e) => {
   node?.focus({ preventScroll: true });
 });
 
+$("remind").addEventListener("click", () => reminding ? openDay(day) : showReminders());
 $("prev").addEventListener("click", () => step(-1));
 $("next").addEventListener("click", () => step(1));
 $("pick").addEventListener("change", (e) => e.target.value && openDay(e.target.value));
@@ -418,7 +512,7 @@ $("search").addEventListener("input", (e) => {
 
 document.addEventListener("keydown", (e) => {
   const typing = e.target.matches("input");
-  if (e.key === "Escape" && searching) { openDay(day); return; }
+  if (e.key === "Escape" && (searching || reminding)) { openDay(day); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "/") { e.preventDefault(); $("search").focus(); }
   else if (e.key === "ArrowLeft") step(-1);
@@ -428,11 +522,13 @@ document.addEventListener("keydown", (e) => {
 
 /* New lines arrive while `pendant-sync watch` runs; pick them up quietly. */
 setInterval(async () => {
-  if (searching || document.hidden || !day) return;
+  if (searching || reminding || document.hidden || !day) return;
   try {
     days = await get("/api/days");
-    const fresh = await get(`/api/day/${day}`);
-    if (fresh.length !== lines.length) { lines = fresh; renderDay(); }
+    const [fresh, freshTalks] = await Promise.all([get(`/api/day/${day}`), get(`/api/conversations/${day}`)]);
+    if (fresh.length !== lines.length || freshTalks.length !== talks.length) {
+      lines = fresh; talks = freshTalks; renderDay(); countReminders();
+    }
   } catch { /* the server is away; try again next time */ }
 }, 30000);
 
@@ -446,7 +542,9 @@ setInterval(async () => {
   const [hashDay, hashId] = location.hash.slice(1).split("/");
   const start = /^\d{4}-\d{2}-\d{2}$/.test(hashDay) ? hashDay
     : days.length ? days[days.length - 1].day : dayKey(new Date());
-  openDay(start, hashId && Number(hashId));
+  await openDay(start, hashId && Number(hashId));
+  if (hashDay === "reminders") showReminders();
+  countReminders();
 })();
 </script>
 </body>

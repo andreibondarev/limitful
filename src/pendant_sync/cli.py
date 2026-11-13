@@ -1,4 +1,4 @@
-"""Command-line interface: scan, pair, status, sync, export, transcribe, speakers, watch, serve."""
+"""Command-line interface: scan, pair, status, sync, export, transcribe, speakers, digest, watch, serve."""
 
 from __future__ import annotations
 
@@ -148,6 +148,52 @@ async def _cmd_speakers(args) -> int:
         store.close()
 
 
+_CHOOSE_PROVIDER = (
+    "choose what writes the summaries: --provider claude (better; sends transcripts to "
+    "Anthropic) or --provider ollama (runs on this computer). "
+    "Set PENDANT_SYNC_LLM to make the choice stick."
+)
+
+
+def _summarizer(args):
+    from .digest import make_summarizer
+
+    provider = args.provider or os.environ.get("PENDANT_SYNC_LLM")
+    if not provider:
+        raise PendantError(_CHOOSE_PROVIDER)
+    try:
+        return make_summarizer(provider, args.llm_model)
+    except ValueError as err:
+        raise PendantError(str(err)) from None
+
+
+async def _cmd_digest(args) -> int:
+    from .digest import DigestError
+
+    summarizer = _summarizer(args)
+    store = Store(args.data_dir)
+    try:
+        if args.redo:
+            store.forget_digests()
+
+        def progress(done: int, total: int) -> None:
+            print(f"\r  {done}/{total} conversations", end="", file=sys.stderr, flush=True)
+
+        try:
+            done = await asyncio.to_thread(store.digest_pending, summarizer, progress)
+        except DigestError as err:
+            print(file=sys.stderr)
+            raise PendantError(f"{err}. Conversations already summarised were kept.") from None
+        print(file=sys.stderr)
+        print(f"Summarised {done} conversation(s) with {summarizer.name}.")
+        waiting = [r for r in store.reminders() if r["status"] == "suggested"]
+        if waiting:
+            print(f"{len(waiting)} suggested reminder(s) to review in the Lifelog.")
+        return 0
+    finally:
+        store.close()
+
+
 async def _cmd_transcribe(args) -> int:
     store = Store(args.data_dir)
     try:
@@ -203,13 +249,18 @@ async def _cmd_watch(args) -> int:
             embedders.append(TitanetEmbedder())
         return embedders[0]
 
+    summarizer = None
+    if args.provider or os.environ.get("PENDANT_SYNC_LLM"):
+        summarizer = _summarizer(args)
+
     print(f"Watching for the pendant every {args.interval:.0f} s. Data: {args.data_dir}")
     print("Synced audio is " + ("kept on" if args.keep else "freed from") + " the pendant. "
           "Press Ctrl-C to stop.")
     try:
         await watch(store, interval=args.interval, ack=not args.keep,
                     get_transcriber=None if args.no_transcribe else get_transcriber,
-                    get_embedder=None if args.no_transcribe or args.no_speakers else get_embedder)
+                    get_embedder=None if args.no_transcribe or args.no_speakers else get_embedder,
+                    summarizer=summarizer)
     finally:
         store.close()
     return 0
@@ -292,6 +343,18 @@ def main(argv: list[str] | None = None) -> int:
                    help="forget all speakers and names, and group every line again")
     p.set_defaults(func=_cmd_speakers)
 
+    def llm_args(p) -> None:
+        p.add_argument("--provider", choices=["claude", "ollama"],
+                       help="what writes summaries (default: $PENDANT_SYNC_LLM)")
+        p.add_argument("--llm-model", help="model name for that provider")
+
+    p = sub.add_parser("digest", help="title and summarise conversations, and suggest reminders")
+    data_args(p)
+    llm_args(p)
+    p.add_argument("--redo", action="store_true",
+                   help="discard existing summaries and reminders and write them again")
+    p.set_defaults(func=_cmd_digest)
+
     p = sub.add_parser("watch", help="keep syncing and transcribing in the background")
     data_args(p)
     p.add_argument("--interval", type=float, default=120.0,
@@ -300,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="do not free synced audio on the pendant")
     p.add_argument("--no-transcribe", action="store_true", help="download audio only")
     p.add_argument("--no-speakers", action="store_true", help="skip speaker labels")
+    llm_args(p)
     p.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL})")
     p.add_argument("--language", help="language code such as en (default: detect per file)")
     p.add_argument("--device", default="auto",

@@ -10,6 +10,7 @@ from typing import Callable
 from bleak.exc import BleakError
 
 from . import client
+from .digest import DigestError, Summarizer
 from .speakers import Embedder, load_audio
 from .store import Store
 from .transcribe import Transcriber
@@ -34,6 +35,7 @@ async def run_cycle(
     ack: bool,
     get_transcriber: Callable[[], Transcriber] | None,
     get_embedder: Callable[[], Embedder] | None = None,
+    summarizer: Summarizer | None = None,
     scan_timeout: float = 5.0,
 ) -> CycleResult:
     """One pass: find the pendant, download, export audio, transcribe."""
@@ -50,6 +52,13 @@ async def run_cycle(
         lines, _files = await asyncio.to_thread(store.transcribe_pending, get_transcriber())
         if lines and get_embedder is not None:
             await asyncio.to_thread(store.label_speakers, get_embedder(), load_audio)
+    if summarizer is not None:
+        try:
+            await asyncio.to_thread(store.digest_pending, summarizer)
+        except DigestError as err:
+            # Audio and transcripts are safe; summaries are retried next cycle.
+            return CycleResult(True, result.pages_new, len(segments), lines,
+                               error=f"summaries: {err}")
     return CycleResult(True, result.pages_new, len(segments), lines)
 
 
@@ -60,6 +69,7 @@ async def watch(
     ack: bool,
     get_transcriber: Callable[[], Transcriber] | None,
     get_embedder: Callable[[], Embedder] | None = None,
+    summarizer: Summarizer | None = None,
     log: Callable[[str], None] = _stamp,
     cycles: int | None = None,
 ) -> None:
@@ -70,10 +80,12 @@ async def watch(
         done += 1
         try:
             result = await run_cycle(store, ack=ack, get_transcriber=get_transcriber,
-                                     get_embedder=get_embedder)
+                                     get_embedder=get_embedder, summarizer=summarizer)
         except (client.PendantError, BleakError, asyncio.TimeoutError, OSError) as err:
             result = CycleResult(found=True, error=str(err) or type(err).__name__)
-        if result.error:
+        if result.error and result.error.startswith("summaries:"):
+            log(f"synced, but {result.error}; will retry")
+        elif result.error:
             log(f"sync failed, will retry: {result.error}")
         elif not result.found:
             if was_found is not False:

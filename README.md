@@ -80,6 +80,33 @@ than 1.5 s are not labelled, a line is given to one speaker even if two people
 spoke in it, and similar voices can be confused. The matching threshold was
 tuned on a small test and will need adjusting on real conversations.
 
+### Summaries and reminders
+
+```sh
+uv run pendant-sync digest --provider claude    # or: --provider ollama
+```
+
+`digest` groups each day's lines into conversations (a five-minute silence ends
+one), then asks a language model for a title, a short summary and any
+reminders. They appear above each conversation in the Lifelog and in the
+Markdown transcripts. Reminders are suggestions: accept or dismiss them in the
+Lifelog, where the Reminders button lists everything waiting.
+
+You choose what does the reading, and nothing is sent anywhere until you do:
+
+- `--provider claude` uses Anthropic's API (Claude Opus by default; change it
+  with `--llm-model`). Better results, but conversation transcripts are sent to
+  Anthropic. Sign in with `ANTHROPIC_API_KEY` or `ant auth login`.
+- `--provider ollama` uses a model running on your computer through
+  [Ollama](https://ollama.com) (`llama3.1` by default). Private, weaker.
+
+Set `PENDANT_SYNC_LLM=claude` (or `ollama`) to make the choice stick; `watch`
+then summarises automatically. Conversations of fewer than 25 words are left
+without a summary. `digest --redo` rewrites everything, discarding the state
+of existing reminders.
+
+Not yet verified against either service: the logic is tested with stand-ins.
+
 ### Running in the background
 
 ```sh
@@ -111,6 +138,7 @@ that your computer holds the only copy, so back up the data folder.
 - `ogg.py`: a small Ogg Opus writer.
 - `transcribe.py`: speech-to-text engines (local Whisper by default).
 - `speakers.py`: voice fingerprints for speaker labels.
+- `digest.py`: titles, summaries and reminders from a language model.
 - `watch.py`: the background loop.
 - `web.py` and `web/index.html`: the Lifelog web app.
 
@@ -153,7 +181,7 @@ Observed on one pendant; treat as provisional.
 1. Run `watch` as a login service.
 2. Better speaker labels (splitting a line between two voices), and a hosted
    transcription option.
-3. Summaries, reminders and chat over transcripts.
+3. Chat over transcripts, and an MCP server.
 4. Import of a Limitless data export.
 5. MCP server, Obsidian sync, mobile app.
 

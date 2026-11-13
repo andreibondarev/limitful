@@ -35,6 +35,10 @@ def site(tmp_path):
     store.db.execute("INSERT INTO speakers (id, name, voice_sum, lines) VALUES (1, 'Speaker 1', x'00000000', 2)")
     store.db.execute("INSERT INTO speakers (id, name, voice_sum, lines) VALUES (2, 'Joseph', x'00000000', 1)")
     store.db.execute("UPDATE utterances SET speaker_id = 1 WHERE text LIKE 'buy%'")
+    store.db.execute("INSERT INTO conversations (id, start_ms, end_ms, status, title, summary) "
+                     "VALUES (1, ?, ?, 'done', 'Shopping and a call', '[\"Oat milk is needed.\"]')",
+                     (T0, T0 + 2000))
+    store.db.execute("INSERT INTO reminders (id, conversation_id, text, created_ms) VALUES (1, 1, 'Call Joseph', ?)", (T0,))
     store.db.commit()
     store.close()
     (tmp_path / "secret.txt").write_text("private")
@@ -127,3 +131,27 @@ def test_rename_rejects_bad_requests(site):
     assert site("/api/speakers/1", dict(JSON, Host="evil.example"), b'{"name": "X"}')[0] == 403
     assert site("/api/other", JSON, b'{}')[0] == 404
     assert json.loads(site("/api/day/2026-11-13")[2])[0]["speaker"]["name"] == "Speaker 1"
+
+
+def test_conversations_and_reminders(site):
+    (talk,) = json.loads(site("/api/conversations/2026-11-13")[2])
+    assert (talk["title"], talk["summary"], talk["start"]) == ("Shopping and a call", ["Oat milk is needed."], T0)
+    assert talk["reminders"] == [{"id": 1, "text": "Call Joseph", "status": "suggested"}]
+    assert json.loads(site("/api/conversations/2026-11-14")[2]) == []
+    assert site("/api/conversations/soon")[0] == 400
+
+    (reminder,) = json.loads(site("/api/reminders")[2])
+    assert (reminder["text"], reminder["from"], reminder["status"]) == ("Call Joseph", "Shopping and a call", "suggested")
+    status, _h, body = site("/api/reminders/1", JSON, b'{"status": "accepted"}')
+    assert (status, json.loads(body)) == (200, {"id": 1, "status": "accepted"})
+    assert json.loads(site("/api/reminders")[2])[0]["status"] == "accepted"
+    assert site("/api/reminders/1", JSON, b'{"status": "dismissed"}')[0] == 200
+    assert json.loads(site("/api/reminders")[2]) == []
+
+
+def test_reminder_updates_reject_bad_requests(site):
+    assert site("/api/reminders/1", JSON, b'{"status": "later"}')[0] == 400
+    assert site("/api/reminders/1", JSON, b'{}')[0] == 400
+    assert site("/api/reminders/42", JSON, b'{"status": "done"}')[0] == 400
+    assert site("/api/reminders/1", {"Content-Type": "text/plain"}, b'{"status": "done"}')[0] == 415
+    assert json.loads(site("/api/reminders")[2])[0]["status"] == "suggested"

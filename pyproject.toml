@@ -5,7 +5,7 @@ description = "Open-source desktop sync client for the Limitless Pendant: pull r
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
-dependencies = ["bleak>=0.22", "faster-whisper>=1.1", "sherpa-onnx>=1.10", "numpy"]
+dependencies = ["bleak>=0.22", "faster-whisper>=1.1", "sherpa-onnx>=1.10", "numpy", "anthropic>=1.0"]
 
 [project.scripts]
 pendant-sync = "pendant_sync.cli:main"

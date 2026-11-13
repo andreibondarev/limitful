@@ -11,6 +11,7 @@ pendant restarts its page and session counters from zero when it is reset
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
     import numpy as np
 
+from .digest import DigestDeclined, Summarizer
 from .ogg import packet_samples, write_ogg_opus
 from .protocol import MIN_VALID_TIMESTAMP_MS, FlashPage, extract_opus_frames
 from .speakers import MATCH_THRESHOLD, MIN_FINGERPRINTS, MIN_SPEAKER_MS, SAMPLE_RATE, Embedder
@@ -67,7 +69,30 @@ CREATE TABLE IF NOT EXISTS speakers (
     voice_sum BLOB    NOT NULL,         -- sum of this speaker's fingerprints
     lines     INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS conversations (
+    id       INTEGER PRIMARY KEY,
+    start_ms INTEGER NOT NULL,
+    end_ms   INTEGER NOT NULL,
+    status   TEXT    NOT NULL,          -- pending, done, short (too little said), skipped
+    title    TEXT,
+    summary  TEXT,                      -- JSON list of sentences
+    engine   TEXT
+);
+CREATE INDEX IF NOT EXISTS conversations_start ON conversations (start_ms);
+CREATE TABLE IF NOT EXISTS reminders (
+    id              INTEGER PRIMARY KEY,
+    conversation_id INTEGER NOT NULL,
+    text            TEXT    NOT NULL,
+    status          TEXT    NOT NULL DEFAULT 'suggested',  -- suggested, accepted, done, dismissed
+    created_ms      INTEGER NOT NULL
+);
 """
+
+# A silence this long ends a conversation.
+CONVERSATION_GAP_MS = 5 * 60 * 1000
+# Conversations with fewer words than this are not worth summarising.
+MIN_DIGEST_WORDS = 25
+REMINDER_STATUSES = ("suggested", "accepted", "done", "dismissed")
 
 # Columns added after the first release; applied to existing databases on open.
 _MIGRATIONS = [
@@ -270,9 +295,21 @@ class Store:
             "WHERE u.start_ms >= ? AND u.start_ms < ? ORDER BY u.start_ms, u.id",
             (start_ms, end_ms),
         ).fetchall()
+        digests = self.db.execute(
+            "SELECT start_ms, end_ms, title, summary FROM conversations "
+            "WHERE status = 'done' AND end_ms >= ? AND start_ms < ? ORDER BY start_ms",
+            (start_ms, end_ms),
+        ).fetchall()
         lines = [f"# {day}", ""]
         for ts, text, speaker in rows:
             clock = datetime.fromtimestamp(ts / 1000).strftime("%H:%M:%S")
+            while digests and digests[0][0] <= ts:
+                d_start, d_end, title, summary = digests.pop(0)
+                if ts > d_end:
+                    continue
+                lines += ["", f"## {clock[:5]} {title}", ""]
+                lines += [f"> {point}" for point in json.loads(summary or "[]")]
+                lines.append("")
             who = f"{speaker}: " if speaker else ""
             lines.append(f"- **{clock}** {who}{text}")
         path = self.data_dir / "transcripts" / f"{day}.md"
@@ -413,3 +450,128 @@ class Store:
         labelled = self._assign_speakers()
         self._rewrite_days("embedding IS NOT NULL", ())
         return labelled
+
+    # --- conversations, summaries and reminders ------------------------------------
+
+    def build_conversations(self, now_ms: int | None = None) -> int:
+        """Group lines newer than the last conversation into conversations.
+
+        A conversation ends at a silence of CONVERSATION_GAP_MS. The most recent
+        one is left alone until that much time has passed, in case it continues.
+        """
+        now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        (after,) = self.db.execute("SELECT COALESCE(MAX(end_ms), 0) FROM conversations").fetchone()
+        rows = self.db.execute(
+            "SELECT start_ms, end_ms FROM utterances WHERE start_ms > ? ORDER BY start_ms, id",
+            (after,),
+        ).fetchall()
+        groups: list[list[int]] = []
+        for start, end in rows:
+            if groups and start - groups[-1][1] <= CONVERSATION_GAP_MS:
+                groups[-1][1] = max(groups[-1][1], end)
+            else:
+                groups.append([start, end])
+        if groups and now_ms - groups[-1][1] <= CONVERSATION_GAP_MS:
+            groups.pop()  # may still be going on
+        self.db.executemany(
+            "INSERT INTO conversations (start_ms, end_ms, status) VALUES (?, ?, 'pending')", groups)
+        self.db.commit()
+        return len(groups)
+
+    def conversation_text(self, start_ms: int, end_ms: int) -> tuple[str, int]:
+        """The transcript handed to the summariser, and how many words were said."""
+        rows = self.db.execute(
+            "SELECT u.start_ms, u.text, s.name FROM utterances u "
+            "LEFT JOIN speakers s ON s.id = u.speaker_id "
+            "WHERE u.start_ms >= ? AND u.start_ms <= ? ORDER BY u.start_ms, u.id",
+            (start_ms, end_ms),
+        ).fetchall()
+        transcript = "\n".join(
+            f"[{datetime.fromtimestamp(ts / 1000).strftime('%H:%M')}] {name or 'Unknown'}: {text}"
+            for ts, text, name in rows
+        )
+        return transcript, sum(len(text.split()) for _ts, text, _name in rows)
+
+    def digest_pending(
+        self,
+        summarizer: Summarizer,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> int:
+        """Title, summarise and extract reminders for new conversations.
+
+        Returns how many were summarised. A DigestError from the engine stops the
+        run and leaves the rest pending for next time.
+        """
+        self.build_conversations()
+        pending = self.db.execute(
+            "SELECT id, start_ms, end_ms FROM conversations WHERE status = 'pending' ORDER BY start_ms"
+        ).fetchall()
+        done = 0
+        for n, (cid, start_ms, end_ms) in enumerate(pending, 1):
+            text, words = self.conversation_text(start_ms, end_ms)
+            if words < MIN_DIGEST_WORDS:
+                self.db.execute("UPDATE conversations SET status = 'short' WHERE id = ?", (cid,))
+            else:
+                try:
+                    result = summarizer.summarize(text)
+                except DigestDeclined:
+                    self.db.execute("UPDATE conversations SET status = 'skipped' WHERE id = ?", (cid,))
+                else:
+                    self.db.execute(
+                        "UPDATE conversations SET status = 'done', title = ?, summary = ?, engine = ? "
+                        "WHERE id = ?",
+                        (result["title"], json.dumps(result["summary"]), summarizer.name, cid))
+                    self.db.executemany(
+                        "INSERT INTO reminders (conversation_id, text, created_ms) VALUES (?, ?, ?)",
+                        [(cid, r, start_ms) for r in result["reminders"]])
+                    done += 1
+            self.db.commit()
+            self._rewrite_days("start_ms >= ? AND start_ms <= ?", (start_ms, end_ms))
+            if on_progress:
+                on_progress(n, len(pending))
+        return done
+
+    def forget_digests(self) -> None:
+        """Drop every conversation, summary and reminder so they can be rebuilt."""
+        self.db.execute("DELETE FROM conversations")
+        self.db.execute("DELETE FROM reminders")
+        self.db.commit()
+        self._rewrite_days("1 = 1", ())
+
+    def conversations(self, lo_ms: int, hi_ms: int) -> list[dict]:
+        rows = self.db.execute(
+            "SELECT id, start_ms, end_ms, title, summary FROM conversations "
+            "WHERE status = 'done' AND start_ms >= ? AND start_ms < ? ORDER BY start_ms",
+            (lo_ms, hi_ms),
+        ).fetchall()
+        out = []
+        for cid, start_ms, end_ms, title, summary in rows:
+            out.append({
+                "id": cid, "start": start_ms, "end": end_ms, "title": title,
+                "summary": json.loads(summary or "[]"),
+                "reminders": [
+                    {"id": rid, "text": text, "status": status}
+                    for rid, text, status in self.db.execute(
+                        "SELECT id, text, status FROM reminders WHERE conversation_id = ? ORDER BY id",
+                        (cid,))
+                ],
+            })
+        return out
+
+    def reminders(self) -> list[dict]:
+        """Reminders still worth showing: suggested and accepted, newest first."""
+        rows = self.db.execute(
+            "SELECT r.id, r.text, r.status, r.created_ms, c.title FROM reminders r "
+            "JOIN conversations c ON c.id = r.conversation_id "
+            "WHERE r.status IN ('suggested', 'accepted') ORDER BY r.created_ms DESC, r.id"
+        ).fetchall()
+        return [{"id": rid, "text": text, "status": status, "when": when, "from": title}
+                for rid, text, status, when, title in rows]
+
+    def set_reminder_status(self, reminder_id: int, status: str) -> None:
+        if status not in REMINDER_STATUSES:
+            raise ValueError(f"status must be one of {', '.join(REMINDER_STATUSES)}")
+        cur = self.db.execute("UPDATE reminders SET status = ? WHERE id = ?", (status, reminder_id))
+        if cur.rowcount == 0:
+            raise ValueError(f"there is no reminder {reminder_id}")
+        self.db.commit()
