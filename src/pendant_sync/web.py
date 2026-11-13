@@ -28,8 +28,9 @@ def _day_of(ms: int) -> str:
 
 
 def _utterance(row) -> dict:
-    uid, start_ms, end_ms, text, segment, segment_start = row
+    uid, start_ms, end_ms, text, segment, segment_start, speaker_id, speaker = row
     return {
+        "speaker": {"id": speaker_id, "name": speaker} if speaker_id else None,
         "id": uid,
         "start": start_ms,
         "end": end_ms,
@@ -40,8 +41,9 @@ def _utterance(row) -> dict:
 
 
 _SELECT = (
-    "SELECT u.id, u.start_ms, u.end_ms, u.text, u.segment, s.start_ms "
+    "SELECT u.id, u.start_ms, u.end_ms, u.text, u.segment, s.start_ms, u.speaker_id, p.name "
     "FROM utterances u JOIN segments s ON s.path = u.segment "
+    "LEFT JOIN speakers p ON p.id = u.speaker_id "
 )
 
 
@@ -90,6 +92,15 @@ class Library:
             db.close()
         return [dict(_utterance(r), day=_day_of(r[1])) for r in rows]
 
+    def rename_speaker(self, speaker_id: int, name: str) -> int:
+        from .store import Store
+
+        store = Store(self.data_dir)
+        try:
+            return store.rename_speaker(speaker_id, name)
+        finally:
+            store.close()
+
     def audio_path(self, url_path: str) -> Path | None:
         """Resolve /audio/... to a file, refusing anything outside the audio folder."""
         root = self.data_dir / "audio"
@@ -130,6 +141,30 @@ def make_handler(library: Library):
             except (sqlite3.Error, ValueError) as err:
                 return self._text(HTTPStatus.INTERNAL_SERVER_ERROR, f"Could not read the data: {err}")
             self._text(HTTPStatus.NOT_FOUND, "Not found.")
+
+        def do_POST(self) -> None:
+            """Name a speaker: POST /api/speakers/<id> with {"name": "..."}."""
+            host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+            if host not in _LOCAL_HOSTS:
+                return self._text(HTTPStatus.FORBIDDEN, "This app only answers on localhost.")
+            # A JSON content type cannot be sent by another website without our
+            # permission, which this server never gives.
+            if (self.headers.get("Content-Type") or "").split(";")[0].strip() != "application/json":
+                return self._text(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "Send JSON.")
+            match = re.match(r"^/api/speakers/(\d+)$", urlparse(self.path).path)
+            if not match:
+                return self._text(HTTPStatus.NOT_FOUND, "Not found.")
+            try:
+                length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                name = json.loads(self.rfile.read(length) or b"{}").get("name", "")
+                if not isinstance(name, str):
+                    raise ValueError("a speaker needs a name")
+                kept = library.rename_speaker(int(match.group(1)), name[:80])
+            except (ValueError, AttributeError) as err:
+                return self._text(HTTPStatus.BAD_REQUEST, str(err))
+            except sqlite3.Error as err:
+                return self._text(HTTPStatus.INTERNAL_SERVER_ERROR, f"Could not save: {err}")
+            self._json({"id": kept})
 
         def _send(self, status: int, body: bytes, content_type: str, extra: dict | None = None) -> None:
             self.send_response(status)

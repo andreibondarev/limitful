@@ -32,6 +32,10 @@ def site(tmp_path):
     store.commit()
     store.export_audio()
     store.transcribe_pending(Words())
+    store.db.execute("INSERT INTO speakers (id, name, voice_sum, lines) VALUES (1, 'Speaker 1', x'00000000', 2)")
+    store.db.execute("INSERT INTO speakers (id, name, voice_sum, lines) VALUES (2, 'Joseph', x'00000000', 1)")
+    store.db.execute("UPDATE utterances SET speaker_id = 1 WHERE text LIKE 'buy%'")
+    store.db.commit()
     store.close()
     (tmp_path / "secret.txt").write_text("private")
 
@@ -39,8 +43,8 @@ def site(tmp_path):
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{server.server_port}"
 
-    def fetch(path, headers=None):
-        req = urllib.request.Request(base + path, headers=headers or {})
+    def fetch(path, headers=None, data=None):
+        req = urllib.request.Request(base + path, headers=headers or {}, data=data)
         try:
             with urllib.request.urlopen(req) as res:
                 return res.status, dict(res.headers), res.read()
@@ -98,3 +102,28 @@ def test_only_audio_files_are_served(site):
 def test_other_hosts_are_refused(site):
     assert site("/api/days", {"Host": "evil.example"})[0] == 403
     assert site("/api/days", {"Host": "localhost:9"})[0] == 200
+
+
+JSON = {"Content-Type": "application/json"}
+
+
+def test_speakers_are_shown_and_can_be_renamed(site):
+    lines = json.loads(site("/api/day/2026-11-13")[2])
+    assert lines[0]["speaker"] == {"id": 1, "name": "Speaker 1"} and lines[1]["speaker"] is None
+    status, _h, body = site("/api/speakers/1", JSON, b'{"name": "Andrei"}')
+    assert (status, json.loads(body)) == (200, {"id": 1})
+    assert json.loads(site("/api/day/2026-11-13")[2])[0]["speaker"]["name"] == "Andrei"
+    # Using a name that exists merges into that speaker.
+    assert json.loads(site("/api/speakers/1", JSON, b'{"name": "joseph"}')[2]) == {"id": 2}
+    assert json.loads(site("/api/day/2026-11-13")[2])[0]["speaker"] == {"id": 2, "name": "Joseph"}
+
+
+def test_rename_rejects_bad_requests(site):
+    assert site("/api/speakers/1", JSON, b'{"name": "  "}')[0] == 400
+    assert site("/api/speakers/1", JSON, b'{"name": 5}')[0] == 400
+    assert site("/api/speakers/1", JSON, b'[1]')[0] == 400
+    assert site("/api/speakers/99", JSON, b'{"name": "X"}')[0] == 400
+    assert site("/api/speakers/1", {"Content-Type": "text/plain"}, b'{"name": "X"}')[0] == 415
+    assert site("/api/speakers/1", dict(JSON, Host="evil.example"), b'{"name": "X"}')[0] == 403
+    assert site("/api/other", JSON, b'{}')[0] == 404
+    assert json.loads(site("/api/day/2026-11-13")[2])[0]["speaker"]["name"] == "Speaker 1"

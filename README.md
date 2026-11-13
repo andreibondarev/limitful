@@ -62,6 +62,24 @@ through the conversation. Search covers every day. The page only answers on
 your own machine. Recordings are Ogg Opus, which Chrome and Firefox play;
 older versions of Safari do not.
 
+### Speaker labels
+
+Lines are grouped by voice into "Speaker 1", "Speaker 2" and so on, using a
+small local model (TitaNet, about 40 MB, downloaded on first use). This runs
+automatically after transcription. Click a name in the Lifelog to rename it;
+giving two speakers the same name merges them. From the command line:
+
+```sh
+uv run pendant-sync speakers                   # label new lines and list speakers
+uv run pendant-sync speakers --rename 2 Andrei
+uv run pendant-sync speakers --reset           # forget names and group again
+```
+
+Limits: labels start once about ten lines have been transcribed, lines shorter
+than 1.5 s are not labelled, a line is given to one speaker even if two people
+spoke in it, and similar voices can be confused. The matching threshold was
+tuned on a small test and will need adjusting on real conversations.
+
 ### Running in the background
 
 ```sh
@@ -92,6 +110,7 @@ that your computer holds the only copy, so back up the data folder.
 - `store.py`: SQLite store of raw pages, and export to audio files.
 - `ogg.py`: a small Ogg Opus writer.
 - `transcribe.py`: speech-to-text engines (local Whisper by default).
+- `speakers.py`: voice fingerprints for speaker labels.
 - `watch.py`: the background loop.
 - `web.py` and `web/index.html`: the Lifelog web app.
 
@@ -132,7 +151,8 @@ Observed on one pendant; treat as provisional.
 ## Roadmap
 
 1. Run `watch` as a login service.
-2. Speaker labels, and a hosted transcription option.
+2. Better speaker labels (splitting a line between two voices), and a hosted
+   transcription option.
 3. Summaries, reminders and chat over transcripts.
 4. Import of a Limitless data export.
 5. MCP server, Obsidian sync, mobile app.

@@ -1,4 +1,4 @@
-"""Command-line interface: scan, pair, status, sync, export, transcribe, watch, serve."""
+"""Command-line interface: scan, pair, status, sync, export, transcribe, speakers, watch, serve."""
 
 from __future__ import annotations
 
@@ -117,6 +117,37 @@ async def _cmd_export(args) -> int:
     return 0
 
 
+def _label_speakers(store: Store) -> None:
+    from .speakers import TitanetEmbedder, load_audio
+
+    labelled = store.label_speakers(TitanetEmbedder(), load_audio)
+    if labelled:
+        print(f"Labelled {labelled} line(s) by speaker.")
+
+
+async def _cmd_speakers(args) -> int:
+    store = Store(args.data_dir)
+    try:
+        if args.rename:
+            try:
+                store.rename_speaker(int(args.rename[0]), args.rename[1])
+            except ValueError as err:
+                raise PendantError(str(err)) from None
+        elif args.reset:
+            print(f"Regrouped {store.reset_speakers()} line(s).")
+        else:
+            _label_speakers(store)
+        rows = store.speakers()
+        if not rows:
+            print("No speakers yet. They appear once about ten lines of speech "
+                  "(each 1.5 s or longer) have been transcribed.")
+        for speaker_id, name, lines in rows:
+            print(f"{speaker_id:4d}  {name}  ({lines} line{'s' if lines != 1 else ''})")
+        return 0
+    finally:
+        store.close()
+
+
 async def _cmd_transcribe(args) -> int:
     store = Store(args.data_dir)
     try:
@@ -142,6 +173,8 @@ async def _cmd_transcribe(args) -> int:
         print(f"Transcribed {audio_s / 60:.1f} min of audio in {took:.0f} s: {added} line(s).")
         if not added:
             print("No speech was detected in the new audio.")
+        if not args.no_speakers:
+            _label_speakers(store)
         for path in files:
             print(f"  {path}")
         return 0
@@ -161,12 +194,22 @@ async def _cmd_watch(args) -> int:
             cached.append(WhisperTranscriber(args.model, args.language, args.device))
         return cached[0]
 
+    embedders: list = []
+
+    def get_embedder():
+        if not embedders:
+            from .speakers import TitanetEmbedder
+
+            embedders.append(TitanetEmbedder())
+        return embedders[0]
+
     print(f"Watching for the pendant every {args.interval:.0f} s. Data: {args.data_dir}")
     print("Synced audio is " + ("kept on" if args.keep else "freed from") + " the pendant. "
           "Press Ctrl-C to stop.")
     try:
         await watch(store, interval=args.interval, ack=not args.keep,
-                    get_transcriber=None if args.no_transcribe else get_transcriber)
+                    get_transcriber=None if args.no_transcribe else get_transcriber,
+                    get_embedder=None if args.no_transcribe or args.no_speakers else get_embedder)
     finally:
         store.close()
     return 0
@@ -238,7 +281,16 @@ def main(argv: list[str] | None = None) -> int:
                    help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
     p.add_argument("--redo", action="store_true",
                    help="transcribe everything again, replacing existing transcripts")
+    p.add_argument("--no-speakers", action="store_true", help="skip speaker labels")
     p.set_defaults(func=_cmd_transcribe)
+
+    p = sub.add_parser("speakers", help="label lines by speaker; list, name or merge speakers")
+    data_args(p)
+    p.add_argument("--rename", nargs=2, metavar=("ID", "NAME"),
+                   help="name a speaker; using an existing name merges the two")
+    p.add_argument("--reset", action="store_true",
+                   help="forget all speakers and names, and group every line again")
+    p.set_defaults(func=_cmd_speakers)
 
     p = sub.add_parser("watch", help="keep syncing and transcribing in the background")
     data_args(p)
@@ -247,6 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--keep", action="store_true",
                    help="do not free synced audio on the pendant")
     p.add_argument("--no-transcribe", action="store_true", help="download audio only")
+    p.add_argument("--no-speakers", action="store_true", help="skip speaker labels")
     p.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL})")
     p.add_argument("--language", help="language code such as en (default: detect per file)")
     p.add_argument("--device", default="auto",

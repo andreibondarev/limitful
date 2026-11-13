@@ -16,10 +16,14 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    import numpy as np
 
 from .ogg import packet_samples, write_ogg_opus
 from .protocol import MIN_VALID_TIMESTAMP_MS, FlashPage, extract_opus_frames
+from .speakers import MATCH_THRESHOLD, MIN_FINGERPRINTS, MIN_SPEAKER_MS, SAMPLE_RATE, Embedder
 from .transcribe import Transcriber
 
 # A jump this large between consecutive pages starts a new audio file.
@@ -57,7 +61,19 @@ CREATE TABLE IF NOT EXISTS utterances (
     text     TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS utterances_start ON utterances (start_ms);
+CREATE TABLE IF NOT EXISTS speakers (
+    id        INTEGER PRIMARY KEY,
+    name      TEXT    NOT NULL,
+    voice_sum BLOB    NOT NULL,         -- sum of this speaker's fingerprints
+    lines     INTEGER NOT NULL
+);
 """
+
+# Columns added after the first release; applied to existing databases on open.
+_MIGRATIONS = [
+    ("utterances", "embedding", "BLOB"),       # voice fingerprint, float32
+    ("utterances", "speaker_id", "INTEGER"),
+]
 
 # Too short to hold a word; Whisper only produces noise on these.
 MIN_TRANSCRIBE_MS = 500
@@ -112,6 +128,11 @@ class Store:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")  # commit() must mean "on disk"
         self.db.executescript(_SCHEMA)
+        for table, column, kind in _MIGRATIONS:
+            have = {row[1] for row in self.db.execute(f"PRAGMA table_info({table})")}
+            if column not in have:
+                self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+        self.db.commit()
 
     def close(self) -> None:
         self.db.close()
@@ -244,15 +265,151 @@ class Store:
         start_ms = int(start.timestamp() * 1000)
         end_ms = int(start.replace(hour=23, minute=59, second=59).timestamp() * 1000) + 1000
         rows = self.db.execute(
-            "SELECT start_ms, text FROM utterances WHERE start_ms >= ? AND start_ms < ? "
-            "ORDER BY start_ms, id",
+            "SELECT u.start_ms, u.text, s.name FROM utterances u "
+            "LEFT JOIN speakers s ON s.id = u.speaker_id "
+            "WHERE u.start_ms >= ? AND u.start_ms < ? ORDER BY u.start_ms, u.id",
             (start_ms, end_ms),
         ).fetchall()
         lines = [f"# {day}", ""]
-        for ts, text in rows:
+        for ts, text, speaker in rows:
             clock = datetime.fromtimestamp(ts / 1000).strftime("%H:%M:%S")
-            lines.append(f"- **{clock}** {text}")
+            who = f"{speaker}: " if speaker else ""
+            lines.append(f"- **{clock}** {who}{text}")
         path = self.data_dir / "transcripts" / f"{day}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("\n".join(lines) + "\n")
         return path
+
+    # --- speakers ---------------------------------------------------------------
+
+    def _rewrite_days(self, where: str, params: tuple) -> list[Path]:
+        days = {
+            datetime.fromtimestamp(ms / 1000).strftime("%Y-%m-%d")
+            for (ms,) in self.db.execute(f"SELECT start_ms FROM utterances WHERE {where}", params)
+        }
+        return [self.write_transcript(day) for day in sorted(days)]
+
+    def label_speakers(self, embedder: Embedder, load_audio: Callable[[Path], "np.ndarray"]) -> int:
+        """Fingerprint new lines and group them into speakers. Returns lines labelled."""
+        import numpy as np
+
+        todo = self.db.execute(
+            "SELECT u.id, u.segment, u.start_ms - s.start_ms, u.end_ms - u.start_ms "
+            "FROM utterances u JOIN segments s ON s.path = u.segment "
+            "WHERE u.embedding IS NULL AND u.end_ms - u.start_ms >= ? ORDER BY u.segment",
+            (MIN_SPEAKER_MS,),
+        ).fetchall()
+        loaded: tuple[str, "np.ndarray"] | None = None
+        for uid, segment, offset_ms, duration_ms in todo:
+            if loaded is None or loaded[0] != segment:
+                loaded = (segment, load_audio(self.data_dir / segment))
+            first = offset_ms * SAMPLE_RATE // 1000
+            clip = loaded[1][first : first + duration_ms * SAMPLE_RATE // 1000]
+            if len(clip) < MIN_SPEAKER_MS * SAMPLE_RATE // 1000:
+                continue  # the file is shorter than the transcript claims
+            voice = np.asarray(embedder.embed(clip), dtype=np.float32)
+            self.db.execute("UPDATE utterances SET embedding = ? WHERE id = ?", (voice.tobytes(), uid))
+        self.db.commit()
+        return self._assign_speakers()
+
+    def _assign_speakers(self) -> int:
+        import numpy as np
+
+        (count,) = self.db.execute(
+            "SELECT COUNT(*) FROM utterances WHERE embedding IS NOT NULL").fetchone()
+        if count < MIN_FINGERPRINTS:
+            return 0
+        pending = self.db.execute(
+            "SELECT id, embedding FROM utterances "
+            "WHERE embedding IS NOT NULL AND speaker_id IS NULL ORDER BY start_ms, id"
+        ).fetchall()
+        if not pending:
+            return 0
+
+        def unit(v):
+            norm = np.linalg.norm(v)
+            return v / norm if norm else v
+
+        # The average fingerprint is mostly the pendant's microphone and the
+        # room, not anyone's voice. Subtracting it is what makes voices separable.
+        total = np.zeros(0, dtype=np.float64)
+        for (blob,) in self.db.execute("SELECT embedding FROM utterances WHERE embedding IS NOT NULL"):
+            v = np.frombuffer(blob, dtype=np.float32)
+            total = v.astype(np.float64) if not total.size else total + v
+        mean = total / count
+
+        speakers = {
+            sid: [np.frombuffer(blob, dtype=np.float32).astype(np.float64), lines]
+            for sid, blob, lines in self.db.execute("SELECT id, voice_sum, lines FROM speakers")
+        }
+        for uid, blob in pending:
+            voice = np.frombuffer(blob, dtype=np.float32).astype(np.float64)
+            centred = unit(voice - mean)
+            best, best_score = None, MATCH_THRESHOLD
+            for sid, (voice_sum, lines) in speakers.items():
+                score = float(centred @ unit(voice_sum / lines - mean))
+                if score >= best_score:
+                    best, best_score = sid, score
+            if best is None:
+                cur = self.db.execute(
+                    "INSERT INTO speakers (name, voice_sum, lines) VALUES ('', ?, 0)",
+                    (np.zeros_like(voice, dtype=np.float32).tobytes(),))
+                best = cur.lastrowid
+                self.db.execute("UPDATE speakers SET name = ? WHERE id = ?", (f"Speaker {best}", best))
+                speakers[best] = [np.zeros_like(voice), 0]
+            speakers[best][0] = speakers[best][0] + voice
+            speakers[best][1] += 1
+            self.db.execute("UPDATE utterances SET speaker_id = ? WHERE id = ?", (best, uid))
+        for sid, (voice_sum, lines) in speakers.items():
+            self.db.execute("UPDATE speakers SET voice_sum = ?, lines = ? WHERE id = ?",
+                            (voice_sum.astype(np.float32).tobytes(), lines, sid))
+        self.db.commit()
+        ids = [uid for uid, _ in pending]
+        marks = ",".join("?" * len(ids))
+        self._rewrite_days(f"id IN ({marks})", tuple(ids))
+        return len(pending)
+
+    def speakers(self) -> list[tuple[int, str, int]]:
+        """(id, name, lines) for every speaker, most lines first."""
+        return self.db.execute(
+            "SELECT id, name, lines FROM speakers ORDER BY lines DESC, id").fetchall()
+
+    def rename_speaker(self, speaker_id: int, name: str) -> int:
+        """Name a speaker. Giving it another speaker's name merges the two.
+
+        Returns the id that now holds those lines.
+        """
+        import numpy as np
+
+        name = " ".join(name.split())
+        if not name:
+            raise ValueError("a speaker needs a name")
+        row = self.db.execute(
+            "SELECT voice_sum, lines FROM speakers WHERE id = ?", (speaker_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"there is no speaker {speaker_id}")
+        other = self.db.execute(
+            "SELECT id, voice_sum, lines FROM speakers WHERE id != ? AND name = ? COLLATE NOCASE",
+            (speaker_id, name)).fetchone()
+        keep = speaker_id
+        if other is None:
+            self.db.execute("UPDATE speakers SET name = ? WHERE id = ?", (name, speaker_id))
+        else:
+            keep = other[0]
+            merged = np.frombuffer(other[1], dtype=np.float32) + np.frombuffer(row[0], dtype=np.float32)
+            self.db.execute("UPDATE speakers SET voice_sum = ?, lines = ? WHERE id = ?",
+                            (merged.tobytes(), other[2] + row[1], keep))
+            self.db.execute("UPDATE utterances SET speaker_id = ? WHERE speaker_id = ?", (keep, speaker_id))
+            self.db.execute("DELETE FROM speakers WHERE id = ?", (speaker_id,))
+        self.db.commit()
+        self._rewrite_days("speaker_id = ?", (keep,))
+        return keep
+
+    def reset_speakers(self) -> int:
+        """Forget all speakers and group every stored fingerprint again."""
+        self.db.execute("UPDATE utterances SET speaker_id = NULL")
+        self.db.execute("DELETE FROM speakers")
+        self.db.commit()
+        labelled = self._assign_speakers()
+        self._rewrite_days("embedding IS NOT NULL", ())
+        return labelled

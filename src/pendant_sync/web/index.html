@@ -104,6 +104,19 @@
   .line:hover span { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   .line.on span { background: var(--mark); color: var(--mark-ink); }
   .line.found span { box-shadow: 0 0 0 2px var(--accent); }
+  .who { margin: 0.75rem 0 0 var(--gutter); font-size: 0.85rem; min-height: 1.5rem; }
+  .who button {
+    border: 0; background: none; padding: 0; cursor: pointer;
+    font-weight: 600; color: var(--accent);
+    text-decoration: underline dotted transparent; text-underline-offset: 3px;
+  }
+  .who button:hover { text-decoration-color: currentColor; }
+  .who.unknown { color: var(--muted); }
+  .who input {
+    border: 1px solid var(--accent); border-radius: 4px; background: transparent;
+    padding: 0.1rem 0.4rem; width: 12rem; font-weight: 600;
+  }
+  .who small { color: var(--muted); margin-left: 0.6rem; font-size: 0.8rem; }
   .quiet {
     margin: 0.9rem 0 0.9rem var(--gutter);
     color: var(--muted); font-size: 0.82rem;
@@ -202,6 +215,42 @@ function lineButton(u, showDay, sameMinute) {
   return b;
 }
 
+function whoRow(speaker) {
+  if (!speaker) return el("div", { className: "who unknown", textContent: "Not identified" });
+  const row = el("div", { className: "who" });
+  const name = el("button", { textContent: speaker.name, title: "Rename this speaker" });
+  name.addEventListener("click", () => {
+    const input = el("input", { value: speaker.name, maxLength: 80, ariaLabel: "Speaker name" });
+    const hint = el("small", { textContent: "Enter to save. An existing name merges the two." });
+    row.replaceChildren(input, hint);
+    input.focus(); input.select();
+    let done = false;
+    const cancel = () => { if (!done) { done = true; row.replaceChildren(name); } };
+    input.addEventListener("blur", cancel);
+    input.addEventListener("keydown", async (e) => {
+      if (e.key === "Escape") { cancel(); return; }
+      if (e.key !== "Enter") return;
+      const value = input.value.trim();
+      if (!value || value === speaker.name) { cancel(); return; }
+      done = true;
+      try {
+        const res = await fetch(`/api/speakers/${speaker.id}`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: value }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        lines = await get(`/api/day/${day}`);
+        renderDay();
+      } catch (err) {
+        done = false;
+        hint.textContent = `Could not rename. ${err.message}`;
+      }
+    });
+  });
+  row.append(name);
+  return row;
+}
+
 function renderDay() {
   $("title").textContent = longDay.format(new Date(dayStart(day)));
   document.title = `Lifelog, ${day}`;
@@ -230,10 +279,14 @@ function renderDay() {
     return;
   }
   const nodes = [];
+  const labelled = lines.some((u) => u.speaker);
   lines.forEach((u, n) => {
     const before = lines[n - 1];
     const gap = before && u.start - before.end > QUIET_MS;
     if (gap) nodes.push(el("div", { className: "quiet", textContent: quietFor(u.start - before.end) }));
+    // Say who is speaking whenever it changes (or after a silence).
+    const changed = !before || gap || (before.speaker?.id ?? 0) !== (u.speaker?.id ?? 0);
+    if (labelled && changed) nodes.push(whoRow(u.speaker));
     const sameMinute = before && !gap && Math.floor(before.start / 60000) === Math.floor(u.start / 60000);
     nodes.push(lineButton(u, null, sameMinute));
   });
