@@ -118,10 +118,42 @@
     padding: 0.1rem 0.4rem; width: 12rem; font-weight: 600;
   }
   .who small { color: var(--muted); margin-left: 0.6rem; font-size: 0.8rem; }
-  .talk { margin: 2.2rem 0 0.6rem var(--gutter); max-width: 68ch; }
-  .talk:first-child { margin-top: 0.4rem; }
-  .talk h2 { margin: 0 0 0.35rem; font-size: 1.55rem; line-height: 1.2; }
-  .talk ul { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.95rem; line-height: 1.5; }
+  .tools {
+    display: flex; align-items: center; gap: 1rem;
+    margin: 0 0 0.6rem var(--gutter); color: var(--muted); font-size: 0.85rem;
+  }
+  #all, .copy {
+    border: 1px solid var(--rule); border-radius: 999px; background: transparent;
+    padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
+  }
+  #all:hover, .copy:hover { border-color: var(--accent); color: var(--accent); }
+  .card { border-top: 1px solid var(--rule); }
+  .card > summary {
+    display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr); align-items: baseline;
+    padding: 0.85rem 0; cursor: pointer; list-style: none;
+  }
+  .card > summary::-webkit-details-marker { display: none; }
+  .card > summary time { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+  .card > summary h2 { margin: 0; font-size: 1.35rem; line-height: 1.25; max-width: 68ch; }
+  .card > summary h2.untitled { color: var(--muted); font-style: italic; font-size: 1.12rem; }
+  .card > summary:hover h2 { color: var(--accent); }
+  .card[open] > summary h2 { color: var(--accent); }
+  .card .meta { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+  .card .body { padding: 0 0 1.4rem; }
+  .card .body > ul {
+    margin: 0 0 0.6rem var(--gutter); padding-left: 1.1rem; max-width: 68ch;
+    color: var(--muted); font-size: 0.95rem; line-height: 1.5;
+  }
+  .card .body > .todo, .card .copy { margin-left: var(--gutter); }
+  .card .copy { margin-top: 0.4rem; }
+  .card h3 {
+    margin: 1.6rem 0 0.2rem var(--gutter); max-width: 68ch;
+    font-family: var(--voice); font-size: 1.18rem; font-weight: 600; line-height: 1.3;
+  }
+  .card h4 {
+    margin: 1rem 0 0.1rem var(--gutter); max-width: 68ch;
+    font-size: 0.92rem; font-weight: 600; color: var(--muted);
+  }
   .todo {
     display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap;
     margin-top: 0.5rem; padding: 0.45rem 0.7rem;
@@ -210,6 +242,9 @@ let wanted = null;    // utterance id to reveal after loading a day
 let searching = false;
 let talks = [];       // summarised conversations of the day
 let reminding = false;
+let groups = [];              // the day's conversation cards
+const openCards = new Set();  // cards the reader has opened, kept across refreshes
+const TALK_GAP_MS = 300000;   // a silence this long separates unsummarised conversations
 
 const pad = (n) => String(n).padStart(2, "0");
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -263,14 +298,6 @@ function todoRow(r, after, source) {
   else if (r.status === "accepted") row.append(act("Done", "done"), act("Dismiss", "dismissed"));
   if (source) row.append(el("small", { textContent: source }));
   return row;
-}
-
-function talkBlock(talk) {
-  const block = el("section", { className: "talk" }, el("h2", { textContent: talk.title }));
-  if (talk.summary.length) block.append(el("ul", {}, ...talk.summary.map((t) => el("li", { textContent: t }))));
-  const open = talk.reminders.filter((r) => r.status === "suggested" || r.status === "accepted");
-  block.append(...open.map((r) => todoRow(r, () => { renderDay(); countReminders(); })));
-  return block;
 }
 
 async function countReminders() {
@@ -365,32 +392,132 @@ function renderDay() {
       el("p", {}, "To bring in new audio from the pendant, run ", el("code", { textContent: "limitful watch" }), ".")));
     return;
   }
+  groups = buildGroups();
+  const toggleAll = el("button", { id: "all", textContent: "Open all" });
+  toggleAll.addEventListener("click", () => {
+    const open = toggleAll.textContent === "Open all";
+    groups.forEach((g) => g.setOpen(open));
+    toggleAll.textContent = open ? "Close all" : "Open all";
+  });
+  const count = `${groups.length} conversation${groups.length === 1 ? "" : "s"}`;
+  main.replaceChildren(
+    el("div", { className: "tools" }, el("span", { textContent: count }), toggleAll),
+    ...groups.map(card));
+  if (groups.length === 1) groups[0].setOpen(true);
+  markPlaying();
+  if (wanted) { reveal(wanted, true); wanted = null; }
+}
+
+/* The day's conversations: summarised ones, plus runs of lines that have no summary. */
+function buildGroups() {
+  const out = [], taken = new Set();
+  for (const t of talks) {
+    const own = lines.filter((u) => u.start >= t.start && u.start <= t.end);
+    if (!own.length) continue;
+    own.forEach((u) => taken.add(u.id));
+    out.push({ ...t, key: `c${t.id}`, own });
+  }
+  let run = null;
+  for (const u of lines) {
+    if (taken.has(u.id)) { run = null; continue; }
+    if (!run || u.start - run.end > TALK_GAP_MS) {
+      run = { key: `l${u.start}`, start: u.start, end: u.end, title: null, summary: [], sections: [], reminders: [], own: [] };
+      out.push(run);
+    }
+    run.own.push(u);
+    run.end = Math.max(run.end, u.end);
+  }
+  return out.sort((x, y) => x.start - y.start);
+}
+
+function lengthOf(ms) {
+  const min = Math.round(ms / 60000);
+  if (min < 1) return "under a minute";
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`;
+}
+
+function card(g) {
+  const first = g.own[0].text;
+  const title = g.title || (first.length > 70 ? `${first.slice(0, 70)}…` : first);
+  const waiting = g.reminders.filter((r) => r.status === "suggested").length;
+  const meta = [lengthOf(g.end - g.start), `${g.own.length} line${g.own.length === 1 ? "" : "s"}`];
+  if (waiting) meta.push(`${waiting} reminder${waiting === 1 ? "" : "s"} to review`);
+  const body = el("div", { className: "body" });
+  const box = el("details", { className: "card", id: `g${g.key}` },
+    el("summary", {},
+      el("time", { textContent: clock.format(new Date(g.start)) }),
+      el("div", {},
+        el("h2", { textContent: title, className: g.title ? "" : "untitled" }),
+        el("p", { className: "meta", textContent: meta.join(", ") }))),
+    body);
+  // The transcript is only built when the card is first opened: days can hold thousands of lines.
+  const fill = () => { if (!body.childElementCount) { body.append(...cardBody(g)); markPlaying(); } };
+  box.addEventListener("toggle", () => {
+    if (box.open) { openCards.add(g.key); fill(); } else openCards.delete(g.key);
+  });
+  g.setOpen = (open) => { if (open) { openCards.add(g.key); fill(); } else openCards.delete(g.key); box.open = open; };
+  if (openCards.has(g.key)) g.setOpen(true);
+  return box;
+}
+
+function cardBody(g) {
   const nodes = [];
-  const labelled = lines.some((u) => u.speaker);
-  const upcoming = [...talks];
-  lines.forEach((u, n) => {
-    const before = lines[n - 1];
+  if (!g.sections.length && g.summary.length) nodes.push(el("ul", {}, ...g.summary.map((t) => el("li", { textContent: t }))));
+  const open = g.reminders.filter((r) => r.status === "suggested" || r.status === "accepted");
+  nodes.push(...open.map((r) => todoRow(r, () => { renderDay(); countReminders(); })));
+
+  const copy = el("button", { className: "copy", textContent: "Copy as Markdown" });
+  copy.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(asMarkdown(g)); copy.textContent = "Copied"; }
+    catch { copy.textContent = "Could not copy"; }
+    setTimeout(() => { copy.textContent = "Copy as Markdown"; }, 2000);
+  });
+  nodes.push(copy);
+
+  const labelled = g.own.some((u) => u.speaker);
+  const who = (x) => x.speaker ? (x.speaker.id ?? x.speaker.name) : 0;
+  const headings = [...g.sections];
+  g.own.forEach((u, n) => {
+    const before = g.own[n - 1];
+    let fresh = !before;
+    while (headings.length && headings[0].start <= u.start) {
+      const heading = headings.shift();
+      nodes.push(el(heading.level === 2 ? "h3" : "h4", { textContent: heading.title }));
+      fresh = true;
+    }
     const gap = before && u.start - before.end > QUIET_MS;
     if (gap) nodes.push(el("div", { className: "quiet", textContent: quietFor(u.start - before.end) }));
-    // A summarised conversation gets its title and summary above its first line.
-    while (upcoming.length && upcoming[0].start <= u.start) {
-      const talk = upcoming.shift();
-      if (u.start <= talk.end) nodes.push(talkBlock(talk));
-    }
-    // Say who is speaking whenever it changes (or after a silence).
-    const who = (x) => x.speaker ? (x.speaker.id ?? x.speaker.name) : 0;
-    const changed = !before || gap || who(before) !== who(u);
-    if (labelled && changed) nodes.push(whoRow(u.speaker));
-    const sameMinute = before && !gap && Math.floor(before.start / 60000) === Math.floor(u.start / 60000);
+    // Say who is speaking whenever it changes, and at the top of each section.
+    if (labelled && (fresh || gap || who(before) !== who(u))) nodes.push(whoRow(u.speaker));
+    const sameMinute = !fresh && !gap && Math.floor(before.start / 60000) === Math.floor(u.start / 60000);
     nodes.push(lineButton(u, null, sameMinute));
   });
-  main.replaceChildren(...nodes);
-  markPlaying();
-  if (wanted) {
-    const node = $(`u${wanted}`);
-    wanted = null;
-    if (node) { node.classList.add("found"); node.scrollIntoView({ block: "center" }); node.focus(); }
+  return nodes;
+}
+
+function asMarkdown(g) {
+  const out = [`# ${g.title || "Conversation"}`, ""];
+  const headings = [...g.sections];
+  for (const u of g.own) {
+    while (headings.length && headings[0].start <= u.start) {
+      const heading = headings.shift();
+      out.push("", `${"#".repeat(heading.level)} ${heading.title}`, "");
+    }
+    out.push(`- **${clockSec.format(new Date(u.start))}** ${u.speaker ? `${u.speaker.name}: ` : ""}${u.text}`);
   }
+  return out.join("\n") + "\n";
+}
+
+/* Open the card holding a line and bring the line into view. */
+function reveal(id, mark) {
+  const g = groups.find((x) => x.own.some((u) => u.id === id));
+  if (!g) return;
+  g.setOpen(true);
+  const node = $(`u${id}`);
+  if (!node) return;
+  node.scrollIntoView({ block: "center" });
+  if (mark) node.classList.add("found"); else node.focus({ preventScroll: true });
 }
 
 async function openDay(key, revealId) {
@@ -499,9 +626,7 @@ strip.addEventListener("click", (e) => {
   const box = strip.getBoundingClientRect();
   const at = dayStart(day) + ((e.clientX - box.left) / box.width) * DAY_MS;
   const nearest = lines.reduce((a, b) => Math.abs(b.start - at) < Math.abs(a.start - at) ? b : a);
-  const node = $(`u${nearest.id}`);
-  node?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-  node?.focus({ preventScroll: true });
+  reveal(nearest.id, false);
 });
 
 $("remind").addEventListener("click", () => reminding ? openDay(day) : showReminders());

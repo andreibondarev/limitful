@@ -122,6 +122,19 @@ def test_redo_discards_and_rebuilds(store):
     assert store.digest_pending(Canned()) == 1
 
 
+def test_redo_leaves_imported_conversations_alone(store):
+    store.db.execute("INSERT INTO conversations (id, start_ms, end_ms, status, title, engine) "
+                     "VALUES (50, 1, 2, 'done', 'Imported', 'limitless')")
+    store.db.execute("INSERT INTO reminders (conversation_id, text, created_ms) VALUES (50, 'Keep me', 1)")
+    store.db.execute("INSERT INTO sections (conversation_id, start_ms, level, title) VALUES (50, 1, 2, 'S')")
+    say(store, 0, LONG)
+    store.digest_pending(Canned())
+    store.forget_digests()
+    assert store.db.execute("SELECT title FROM conversations").fetchall() == [("Imported",)]
+    assert [r["text"] for r in store.reminders()] == ["Keep me"]
+    assert store.db.execute("SELECT COUNT(*) FROM sections").fetchone() == (1,)
+
+
 def test_clean_accepts_sloppy_replies_and_rejects_useless_ones():
     got = digest.clean({"title": "  Budget\n review ", "summary": "One point.",
                         "reminders": ["  Call  Joseph ", "", 7, "x"] + ["more"] * 20})

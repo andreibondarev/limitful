@@ -82,6 +82,14 @@ CREATE TABLE IF NOT EXISTS conversations (
     engine   TEXT
 );
 CREATE INDEX IF NOT EXISTS conversations_start ON conversations (start_ms);
+CREATE TABLE IF NOT EXISTS sections (
+    id              INTEGER PRIMARY KEY,
+    conversation_id INTEGER NOT NULL,
+    start_ms        INTEGER NOT NULL,   -- the first line under this heading
+    level           INTEGER NOT NULL,   -- 2 for a section, 3 for a subsection
+    title           TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sections_conversation ON sections (conversation_id);
 CREATE TABLE IF NOT EXISTS reminders (
     id              INTEGER PRIMARY KEY,
     conversation_id INTEGER NOT NULL,
@@ -541,8 +549,11 @@ class Store:
 
     def forget_digests(self) -> None:
         """Drop every conversation, summary and reminder so they can be rebuilt."""
-        self.db.execute("DELETE FROM conversations")
-        self.db.execute("DELETE FROM reminders")
+        # Imported conversations carry their own titles; only ours are rebuilt.
+        ours = "SELECT id FROM conversations WHERE engine IS NOT 'limitless'"
+        self.db.execute(f"DELETE FROM reminders WHERE conversation_id IN ({ours})")
+        self.db.execute(f"DELETE FROM sections WHERE conversation_id IN ({ours})")
+        self.db.execute("DELETE FROM conversations WHERE engine IS NOT 'limitless'")
         self.db.commit()
         self._rewrite_days("1 = 1", ())
 
@@ -554,9 +565,19 @@ class Store:
         ).fetchall()
         out = []
         for cid, start_ms, end_ms, title, summary in rows:
+            (line_count,) = self.db.execute(
+                "SELECT COUNT(*) FROM utterances WHERE start_ms >= ? AND start_ms <= ?",
+                (start_ms, end_ms)).fetchone()
             out.append({
                 "id": cid, "start": start_ms, "end": end_ms, "title": title,
                 "summary": json.loads(summary or "[]"),
+                "lines": line_count,
+                "sections": [
+                    {"start": at, "level": level, "title": heading}
+                    for at, level, heading in self.db.execute(
+                        "SELECT start_ms, level, title FROM sections WHERE conversation_id = ? "
+                        "ORDER BY start_ms, id", (cid,))
+                ],
                 "reminders": [
                     {"id": rid, "text": text, "status": status}
                     for rid, text, status in self.db.execute(

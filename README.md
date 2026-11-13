@@ -56,9 +56,11 @@ On macOS the first run asks for Bluetooth permission for your terminal app.
 uv run limitful serve
 ```
 
-Opens the Lifelog at http://localhost:4747: each day's transcript, with a strip
-showing when speech happened. Click any line to hear it; playback carries on
-through the conversation. Search covers every day. The page only answers on
+Opens the Lifelog at http://localhost:4747. Each day is a list of
+conversations with their time, title and length, under a strip showing when
+speech happened. Open a conversation to read it under its section headings,
+click any line to hear it (playback carries on through the conversation), or
+copy it as Markdown. Search covers every day. The page only answers on
 your own machine. Recordings are Ogg Opus, which Chrome and Firefox play;
 older versions of Safari do not.
 

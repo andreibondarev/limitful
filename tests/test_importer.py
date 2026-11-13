@@ -57,6 +57,7 @@ def test_parse_lifelog():
         ("2", 1, "Mhm."),  # a zero-length line still gets a duration
         ("1", 4000, "Does it take [a long] time?"),
     ]
+    assert log.headings == [(T0, 2, "Benefits"), (T0 + 60000, 2, "Setup"), (T0 + 60000, 3, "App")]
     assert parse_lifelog("k", "# Only a title\n") is None
 
 
@@ -90,6 +91,11 @@ def test_import(tmp_path):
     (talk,) = store.conversations(T0 - 1, T0 + 1)
     assert (talk["title"], talk["summary"]) == ("UVB therapy introduction", ["Benefits", "Setup"])
     assert [(r["text"], r["status"]) for r in talk["reminders"]] == [("Ask about the spraying", "done")]
+    assert talk["lines"] == 3
+    assert talk["sections"] == [
+        {"start": T0, "level": 2, "title": "Benefits"},
+        {"start": T0 + 60000, "level": 2, "title": "Setup"},
+        {"start": T0 + 60000, "level": 3, "title": "App"}]
     assert store.pending_transcription() == []  # imported audio is not sent to Whisper
 
     day = datetime.fromtimestamp(T0 / 1000).strftime("%Y-%m-%d")
@@ -107,6 +113,11 @@ def test_import_twice_adds_nothing(tmp_path):
     assert again.skipped_existing == 1
     assert store.db.execute("SELECT COUNT(*) FROM utterances").fetchone() == (3,)
     assert store.db.execute("SELECT COUNT(*) FROM reminders").fetchone() == (1,)
+    assert store.db.execute("SELECT COUNT(*) FROM sections").fetchone() == (3,)
+    # An import made before headings were kept gets them on the next run.
+    store.db.execute("DELETE FROM sections")
+    import_limitless(store, path, log=quiet)
+    assert store.db.execute("SELECT COUNT(*) FROM sections").fetchone() == (3,)
     store.close()
 
 

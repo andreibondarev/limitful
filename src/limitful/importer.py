@@ -43,6 +43,7 @@ class Lifelog:
     title: str
     sections: list[str]
     lines: list[tuple[str, int, int, str]]  # speaker label, start_ms, end_ms, text
+    headings: list[tuple[int, int, str]] = field(default_factory=list)  # start_ms, level, title
 
 
 @dataclass
@@ -62,6 +63,8 @@ def parse_lifelog(key: str, text: str) -> Lifelog | None:
     title = ""
     sections: list[str] = []
     lines: list[tuple[str, int, int, str]] = []
+    headings: list[tuple[int, int, str]] = []
+    waiting: list[tuple[int, str]] = []  # headings seen since the last line
     for raw in text.splitlines():
         match = _UTTERANCE.match(raw)
         if match:
@@ -69,14 +72,20 @@ def parse_lifelog(key: str, text: str) -> Lifelog | None:
             said = match.group(4).strip()
             if said:
                 lines.append((match.group(1).strip(), start, max(end, start + 1), said))
+                # A heading belongs to the first line that follows it.
+                headings += [(start, level, heading) for level, heading in waiting]
+                waiting = []
         elif raw.startswith("# ") and not title:
             title = raw[2:].strip()
         elif raw.startswith("## "):
             sections.append(raw[3:].strip())
+            waiting.append((2, raw[3:].strip()))
+        elif raw.startswith("### "):
+            waiting.append((3, raw[4:].strip()))
     if not lines:
         return None
     lines.sort(key=lambda item: item[1])
-    return Lifelog(key, title or "Untitled conversation", sections, lines)
+    return Lifelog(key, title or "Untitled conversation", sections, lines, headings)
 
 
 def _audio_times(name: str) -> tuple[int, int] | None:
@@ -168,15 +177,26 @@ def import_limitless(
 
         # --- conversations and their lines ------------------------------------------
         for lifelog in lifelogs:
-            if store.db.execute("SELECT 1 FROM imports WHERE key = ?", (lifelog.key,)).fetchone():
-                result.skipped_existing += 1
-                continue
             start = lifelog.lines[0][1]
             end = max(line[2] for line in lifelog.lines)
-            store.db.execute(
+            if store.db.execute("SELECT 1 FROM imports WHERE key = ?", (lifelog.key,)).fetchone():
+                result.skipped_existing += 1
+                # Imports made before section headings were kept: add them now.
+                row = store.db.execute(
+                    "SELECT id FROM conversations WHERE engine = 'limitless' AND start_ms = ? "
+                    "AND id NOT IN (SELECT conversation_id FROM sections)", (start,)).fetchone()
+                if row:
+                    store.db.executemany(
+                        "INSERT INTO sections (conversation_id, start_ms, level, title) VALUES (?, ?, ?, ?)",
+                        [(row[0], at, level, heading) for at, level, heading in lifelog.headings])
+                continue
+            cur = store.db.execute(
                 "INSERT INTO conversations (start_ms, end_ms, status, title, summary, engine) "
                 "VALUES (?, ?, 'done', ?, ?, 'limitless')",
                 (start, end, lifelog.title, json.dumps(lifelog.sections)))
+            store.db.executemany(
+                "INSERT INTO sections (conversation_id, start_ms, level, title) VALUES (?, ?, ?, ?)",
+                [(cur.lastrowid, at, level, heading) for at, level, heading in lifelog.headings])
             rows = []
             for speaker, line_start, line_end, text in lifelog.lines:
                 segment = recording_at(line_start)
