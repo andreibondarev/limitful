@@ -5,9 +5,9 @@ import subprocess
 
 import pytest
 
-from pendant_sync.ogg import ogg_crc, packet_samples, write_ogg_opus
-from pendant_sync.protocol import VALID_OPUS_TOC, FlashPage
-from pendant_sync.store import Store
+from limitful.ogg import ogg_crc, packet_samples, write_ogg_opus
+from limitful.protocol import VALID_OPUS_TOC, FlashPage
+from limitful.store import Store
 
 from wire import flash_page, opus_frame
 

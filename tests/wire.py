@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pendant_sync.protocol import encode_varint
+from limitful.protocol import encode_varint
 
 
 def ld(tag: int, body: bytes) -> bytes:

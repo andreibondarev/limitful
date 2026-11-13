@@ -5,9 +5,9 @@ import asyncio
 import pytest
 from bleak.exc import BleakError
 
-from pendant_sync import client as client_mod
-from pendant_sync.protocol import decode_varint, parse_ble_packet
-from pendant_sync.store import Store
+from limitful import client as client_mod
+from limitful.protocol import decode_varint, parse_ble_packet
+from limitful.store import Store
 
 from wire import (ble_packets, device_status, flash_page, opus_frame,
                   pendant_message, storage_buffer)

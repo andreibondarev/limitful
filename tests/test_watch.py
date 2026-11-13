@@ -4,10 +4,10 @@ import asyncio
 
 import pytest
 
-from pendant_sync import client as client_mod
-from pendant_sync import watch as watch_mod
-from pendant_sync.store import Store
-from pendant_sync.transcribe import Utterance
+from limitful import client as client_mod
+from limitful import watch as watch_mod
+from limitful.store import Store
+from limitful.transcribe import Utterance
 
 from test_client import FakePendant, pendant  # noqa: F401  (pytest fixture)
 

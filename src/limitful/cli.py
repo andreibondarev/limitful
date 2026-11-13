@@ -17,7 +17,11 @@ from .watch import watch
 
 
 def default_data_dir() -> Path:
-    return Path(os.environ.get("PENDANT_SYNC_DATA") or Path.home() / "PendantSync")
+    if os.environ.get("LIMITFUL_DATA"):
+        return Path(os.environ["LIMITFUL_DATA"])
+    legacy = Path.home() / "PendantSync"  # the folder used before the project was named
+    current = Path.home() / "Limitful"
+    return legacy if legacy.exists() and not current.exists() else current
 
 
 async def _resolve(address: str | None, timeout: float):
@@ -151,14 +155,14 @@ async def _cmd_speakers(args) -> int:
 _CHOOSE_PROVIDER = (
     "choose what writes the summaries: --provider claude (better; sends transcripts to "
     "Anthropic) or --provider ollama (runs on this computer). "
-    "Set PENDANT_SYNC_LLM to make the choice stick."
+    "Set LIMITFUL_LLM to make the choice stick."
 )
 
 
 def _summarizer(args):
     from .digest import make_summarizer
 
-    provider = args.provider or os.environ.get("PENDANT_SYNC_LLM")
+    provider = args.provider or os.environ.get("LIMITFUL_LLM")
     if not provider:
         raise PendantError(_CHOOSE_PROVIDER)
     try:
@@ -250,7 +254,7 @@ async def _cmd_watch(args) -> int:
         return embedders[0]
 
     summarizer = None
-    if args.provider or os.environ.get("PENDANT_SYNC_LLM"):
+    if args.provider or os.environ.get("LIMITFUL_LLM"):
         summarizer = _summarizer(args)
 
     print(f"Watching for the pendant every {args.interval:.0f} s. Data: {args.data_dir}")
@@ -285,7 +289,7 @@ async def _cmd_serve(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="pendant-sync",
+        prog="limitful",
         description="Pull recordings off a Limitless Pendant over Bluetooth.",
     )
     parser.add_argument("--version", action="version", version=__version__)
@@ -297,8 +301,8 @@ def main(argv: list[str] | None = None) -> int:
 
     def data_args(p) -> None:
         p.add_argument("--data-dir", type=Path, default=default_data_dir(),
-                       help="where recordings are stored (default: ~/PendantSync, "
-                            "or $PENDANT_SYNC_DATA)")
+                       help="where recordings are stored (default: ~/Limitful, "
+                            "or $LIMITFUL_DATA)")
 
     p = sub.add_parser("scan", help="list pendants advertising nearby")
     p.add_argument("--timeout", type=float, default=8.0)
@@ -345,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def llm_args(p) -> None:
         p.add_argument("--provider", choices=["claude", "ollama"],
-                       help="what writes summaries (default: $PENDANT_SYNC_LLM)")
+                       help="what writes summaries (default: $LIMITFUL_LLM)")
         p.add_argument("--llm-model", help="model name for that provider")
 
     p = sub.add_parser("digest", help="title and summarise conversations, and suggest reminders")

@@ -1,4 +1,4 @@
-# pendant-sync
+# Limitful
 
 An open-source desktop client for the Limitless Pendant. It pulls recordings off
 the pendant over Bluetooth and saves them as audio files on your computer, with
@@ -31,29 +31,29 @@ resets the pendant and clears the audio stored on it**, so let the Limitless app
 sync first if you still use it.
 
 ```sh
-uv run pendant-sync scan      # find the pendant
-uv run pendant-sync pair      # first use only: pair this computer with it
-uv run pendant-sync status    # how much audio is stored on it
-uv run pendant-sync sync      # download everything into ~/PendantSync
-uv run pendant-sync transcribe  # turn new audio into text, on this machine
+uv run limitful scan      # find the pendant
+uv run limitful pair      # first use only: pair this computer with it
+uv run limitful status    # how much audio is stored on it
+uv run limitful sync      # download everything into ~/Limitful
+uv run limitful transcribe  # turn new audio into text, on this machine
 ```
 
 Transcripts are written to `transcripts/<date>.md`, one timestamped line
 per utterance. Transcription uses Whisper (`large-v3-turbo`) locally; the model
 is about 1.6 GB and downloads on first use. No audio leaves your computer.
 
-Everything is stored in `~/PendantSync` (change it with `--data-dir` or the
-`PENDANT_SYNC_DATA` environment variable). Audio lands in
+Everything is stored in `~/Limitful` (change it with `--data-dir` or the
+`LIMITFUL_DATA` environment variable). Audio lands in
 `audio/<date>/<time>.ogg` (Ogg Opus, plays in VLC, ffmpeg and most browsers).
 The raw pages from the pendant are kept in `pendant.db`, so audio can be
-re-exported later with `uv run pendant-sync export`.
+re-exported later with `uv run limitful export`.
 
 On macOS the first run asks for Bluetooth permission for your terminal app.
 
 ### Reading and listening
 
 ```sh
-uv run pendant-sync serve
+uv run limitful serve
 ```
 
 Opens the Lifelog at http://localhost:4747: each day's transcript, with a strip
@@ -70,9 +70,9 @@ automatically after transcription. Click a name in the Lifelog to rename it;
 giving two speakers the same name merges them. From the command line:
 
 ```sh
-uv run pendant-sync speakers                   # label new lines and list speakers
-uv run pendant-sync speakers --rename 2 Andrei
-uv run pendant-sync speakers --reset           # forget names and group again
+uv run limitful speakers                   # label new lines and list speakers
+uv run limitful speakers --rename 2 Andrei
+uv run limitful speakers --reset           # forget names and group again
 ```
 
 Limits: labels start once about ten lines have been transcribed, lines shorter
@@ -83,7 +83,7 @@ tuned on a small test and will need adjusting on real conversations.
 ### Summaries and reminders
 
 ```sh
-uv run pendant-sync digest --provider claude    # or: --provider ollama
+uv run limitful digest --provider claude    # or: --provider ollama
 ```
 
 `digest` groups each day's lines into conversations (a five-minute silence ends
@@ -100,7 +100,7 @@ You choose what does the reading, and nothing is sent anywhere until you do:
 - `--provider ollama` uses a model running on your computer through
   [Ollama](https://ollama.com) (`llama3.1` by default). Private, weaker.
 
-Set `PENDANT_SYNC_LLM=claude` (or `ollama`) to make the choice stick; `watch`
+Set `LIMITFUL_LLM=claude` (or `ollama`) to make the choice stick; `watch`
 then summarises automatically. Conversations of fewer than 25 words are left
 without a summary. `digest --redo` rewrites everything, discarding the state
 of existing reminders.
@@ -110,7 +110,7 @@ Not yet verified against either service: the logic is tested with stand-ins.
 ### Running in the background
 
 ```sh
-uv run pendant-sync watch
+uv run limitful watch
 ```
 
 `watch` checks for the pendant every two minutes. When it is in range it
@@ -124,7 +124,7 @@ By default `sync` is read-only: the pendant keeps its copy and will send the
 same pages again next time (they are skipped locally).
 
 ```sh
-uv run pendant-sync sync --ack
+uv run limitful sync --ack
 ```
 
 `--ack` tells the pendant to delete pages once they are safely on disk. After

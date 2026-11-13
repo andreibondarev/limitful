@@ -35,5 +35,5 @@ echo "run: dev server on http://localhost:$PORT"
 # Record our PID so teardown.sh can stop the server; exec keeps the PID the same.
 echo $$ >"$PID_FILE"
 
-# The Lifelog web app: browse transcripts and play audio. Reads ~/PendantSync.
-exec uv run pendant-sync serve --port "$PORT"
+# The Lifelog web app: browse transcripts and play audio. Reads ~/Limitful.
+exec uv run limitful serve --port "$PORT"

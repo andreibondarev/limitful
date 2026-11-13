@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from pendant_sync.protocol import FlashPage
-from pendant_sync.store import Store
-from pendant_sync.transcribe import Utterance
+from limitful.protocol import FlashPage
+from limitful.store import Store
+from limitful.transcribe import Utterance
 
 from wire import flash_page, opus_frame
 

@@ -45,7 +45,7 @@ class Embedder(Protocol):
 
 
 def cache_dir() -> Path:
-    return Path(os.environ.get("PENDANT_SYNC_CACHE") or Path.home() / ".cache" / "pendant-sync")
+    return Path(os.environ.get("LIMITFUL_CACHE") or Path.home() / ".cache" / "limitful")
 
 
 def ensure_model() -> Path:

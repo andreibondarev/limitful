@@ -298,7 +298,7 @@ async function showReminders() {
   const nodes = [...group("To review", "suggested"), ...group("Accepted", "accepted")];
   main.replaceChildren(...(nodes.length ? nodes : [el("div", { className: "empty" },
     el("p", { textContent: "No reminders to review." }),
-    el("p", {}, "They are suggested when conversations are summarised. Run ", el("code", { textContent: "pendant-sync digest" }), "."))]));
+    el("p", {}, "They are suggested when conversations are summarised. Run ", el("code", { textContent: "limitful digest" }), "."))]));
   countReminders();
 }
 
@@ -358,7 +358,7 @@ function renderDay() {
   if (!lines.length) {
     main.replaceChildren(el("div", { className: "empty" },
       el("p", { textContent: "Nothing was said on this day, or nothing has been synced yet." }),
-      el("p", {}, "To bring in new audio from the pendant, run ", el("code", { textContent: "pendant-sync watch" }), ".")));
+      el("p", {}, "To bring in new audio from the pendant, run ", el("code", { textContent: "limitful watch" }), ".")));
     return;
   }
   const nodes = [];
@@ -520,7 +520,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === " " && playing && !e.target.matches("button")) { e.preventDefault(); $("toggle").click(); }
 });
 
-/* New lines arrive while `pendant-sync watch` runs; pick them up quietly. */
+/* New lines arrive while `limitful watch` runs; pick them up quietly. */
 setInterval(async () => {
   if (searching || reminding || document.hidden || !day) return;
   try {

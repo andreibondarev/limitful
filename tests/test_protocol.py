@@ -1,4 +1,4 @@
-from pendant_sync import protocol as p
+from limitful import protocol as p
 
 from wire import (ble_packets, device_status, flash_page, opus_frame,
                   pendant_message, storage_buffer)

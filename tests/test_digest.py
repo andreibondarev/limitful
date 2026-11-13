@@ -7,8 +7,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from pendant_sync import digest
-from pendant_sync.store import Store
+from limitful import digest
+from limitful.store import Store
 
 T0 = int(datetime(2026, 11, 13, 9, 0, 0).timestamp() * 1000)
 MIN = 60_000

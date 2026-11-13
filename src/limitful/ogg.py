@@ -75,7 +75,7 @@ def write_ogg_opus(
 ) -> int:
     """Write packets as an Ogg Opus stream. Returns the duration in milliseconds."""
     head = struct.pack("<8sBBHIhB", b"OpusHead", 1, channels, 0, input_sample_rate, 0, 0)
-    vendor = b"pendant-sync"
+    vendor = b"limitful"
     tags = b"OpusTags" + struct.pack("<I", len(vendor)) + vendor + struct.pack("<I", 0)
     out.write(_page(serial, 0, 0, 0x02, [head]))  # beginning of stream
     out.write(_page(serial, 1, 0, 0x00, [tags]))

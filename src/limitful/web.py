@@ -127,7 +127,7 @@ class Library:
 
 def make_handler(library: Library):
     class Handler(BaseHTTPRequestHandler):
-        server_version = "pendant-sync"
+        server_version = "limitful"
 
         def log_message(self, format, *args) -> None:  # keep the terminal quiet
             pass

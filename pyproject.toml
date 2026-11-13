@@ -1,14 +1,14 @@
 [project]
-name = "pendant-sync"
+name = "limitful"
 version = "0.1.0"
-description = "Open-source desktop sync client for the Limitless Pendant: pull recordings off the device over Bluetooth."
+description = "Open-source client for the Limitless Pendant: sync recordings over Bluetooth, transcribe them locally and browse your day."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = ["bleak>=0.22", "faster-whisper>=1.1", "sherpa-onnx>=1.10", "numpy", "anthropic>=1.0"]
 
 [project.scripts]
-pendant-sync = "pendant_sync.cli:main"
+limitful = "limitful.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]
@@ -18,7 +18,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pendant_sync"]
+packages = ["src/limitful"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
