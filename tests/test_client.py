@@ -3,6 +3,7 @@
 import asyncio
 
 import pytest
+from bleak.exc import BleakError
 
 from pendant_sync import client as client_mod
 from pendant_sync.protocol import decode_varint, parse_ble_packet
@@ -38,7 +39,12 @@ class FakePendant:
     async def start_notify(self, _uuid, callback):
         self.notify = callback
 
+    encryption_failures = 0  # how many writes to reject before "pairing" completes
+
     async def write_gatt_char(self, _uuid, data, response=True):
+        if FakePendant.encryption_failures > 0:
+            FakePendant.encryption_failures -= 1
+            raise BleakError("(15, 'GATT Protocol Error: Insufficient Encryption')")
         payload = parse_ble_packet(bytes(data)).payload
         field = decode_varint(payload, 0)[0] >> 3
         length, pos = decode_varint(payload, 1 if field < 16 else 2)
@@ -73,6 +79,9 @@ def pendant(monkeypatch):
     monkeypatch.setattr(client_mod, "STATUS_TIMEOUT_S", 0.2)
     FakePendant.page_indices = []
     FakePendant.reported_newest = None
+    FakePendant.encryption_failures = 0
+    monkeypatch.setattr(client_mod, "PAIRING_RETRY_S", 0.01)
+    monkeypatch.setattr(client_mod, "PAIRING_TIMEOUT_S", 0.1)
     return FakePendant
 
 
@@ -136,6 +145,20 @@ def test_empty_pendant(pendant, tmp_path):
     result, stored = run_sync(tmp_path)
     assert (result.reason, stored) == ("empty", 0)
     assert [f for f, _ in pendant.instance.commands] == [6, 21]
+
+
+def test_write_is_retried_while_pairing_completes(pendant, tmp_path):
+    pendant.page_indices = [0, 1]
+    pendant.encryption_failures = 2
+    result, stored = run_sync(tmp_path)
+    assert (result.reason, stored) == ("caught_up", 2)
+
+
+def test_unpaired_pendant_gives_pairing_instructions(pendant, tmp_path):
+    pendant.encryption_failures = 10_000
+    with pytest.raises(client_mod.PendantError, match="pairing mode"):
+        run_sync(tmp_path)
+    assert not pendant.instance.connected
 
 
 def test_status_timeout_raises(pendant, tmp_path, monkeypatch):

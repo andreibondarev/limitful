@@ -9,6 +9,7 @@ from typing import Callable
 
 from bleak import BleakClient, BleakScanner
 from bleak.backends.device import BLEDevice
+from bleak.exc import BleakError
 
 from .protocol import (
     RX_CHAR_UUID,
@@ -27,6 +28,8 @@ from .store import Store
 STATUS_TIMEOUT_S = 8
 STALL_TIMEOUT_S = 30
 CHECKPOINT_EVERY_PAGES = 25
+PAIRING_TIMEOUT_S = 30
+PAIRING_RETRY_S = 2
 _SETTLE_S = 1.0  # the pendant needs a moment after connect and after subscribing
 
 
@@ -70,7 +73,7 @@ class Pendant:
             await asyncio.sleep(_SETTLE_S)
             await self._client.start_notify(RX_CHAR_UUID, self._on_notify)
             await asyncio.sleep(_SETTLE_S)
-            await self._write(self._encoder.set_time(int(time.time() * 1000)))
+            await self._first_write()
         except BaseException:
             await self._client.disconnect()
             raise
@@ -78,6 +81,31 @@ class Pendant:
 
     async def __aexit__(self, *exc) -> None:
         await self._client.disconnect()
+
+    async def _first_write(self) -> None:
+        """Set the clock. This is the first encrypted write, so it triggers pairing.
+
+        The pendant rejects writes until the link is encrypted. The operating
+        system then starts pairing (macOS shows a dialog); retry while it does.
+        """
+        deadline = time.monotonic() + PAIRING_TIMEOUT_S
+        while True:
+            try:
+                await self._write(self._encoder.set_time(int(time.time() * 1000)))
+                return
+            except BleakError as err:
+                text = str(err).lower()
+                if "encryption" not in text and "authentication" not in text:
+                    raise
+                if time.monotonic() >= deadline:
+                    raise PendantError(
+                        "the pendant refused the connection because this computer is "
+                        "not paired with it. Put the pendant in pairing mode (while a "
+                        "light is visible, press once, then press and hold until the "
+                        "light turns pink, then release), accept the pairing request "
+                        "on this computer, and run the command again."
+                    ) from None
+                await asyncio.sleep(PAIRING_RETRY_S)
 
     async def _write(self, packet: bytes) -> None:
         await self._client.write_gatt_char(TX_CHAR_UUID, packet, response=True)
