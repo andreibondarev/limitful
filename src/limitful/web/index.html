@@ -372,7 +372,8 @@ function todoRow(r, after, source) {
 function whereLink(r) {
   const box = el("small", { className: "where" });
   const go = el("a", { href: `#${r.day}`, textContent: `${longDay.format(new Date(r.line ? r.line.start : r.start))}, in “${r.from}”` });
-  go.addEventListener("click", (e) => { e.preventDefault(); openDay(r.day, r.line?.id, r.conversation); });
+  // Going to where a reminder came from also plays it: hearing it is the point.
+  go.addEventListener("click", (e) => { e.preventDefault(); openDay(r.day, r.line?.id, r.conversation, true); });
   box.append(go);
   if (r.line) {
     const said = r.line.text.length > 160 ? `${r.line.text.slice(0, 160)}…` : r.line.text;
@@ -496,14 +497,22 @@ function renderDay() {
   if (groups.length === 1) groups[0].setOpen(true);
   markPlaying();
   if (wanted) {
-    const { line, talk } = wanted;
+    const { line, talk, start } = wanted;
     wanted = null;
     document.querySelectorAll(".found").forEach((n) => n.classList.remove("found"));
-    if (line && groups.some((g) => g.own.some((u) => u.id === line))) reveal(line, true);
-    else if (talk) {
+    let from = null;  // the line to start playing at, when asked to
+    if (line && groups.some((g) => g.own.some((u) => u.id === line))) {
+      reveal(line, true);
+      from = lines.find((u) => u.id === line);
+    } else if (talk) {
       const g = groups.find((x) => x.key === `c${talk}`);
-      if (g) { g.setOpen(true); $(`g${g.key}`).scrollIntoView({ block: "start" }); }
+      if (g) {
+        g.setOpen(true);
+        $(`g${g.key}`).scrollIntoView({ block: "start" });
+        from = g.own.find((u) => u.audio);
+      }
     }
+    if (start && from) play(from);
   }
 }
 
@@ -567,8 +576,12 @@ function cardBody(g) {
   nodes.push(...open.map((r) => {
     let jump = null;
     if (r.line && g.own.some((u) => u.id === r.line)) {
-      jump = el("button", { className: "jump", textContent: "Show the line" });
-      jump.addEventListener("click", () => reveal(r.line, true));
+      jump = el("button", { className: "jump", textContent: "Play the line" });
+      jump.addEventListener("click", () => {
+        reveal(r.line, true);
+        const from = lines.find((u) => u.id === r.line);
+        if (from) play(from);
+      });
     }
     return todoRow(r, () => { renderDay(); countReminders(); }, jump);
   }));
@@ -626,7 +639,7 @@ function reveal(id, mark) {
   if (mark) node.classList.add("found"); else node.focus({ preventScroll: true });
 }
 
-async function openDay(key, revealId, revealTalk) {
+async function openDay(key, revealId, revealTalk, startPlaying) {
   searching = false;
   reminding = false;
   configuring = false;
@@ -634,7 +647,8 @@ async function openDay(key, revealId, revealTalk) {
   $("settings").setAttribute("aria-pressed", "false");
   $("search").value = "";
   day = key;
-  wanted = revealId || revealTalk ? { line: revealId || null, talk: revealTalk || null } : null;
+  wanted = revealId || revealTalk
+    ? { line: revealId || null, talk: revealTalk || null, start: Boolean(startPlaying) } : null;
   history.replaceState(null, "", `#${key}`);
   try {
     [lines, talks] = await Promise.all([get(`/api/day/${key}`), get(`/api/conversations/${key}`)]);

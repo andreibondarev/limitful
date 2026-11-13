@@ -101,7 +101,8 @@ Markdown transcripts. Reminders are suggestions: accept or dismiss them in the
 Lifelog, where the Reminders button lists everything waiting.
 
 Each reminder links back to the conversation it came from and, where it can be
-identified, the line: the Reminders list quotes that line and jumps to it. The
+identified, the line: the Reminders list quotes that line, and clicking the
+link jumps to it and starts playing from there. The
 model cites the line for reminders it writes. For reminders imported from
 Limitless, which only record the conversation, the line is found by matching
 the wording, so it is a best guess and some have none.
