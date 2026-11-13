@@ -186,6 +186,21 @@
   .todo button:hover, #remind:hover, #settings:hover, .pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   #remind, #settings, #ask, .pill { padding: 0.4rem 0.85rem; font-size: inherit; }
   #ask:hover { border-color: var(--accent); color: var(--accent); }
+  #paused {
+    border: 0; border-radius: 999px; padding: 0.4rem 0.85rem; cursor: pointer; font-weight: 600;
+    background: var(--mark); color: var(--mark-ink);
+  }
+  #paused[hidden] { display: none; }
+  .hold {
+    margin: 0.9rem 0 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--mark);
+    background: color-mix(in srgb, var(--mark) 16%, transparent); font-size: 0.9rem; line-height: 1.45;
+  }
+  .hold[hidden] { display: none; }
+  .setup details.more { margin-top: 1rem; }
+  .setup details.more summary { cursor: pointer; color: var(--accent); font-size: 0.95rem; }
+  .setup details.more ol { margin: 0.7rem 0; padding-left: 1.3rem; color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
+  .setup details.more .row { margin-top: 0.6rem; }
+  .pill.danger:hover:not(:disabled) { border-color: #b3261e; color: #b3261e; }
   #ask[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .chat { max-width: 44rem; }
   .chat .lead { font-family: var(--voice); font-size: 1.2rem; line-height: 1.5; margin: 0 0 1rem; }
@@ -337,6 +352,7 @@
     <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
     <button class="step" id="next" aria-label="Next day with recordings">›</button>
     <input type="date" id="pick" aria-label="Go to a date">
+    <button id="paused" hidden title="Audio is not being kept. Click to open Settings."><span>Paused</span></button>
     <button id="ask" aria-pressed="false"><span>Ask</span></button>
     <button id="remind" aria-pressed="false"><span id="remindLabel">Reminders</span></button>
     <button id="settings" aria-pressed="false"><span>Settings</span></button>
@@ -408,6 +424,10 @@ const ICONS = {
   import: "M12 3v11 M7.5 9.5 12 14l4.5-4.5 M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3",
   pendant: "M9 4.5h6v4H9Z M12 21a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Z",
   key: "M14.5 9.5a4 4 0 1 0-3.6 4l1.6 1.5h2v2h2v2h3v-3l-5.2-5.2c.1-.4.2-.9.2-1.3Z",
+  pause: "M9 5v14 M15 5v14",
+  play: "M8 5v14l11-7Z",
+  link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
+  unlink: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1 M4 4l16 16",
 };
 const SVG = "http://www.w3.org/2000/svg";
 function svgEl(tag, attrs = {}) {
@@ -1112,6 +1132,42 @@ async function showSettings() {
   };
   const check = el("button", { className: "pill busy-off" }, ...withIcon("refresh", "Check pendant", 16));
   const sync = el("button", { className: "pill main busy-off" }, ...withIcon("sync", "Sync now", 16));
+  // Pause: kept by the app, since the pendant cannot be told to stop recording.
+  const hold = el("p", { className: "hold", hidden: true });
+  const pause = el("button", { className: "pill" });
+  let pausedSince = null;
+  const showHold = (since) => {
+    pausedSince = since ?? null;
+    pause.replaceChildren(...withIcon(pausedSince ? "play" : "pause", pausedSince ? "Resume keeping audio" : "Pause", 16));
+    hold.hidden = !pausedSince;
+    if (pausedSince) hold.textContent = `Paused since ${clock.format(new Date(pausedSince))}. The pendant is still recording, because it has no way to be told to stop. Audio from this period is deleted when it syncs, without being kept or transcribed.`;
+    $("paused").hidden = !pausedSince;
+  };
+  pause.addEventListener("click", async () => {
+    try { showHold((await post("/api/pendant", { action: pausedSince ? "resume" : "pause" })).paused_since); }
+    catch (err) { about.textContent = err.message; about.classList.add("failed"); }
+  });
+
+  // Pairing and unpairing.
+  const pair = el("button", { className: "pill busy-off" }, ...withIcon("link", "Pair this computer", 16));
+  const unpair = el("button", { className: "pill danger busy-off" }, ...withIcon("unlink", "Unpair", 16));
+  pair.addEventListener("click", async () => {
+    try { await post("/api/pendant", { action: "pair" }); watchJob(); }
+    catch (err) { about.textContent = err.message; about.classList.add("failed"); }
+  });
+  let sure = false;
+  unpair.addEventListener("click", async () => {
+    if (!sure) { sure = true; unpair.lastChild.textContent = "Really unpair?"; return; }
+    unpair.disabled = true;
+    about.classList.remove("failed");
+    about.textContent = "Unpairing…";
+    try { describe(await post("/api/pendant", { action: "unpair" })); about.textContent = "Unpaired. The pendant has forgotten this computer and keeps its recordings. Pair again to use it here."; }
+    catch (err) { about.textContent = err.message; about.classList.add("failed"); }
+    sure = false;
+    unpair.lastChild.textContent = "Unpair";
+    unpair.disabled = false;
+  });
+
   const light = el("input", { type: "range", min: 0, max: 100, step: 5, id: "light", ariaLabel: "Brightness of the pendant's light" });
   const lightValue = el("output", { htmlFor: "light" });
   const showLight = () => {
@@ -1146,6 +1202,7 @@ async function showSettings() {
   light.value = pendantNow.brightness ?? 100;
   showLight();
   describe(pendantNow);
+  showHold(pendantNow.paused_since);
 
   const pick = el("button", { className: "pill busy-off" }, ...withIcon("import", "Choose an export zip", 16));
   pick.addEventListener("click", () => $("file").click());
@@ -1156,13 +1213,23 @@ async function showSettings() {
       drawing,
       el("div", {},
         el("div", { className: "readings" }, power.node, waiting.node, room.node),
-        el("div", { className: "row" }, sync, check),
+        el("div", { className: "row" }, sync, check, pause),
         about)),
+    hold,
     el("div", { className: "row light" }, el("label", { htmlFor: "light", textContent: "Light" }), icon("dim", 18), light, icon("bright", 20), lightValue),
     el("p", { className: "small", textContent: pendantNow.brightness == null
       ? "The pendant does not report its brightness, so this shows 100% until you set it here."
       : "The pendant does not report its brightness; this is the last value set from here." }),
-    el("p", { className: "small", textContent: "To stop recording, hold the pendant's button for two seconds to switch it off. No command for pausing from here is known." }),
+    el("p", { className: "small", textContent: "Pause stops the app keeping audio; the pendant itself goes on recording. To stop it recording at all, hold its button for two seconds to switch it off." }),
+    el("details", { className: "more" },
+      el("summary", { textContent: "Pairing" }),
+      el("ol", {},
+        el("li", { textContent: "Sync first. Pairing mode is a factory reset: it erases any audio still on the pendant." }),
+        el("li", { textContent: "Click Pair this computer. It waits three minutes." }),
+        el("li", { textContent: "On the pendant, press the button once and release, then straight away press and hold. A purple light appears; keep holding until it goes out." }),
+        el("li", { textContent: "A blue light means it is ready. Accept the connection request your computer shows." })),
+      el("p", { className: "small", textContent: "Unpair makes the pendant forget this computer, so it can be paired with another. Its recordings are kept. Your computer may also remember the pendant: if pairing again fails, remove it under Bluetooth in System Settings." }),
+      el("div", { className: "row" }, pair, unpair)),
     el("h2", {}, ...withIcon("summary", "Summaries", 22)),
     el("p", { textContent: "A title, a short summary and suggested reminders for each conversation recorded from the pendant. Conversations imported from Limitless already have theirs." }),
     options,
@@ -1354,6 +1421,12 @@ function showAsk() {
 $("ask").addEventListener("click", () => asking ? openDay(day) : showAsk());
 
 for (const id of ["ask", "remind", "settings"]) $(id).prepend(icon(id === "remind" ? "reminders" : id, 16));
+$("paused").prepend(icon("pause", 16));
+$("paused").addEventListener("click", () => showSettings());
+/* Show on every page when audio is not being kept: it is easy to forget. */
+async function showPaused() {
+  try { $("paused").hidden = (await get("/api/pendant")).paused_since == null; } catch { /* leave it as it is */ }
+}
 $("remind").addEventListener("click", () => reminding ? openDay(day) : showReminders());
 $("home").addEventListener("click", (e) => {
   e.preventDefault();
@@ -1384,6 +1457,7 @@ document.addEventListener("keydown", (e) => {
 
 /* New lines arrive while `limitful watch` runs; pick them up quietly. */
 setInterval(async () => {
+  showPaused();
   if (searching || reminding || configuring || asking || document.hidden || !day) return;
   try {
     days = await get("/api/days");
@@ -1410,6 +1484,7 @@ setInterval(async () => {
   if (hashDay === "ask") showAsk();
   watchJob();
   countReminders();
+  showPaused();
 })();
 </script>
 </body>

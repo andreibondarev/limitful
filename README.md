@@ -81,8 +81,21 @@ The Lifelog's Settings page has a Pendant section:
 From the command line, `uv run limitful status` shows the same readings and
 `--brightness 40` sets the light.
 
-No command for pausing recording is known. Hold the pendant's button for two
-seconds to switch it off.
+- **Pause** stops the app keeping audio. The pendant itself cannot be told to
+  stop recording (no such command is known, and its live-stream mode keeps
+  writing to storage, which was measured). So a pause is kept by the app: the
+  pendant goes on recording, and anything from the paused period is deleted
+  when it syncs, without being stored or transcribed. A Paused marker shows on
+  every page until you resume. To stop the pendant recording at all, hold its
+  button for two seconds to switch it off.
+- **Pairing** has two buttons. Pair this computer waits three minutes while
+  you put the pendant in pairing mode. Unpair makes the pendant forget this
+  computer so another can pair with it, keeping its recordings.
+
+On the command line: `limitful pause`, `limitful resume`, `limitful pair` and
+`limitful unpair`.
+
+Unpair has only been tested against a simulated pendant.
 
 ### Speaker labels
 

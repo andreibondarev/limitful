@@ -33,6 +33,11 @@ def test_led_brightness_is_clamped():
     assert p.parse_ble_packet(p.CommandEncoder().set_led_brightness(-5)).payload[4] == 0
 
 
+def test_unpair_keeps_recordings_unless_asked_to_reset():
+    assert p.parse_ble_packet(p.CommandEncoder().unpair()).payload.hex() == "7a020801" "f20104" "08011000"
+    assert p.parse_ble_packet(p.CommandEncoder().unpair(reset=True)).payload.hex().startswith("7a020800")
+
+
 def test_set_time_carries_timestamp():
     ts = 1_763_000_000_123
     payload = p.parse_ble_packet(p.CommandEncoder().set_time(ts)).payload

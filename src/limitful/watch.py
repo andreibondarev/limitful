@@ -23,6 +23,7 @@ class CycleResult:
     audio_files: int = 0
     lines: int = 0
     error: str | None = None
+    pages_discarded: int = 0
 
 
 def _stamp(message: str) -> None:
@@ -62,8 +63,9 @@ async def run_cycle(
         except DigestError as err:
             # Audio and transcripts are safe; summaries are retried next cycle.
             return CycleResult(True, result.pages_new, len(segments), lines,
-                               error=f"summaries: {err}")
-    return CycleResult(True, result.pages_new, len(segments), lines)
+                               error=f"summaries: {err}", pages_discarded=result.pages_discarded)
+    return CycleResult(True, result.pages_new, len(segments), lines,
+                       pages_discarded=result.pages_discarded)
 
 
 async def watch(
@@ -94,9 +96,11 @@ async def watch(
         elif not result.found:
             if was_found is not False:
                 log("pendant not in range; waiting")
-        elif result.pages_new or result.lines:
+        elif result.pages_new or result.lines or result.pages_discarded:
             log(f"synced {result.pages_new} new page(s), {result.audio_files} audio file(s), "
-                f"{result.lines} transcript line(s)")
+                f"{result.lines} transcript line(s)"
+                + (f"; deleted {result.pages_discarded} page(s) recorded while paused"
+                   if result.pages_discarded else ""))
         elif was_found is not True:
             log("pendant connected; nothing new")
         was_found = result.found

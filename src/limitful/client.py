@@ -57,6 +57,7 @@ class SyncResult:
     pages_received: int
     pages_new: int
     acked_up_to: int | None
+    pages_discarded: int = 0  # recorded while paused, so deliberately not kept
 
 
 async def scan(timeout: float = 8.0) -> list[tuple[BLEDevice, int]]:
@@ -107,6 +108,16 @@ async def set_brightness(percent: int, timeout: float = 8.0) -> None:
             "the pendant is not in range, is switched off, or is connected to another device")
     async with Pendant(device, pairing_timeout=10) as pendant:
         await pendant.set_led_brightness(percent)
+
+
+async def unpair(timeout: float = 8.0) -> None:
+    """Tell the pendant to forget this computer, keeping its recordings."""
+    device = await find(timeout)
+    if device is None:
+        raise PendantError(
+            "the pendant is not in range, is switched off, or is connected to another device")
+    async with Pendant(device, pairing_timeout=10) as pendant:
+        await pendant.unpair()
 
 
 async def pair(
@@ -234,6 +245,14 @@ class Pendant:
             return None
         return int(data[0]) if data and data[0] <= 100 else None
 
+    async def unpair(self) -> None:
+        try:
+            await self._write(self._encoder.unpair())
+        except BleakError as err:
+            # The pendant may drop the link as it obeys, before confirming the write.
+            if self._client.is_connected:
+                raise PendantError(f"the pendant did not accept the unpair command: {err}") from None
+
     async def set_led_brightness(self, percent: int) -> None:
         await self._write(self._encoder.set_led_brightness(percent))
 
@@ -273,6 +292,7 @@ class Pendant:
         acked_to: int | None = None
         uncommitted = 0
         reason = "stalled"
+        discarded_before = store.discarded_pages
 
         async def checkpoint() -> None:
             nonlocal acked_to, uncommitted
@@ -315,4 +335,4 @@ class Pendant:
             finally:
                 # Always hand the pendant back to recording-to-flash.
                 await self._write(self._encoder.set_mode(download=False, realtime=False))
-        return SyncResult(reason, received, new, acked_to)
+        return SyncResult(reason, received, new, acked_to, store.discarded_pages - discarded_before)

@@ -350,3 +350,49 @@ def test_sync_from_the_page_reports_when_the_pendant_is_away(site, monkeypatch):
             break
         time.sleep(0.05)
     assert job["error"].startswith("Sync stopped: the pendant is not in range")
+
+
+def test_pause_pair_and_unpair_from_the_page(site, monkeypatch):
+    import time
+
+    from limitful import client
+
+    before = json.loads(site("/api/pendant")[2])
+    assert before["paused_since"] is None
+    paused = json.loads(site("/api/pendant", JSON, b'{"action": "pause"}')[2])
+    assert paused["paused_since"] and json.loads(site("/api/pendant")[2])["paused_since"] == paused["paused_since"]
+    assert json.loads(site("/api/pendant", JSON, b'{"action": "pause"}')[2])["paused_since"] == paused["paused_since"]
+    assert json.loads(site("/api/pendant", JSON, b'{"action": "resume"}')[2])["paused_since"] is None
+
+    calls = []
+
+    async def unpair(timeout=8.0):
+        calls.append("unpair")
+
+    async def pair(timeout=180.0, log=print):
+        calls.append(("pair", timeout))
+        return None if len(calls) == 2 else object()
+
+    monkeypatch.setattr(client, "unpair", unpair)
+    monkeypatch.setattr(client, "pair", pair)
+    assert site("/api/pendant", JSON, b'{"action": "unpair"}')[0] == 200 and calls == ["unpair"]
+
+    def finished():
+        for _ in range(100):
+            job = json.loads(site("/api/status")[2])
+            if not job["running"]:
+                return job
+            time.sleep(0.05)
+
+    assert site("/api/pendant", JSON, b'{"action": "pair"}')[0] == 200
+    assert finished()["error"].startswith("Pairing stopped: the pendant never accepted")
+    assert site("/api/pendant", JSON, b'{"action": "pair"}')[0] == 200
+    job = finished()
+    assert (job["error"], job["note"]) == (None, "Paired. The pendant accepted this computer.")
+
+    async def gone(timeout=8.0):
+        raise client.PendantError("the pendant is not in range")
+
+    monkeypatch.setattr(client, "unpair", gone)
+    status, _h, body = site("/api/pendant", JSON, b'{"action": "unpair"}')
+    assert status == 400 and b"Could not unpair: the pendant is not in range" in body

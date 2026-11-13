@@ -90,6 +90,11 @@ CREATE TABLE IF NOT EXISTS sections (
     title           TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sections_conversation ON sections (conversation_id);
+CREATE TABLE IF NOT EXISTS pauses (
+    id       INTEGER PRIMARY KEY,
+    start_ms INTEGER NOT NULL,
+    end_ms   INTEGER                   -- NULL while still paused
+);
 CREATE TABLE IF NOT EXISTS chats (
     id         INTEGER PRIMARY KEY,
     title      TEXT    NOT NULL,        -- the first question, shortened
@@ -233,14 +238,47 @@ class Store:
                 self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
                 added.add((table, column))
         self.db.commit()
+        self.discarded_pages = 0  # pages dropped this session because they fell in a pause
         if ("reminders", "utterance_id") in added:
             self.link_reminders_to_lines()  # reminders saved before lines were tracked
 
     def close(self) -> None:
         self.db.close()
 
+    # --- pausing -------------------------------------------------------------------
+    # The pendant cannot be told to stop recording. A pause is kept here instead:
+    # audio from a paused period is thrown away when it arrives, never stored.
+
+    def pause(self, now_ms: int | None = None) -> int:
+        """Start a pause (or return the start of the one already running)."""
+        since = self.paused_since()
+        if since is not None:
+            return since
+        now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        self.db.execute("INSERT INTO pauses (start_ms) VALUES (?)", (now_ms,))
+        self.db.commit()
+        return now_ms
+
+    def resume(self, now_ms: int | None = None) -> None:
+        now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        self.db.execute("UPDATE pauses SET end_ms = ? WHERE end_ms IS NULL", (now_ms,))
+        self.db.commit()
+
+    def paused_since(self) -> int | None:
+        row = self.db.execute("SELECT start_ms FROM pauses WHERE end_ms IS NULL ORDER BY id LIMIT 1").fetchone()
+        return row[0] if row else None
+
+    def _was_paused(self, ms: int) -> bool:
+        return self.db.execute(
+            "SELECT 1 FROM pauses WHERE start_ms <= ? AND (end_ms IS NULL OR end_ms >= ?) LIMIT 1",
+            (ms, ms)).fetchone() is not None
+
     def add_page(self, page: FlashPage) -> bool:
-        """Queue a page for the next commit. Returns False if already stored."""
+        """Queue a page for the next commit. Returns False if already stored,
+        or if it was recorded during a pause and so is not kept."""
+        if page.timestamp_ms >= MIN_VALID_TIMESTAMP_MS and self._was_paused(page.timestamp_ms):
+            self.discarded_pages += 1
+            return False
         cur = self.db.execute(
             "INSERT OR IGNORE INTO pages "
             "(hash, session, idx, timestamp_ms, uptime_ms, received_ms, raw) "

@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import os
 import sys
+from datetime import datetime
 import zipfile
 import time
 from pathlib import Path
@@ -88,6 +89,32 @@ async def _cmd_pair(args) -> int:
     return 0
 
 
+async def _cmd_pause(args) -> int:
+    store = Store(args.data_dir)
+    try:
+        if args.command == "pause":
+            since = store.pause()
+            print(f"Paused since {datetime.fromtimestamp(since / 1000).strftime('%H:%M')}. The pendant keeps "
+                  "recording; audio from now until you resume is deleted when it syncs.")
+        elif store.paused_since() is None:
+            print("Not paused.")
+        else:
+            store.resume()
+            print("Resumed. Audio from now on is kept.")
+        return 0
+    finally:
+        store.close()
+
+
+async def _cmd_unpair(args) -> int:
+    from .client import unpair
+
+    await unpair(args.timeout)
+    print("Unpaired. The pendant has forgotten this computer and keeps its recordings.")
+    print("To use it here again, run `limitful pair`.")
+    return 0
+
+
 def _print_segments(segments) -> None:
     total_s = sum(s.duration_ms for s in segments) / 1000
     print(f"Exported {len(segments)} audio file(s), {total_s / 60:.1f} min.")
@@ -113,6 +140,8 @@ async def _cmd_sync(args) -> int:
         else:
             print(f"Received {result.pages_received} pages ({result.pages_new} new), "
                   f"finished: {result.reason}.")
+            if result.pages_discarded:
+                print(f"Deleted {result.pages_discarded} page(s) recorded while paused.")
             if result.acked_up_to is not None:
                 print(f"Pendant freed pages up to {result.acked_up_to}.")
             elif not args.ack:
@@ -395,6 +424,16 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("pair", help="pair this computer with the pendant (first use)")
     p.add_argument("--timeout", type=float, default=180.0, help="how long to wait, in seconds")
     p.set_defaults(func=_cmd_pair)
+
+    for name, text in (("pause", "stop keeping audio: what the pendant records from now is deleted at sync"),
+                       ("resume", "keep audio again after a pause")):
+        p = sub.add_parser(name, help=text)
+        data_args(p)
+        p.set_defaults(func=_cmd_pause)
+
+    p = sub.add_parser("unpair", help="make the pendant forget this computer (keeps its recordings)")
+    p.add_argument("--timeout", type=float, default=8.0, help="scan time in seconds")
+    p.set_defaults(func=_cmd_unpair)
 
     p = sub.add_parser("status", help="show the pendant's battery and storage; set its light")
     device_args(p)

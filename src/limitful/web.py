@@ -120,7 +120,49 @@ class Library:
 
     def pendant(self) -> dict:
         """What was last learned about the pendant, without touching the radio."""
-        return dict(self._pendant, brightness=config.load().get("led_brightness"))
+        return dict(self._pendant, brightness=config.load().get("led_brightness"),
+                    paused_since=self._with_store(lambda store: store.paused_since()))
+
+    def set_paused(self, paused: bool) -> dict:
+        self._with_store(lambda store: store.pause() if paused else store.resume())
+        return self.pendant()
+
+    def unpair_pendant(self) -> dict:
+        def unpair():
+            try:
+                asyncio.run(client_mod.unpair())
+            except (client_mod.PendantError, client_mod.BleakError, asyncio.TimeoutError, OSError) as err:
+                raise ValueError(f"Could not unpair: {err}") from None
+            self._pendant = {"checked": None, "error": None}
+            return self.pendant()
+
+        return self._with_radio(unpair)
+
+    def start_pairing(self) -> None:
+        """Wait, in the background, for the pendant to be put in pairing mode."""
+        with self._lock:
+            if self.job["running"]:
+                raise RuntimeError("something is already running; wait for it to finish")
+            self.job.update(running=True, what="Waiting for the pendant in pairing mode",
+                            done=0, total=0, error=None, note=None)
+        threading.Thread(target=self._pair_job, daemon=True).start()
+
+    def _pair_job(self) -> None:
+        try:
+            if not self._radio.acquire(timeout=20):
+                raise RuntimeError("the pendant is busy")
+            try:
+                state = asyncio.run(client_mod.pair(timeout=180, log=lambda message: None))
+            finally:
+                self._radio.release()
+            if state is None:
+                raise RuntimeError("the pendant never accepted this computer. Check it showed "
+                                   "a blue light, and that you accepted the connection request")
+            self.job["note"] = "Paired. The pendant accepted this computer."
+        except Exception as err:  # shown in the page
+            self.job["error"] = f"Pairing stopped: {err}"
+        finally:
+            self.job.update(running=False, what="")
 
     def _with_radio(self, action):
         if not self._radio.acquire(blocking=False):
@@ -193,7 +235,9 @@ class Library:
             if result.error:
                 raise RuntimeError(result.error)
             self.job["note"] = (f"Synced {result.pages_new} new pages: {result.audio_files} recordings, "
-                                f"{result.lines} lines of speech.")
+                                f"{result.lines} lines of speech."
+                                + (f" Deleted {result.pages_discarded} pages recorded while paused."
+                                   if result.pages_discarded else ""))
         except Exception as err:  # shown in the page
             self.job["error"] = f"Sync stopped: {err}"
             self.job["note"] = None
@@ -452,6 +496,13 @@ def make_handler(library: Library):
                     if action == "sync":
                         library.start_sync()
                         return self._json({"started": True})
+                    if action in ("pause", "resume"):
+                        return self._json(library.set_paused(action == "pause"))
+                    if action == "pair":
+                        library.start_pairing()
+                        return self._json({"started": True})
+                    if action == "unpair":
+                        return self._json(library.unpair_pendant())
                     raise ValueError("unknown action")
                 except RuntimeError as err:
                     return self._text(HTTPStatus.CONFLICT, str(err))

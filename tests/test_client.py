@@ -225,3 +225,35 @@ def test_battery_storage_and_light(pendant, monkeypatch):
     monkeypatch.setattr(client_mod, "find", nothing)
     with pytest.raises(client_mod.PendantError, match="not in range"):
         asyncio.run(client_mod.read_state())
+
+
+def test_audio_recorded_while_paused_is_not_kept_but_is_freed(pendant, tmp_path):
+    from limitful.store import Store
+
+    # The fake pendant stamps page n at T0 + n seconds. Pause covers pages 3 to 6.
+    pendant.page_indices = list(range(10))
+    setup = Store(tmp_path)
+    setup.pause(now_ms=T0 + 3_000)
+    setup.resume(now_ms=T0 + 6_500)
+    assert setup.paused_since() is None
+    setup.close()
+
+    result, stored = run_sync(tmp_path, ack=True)
+    assert (result.pages_received, result.pages_new, result.pages_discarded, stored) == (10, 6, 4, 6)
+    assert result.acked_up_to == 9  # the paused pages are deleted from the pendant too
+
+    kept = Store(tmp_path)
+    assert [i for (i,) in kept.db.execute("SELECT idx FROM pages ORDER BY idx")] == [0, 1, 2, 7, 8, 9]
+    # An open pause covers everything from its start, and pausing twice changes nothing.
+    since = kept.pause(now_ms=T0 + 60_000)
+    assert kept.pause(now_ms=T0 + 90_000) == since == kept.paused_since()
+    kept.close()
+
+
+def test_unpair_sends_the_keep_recordings_command(pendant, monkeypatch):
+    async def find(timeout=8.0):
+        return "fake-device"
+
+    monkeypatch.setattr(client_mod, "find", find)
+    asyncio.run(client_mod.unpair())
+    assert pendant.instance.commands[-1] == (15, b"\x08\x01")  # 1 = do not reset

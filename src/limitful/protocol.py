@@ -11,7 +11,9 @@ Shape of the protocol:
   A payload can span several notifications and must be reassembled.
 * Commands (written to TX) carry one message field plus a request trailer
   (field 30): 6=set time, 7=acknowledge pages, 8=set mode, 21=get status,
-  26=set LED brightness. No command to pause recording is known.
+  15=unpair, 26=set LED brightness. No command to pause recording is known,
+  and live-stream mode does not pause it: the pendant keeps writing to flash
+  while it streams (measured: 15 pages in 20 s, the same as normal).
 * In download mode each reassembled payload holds StorageBuffers (field 2):
   2=session, 4=sequence, 5=flash page index, 6=flash page data.
 * A flash page starts with the pendant-clock timestamp (field 1, ms) and the
@@ -125,6 +127,13 @@ class CommandEncoder:
 
     def get_status(self) -> bytes:
         return self._command(21, b"")
+
+    def unpair(self, reset: bool = False) -> bytes:
+        """Make the pendant forget this host so another can pair with it.
+
+        With reset=True the pendant also wipes itself. Nothing here uses that.
+        """
+        return self._command(15, _int_field(1, int(not reset)))
 
     def set_led_brightness(self, percent: int) -> bytes:
         """Set how bright the pendant's light is, 0 (off) to 100."""
