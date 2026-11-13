@@ -92,6 +92,7 @@ def test_import(tmp_path):
     assert (talk["title"], talk["summary"]) == ("UVB therapy introduction", ["Benefits", "Setup"])
     assert [(r["text"], r["status"]) for r in talk["reminders"]] == [("Ask about the spraying", "done")]
     assert talk["lines"] == 3
+    assert talk["reminders"][0]["line"] is None  # nothing in this transcript mentions spraying
     assert talk["sections"] == [
         {"start": T0, "level": 2, "title": "Benefits"},
         {"start": T0 + 60000, "level": 2, "title": "Setup"},

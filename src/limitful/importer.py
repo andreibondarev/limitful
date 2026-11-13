@@ -244,5 +244,6 @@ def import_limitless(
             if count:
                 result.not_imported.append(f"{count} file(s) in {kind}/")
 
+    store.link_reminders_to_lines()
     store.rewrite_all_transcripts()
     return result

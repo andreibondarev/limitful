@@ -105,6 +105,12 @@ reminders. They appear above each conversation in the Lifelog and in the
 Markdown transcripts. Reminders are suggestions: accept or dismiss them in the
 Lifelog, where the Reminders button lists everything waiting.
 
+Each reminder links back to the conversation it came from and, where it can be
+identified, the line: the Reminders list quotes that line and jumps to it. The
+model cites the line for reminders it writes. For reminders imported from
+Limitless, which only record the conversation, the line is found by matching
+the wording, so it is a best guess and some have none.
+
 You choose what does the reading, and nothing is sent anywhere until you do.
 The easiest way is the Lifelog's Settings page, which also has a "Summarise new
 conversations now" button:

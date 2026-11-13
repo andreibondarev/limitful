@@ -64,7 +64,7 @@ def test_digest_writes_titles_summaries_and_reminders(store, tmp_path):
     say(store, 20, "okay")  # too little to summarise
     canned = Canned()
     assert store.digest_pending(canned) == 1
-    assert canned.seen == [f"[09:00] Karen: {LONG}\n[09:01] Unknown: sounds good to me"]
+    assert canned.seen == [f"1. [09:00] Karen: {LONG}\n2. [09:01] Unknown: sounds good to me"]
     assert store.db.execute("SELECT status, title FROM conversations ORDER BY start_ms").fetchall() == [
         ("done", "Talk 1"), ("short", None)]
 
@@ -138,8 +138,8 @@ def test_redo_leaves_imported_conversations_alone(store):
 def test_clean_accepts_sloppy_replies_and_rejects_useless_ones():
     got = digest.clean({"title": "  Budget\n review ", "summary": "One point.",
                         "reminders": ["  Call  Joseph ", "", 7, "x"] + ["more"] * 20})
-    assert got == {"title": "Budget review", "summary": ["One point."],
-                   "reminders": ["Call Joseph", "x"] + ["more"] * 8}
+    assert (got["title"], got["summary"]) == ("Budget review", ["One point."])
+    assert [r["text"] for r in got["reminders"]] == ["Call Joseph", "x"] + ["more"] * 8
     assert digest.clean({"title": "T"}) == {"title": "T", "summary": [], "reminders": []}
     for bad in ({"title": "   "}, {"summary": []}, ["title"], "title", {"title": 5}):
         with pytest.raises(digest.DigestError):
@@ -198,3 +198,48 @@ def test_ollama_failures_are_explained(ollama):
 def test_unknown_provider():
     with pytest.raises(ValueError):
         digest.make_summarizer("gpt")
+
+
+def test_reminders_point_at_the_line_they_came_from(store):
+    from limitful.store import best_matching_line
+
+    say(store, 0, LONG)
+    say(store, 1, "I will send everyone the template after lunch")
+    say(store, 2, "okay sounds good")
+
+    class Citing:
+        name = "citing"
+
+        def summarize(self, transcript):
+            assert transcript.splitlines()[1].startswith("2. [09:01] Unknown: I will send")
+            return {"title": "T", "summary": [], "reminders": [
+                {"text": "Send the template", "line": 2},       # cited by the model
+                {"text": "Keep the report under ten pages", "line": None},  # found by wording
+                {"text": "Water the plants", "line": 99},        # a bad citation, and no match
+            ]}
+
+    store.digest_pending(Citing())
+    by_text = {r["text"]: r for r in store.reminders()}
+    assert by_text["Send the template"]["line"]["text"].startswith("I will send everyone")
+    assert by_text["Keep the report under ten pages"]["line"]["text"] == LONG
+    assert by_text["Water the plants"]["line"] is None
+    first = by_text["Send the template"]
+    assert first["day"] == "2026-11-13" and first["conversation"] and first["start"] == T0
+    (talk,) = store.conversations(T0, T0 + MIN)
+    assert [r["line"] is not None for r in talk["reminders"]] == [True, True, False]
+
+    lines = [(1, "we talked about the weather"), (2, "they are spraying something in West Palm Beach"),
+             (3, "the weather was nice")]
+    assert best_matching_line("Ask West Palm Beach officials what they're spraying", lines) == 2
+    assert best_matching_line("Check the weather", lines) is None  # one common word is not enough
+    assert best_matching_line("Call the dentist", lines) is None
+    assert best_matching_line("", lines) is None and best_matching_line("Call", []) is None
+
+
+def test_clean_reads_reminders_as_objects_or_strings():
+    got = digest.clean({"title": "T", "summary": [], "reminders": [
+        {"text": " Send  it ", "line": 4}, "Bare string", {"text": "No line"}, {"text": "", "line": 1},
+        {"text": "Bad line", "line": "three"}, {"line": 2}]})
+    assert got["reminders"] == [
+        {"text": "Send it", "line": 4}, {"text": "Bare string", "line": None},
+        {"text": "No line", "line": None}, {"text": "Bad line", "line": None}]

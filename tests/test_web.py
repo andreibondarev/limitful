@@ -40,6 +40,7 @@ def site(tmp_path):
                      (T0, T0 + 2000))
     store.db.execute("INSERT INTO reminders (id, conversation_id, text, created_ms) VALUES (1, 1, 'Call Joseph', ?)", (T0,))
     store.db.commit()
+    assert store.link_reminders_to_lines() == 1  # "Call Joseph" is found in the transcript
     store.close()
     (tmp_path / "secret.txt").write_text("private")
 
@@ -144,12 +145,15 @@ def test_rename_rejects_bad_requests(site):
 def test_conversations_and_reminders(site):
     (talk,) = json.loads(site("/api/conversations/2026-11-13")[2])
     assert (talk["title"], talk["summary"], talk["start"]) == ("Shopping and a call", ["Oat milk is needed."], T0)
-    assert talk["reminders"] == [{"id": 1, "text": "Call Joseph", "status": "suggested"}]
+    line = json.loads(site("/api/day/2026-11-13")[2])[1]
+    assert talk["reminders"] == [{"id": 1, "text": "Call Joseph", "status": "suggested", "line": line["id"]}]
     assert json.loads(site("/api/conversations/2026-11-14")[2]) == []
     assert site("/api/conversations/soon")[0] == 400
 
     (reminder,) = json.loads(site("/api/reminders")[2])
     assert (reminder["text"], reminder["from"], reminder["status"]) == ("Call Joseph", "Shopping and a call", "suggested")
+    assert (reminder["day"], reminder["conversation"], reminder["start"]) == ("2026-11-13", 1, T0)
+    assert reminder["line"] == {"id": line["id"], "text": "call Joseph", "start": line["start"]}
     status, _h, body = site("/api/reminders/1", JSON, b'{"status": "accepted"}')
     assert (status, json.loads(body)) == (200, {"id": 1, "status": "accepted"})
     assert json.loads(site("/api/reminders")[2])[0]["status"] == "accepted"

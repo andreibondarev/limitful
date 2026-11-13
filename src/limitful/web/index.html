@@ -170,6 +170,9 @@
   }
   .todo p { margin: 0; flex: 1 1 14rem; }
   .todo small { color: var(--muted); flex-basis: 100%; }
+  .todo .where a { color: var(--accent); text-underline-offset: 3px; }
+  .todo .where q { display: block; margin-top: 0.2rem; font-family: var(--voice); font-size: 0.95rem; font-style: italic; }
+  .todo .jump { border-style: dashed; }
   .todo.accepted { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
   #status {
     margin: 0.7rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.9rem;
@@ -302,7 +305,7 @@ let days = [];        // [{day, lines}] for days that have speech
 let day = null;       // "YYYY-MM-DD" being shown
 let lines = [];       // utterances of that day
 let playing = null;   // utterance being played
-let wanted = null;    // utterance id to reveal after loading a day
+let wanted = null;    // { line, talk }: what to reveal after loading a day
 let searching = false;
 let talks = [];       // summarised conversations of the day
 let reminding = false;
@@ -361,8 +364,21 @@ function todoRow(r, after, source) {
   };
   if (r.status === "suggested") row.append(act("Accept", "accepted"), act("Dismiss", "dismissed"));
   else if (r.status === "accepted") row.append(act("Done", "done"), act("Dismiss", "dismissed"));
-  if (source) row.append(el("small", { textContent: source }));
+  if (source) row.append(source);
   return row;
+}
+
+/* A link from a reminder back to the conversation, and the line, it came from. */
+function whereLink(r) {
+  const box = el("small", { className: "where" });
+  const go = el("a", { href: `#${r.day}`, textContent: `${longDay.format(new Date(r.line ? r.line.start : r.start))}, in “${r.from}”` });
+  go.addEventListener("click", (e) => { e.preventDefault(); openDay(r.day, r.line?.id, r.conversation); });
+  box.append(go);
+  if (r.line) {
+    const said = r.line.text.length > 160 ? `${r.line.text.slice(0, 160)}…` : r.line.text;
+    box.append(el("q", { textContent: said }));
+  }
+  return box;
 }
 
 async function countReminders() {
@@ -386,10 +402,9 @@ async function showReminders() {
     main.replaceChildren(el("p", { className: "empty", textContent: `Could not load reminders. ${err.message}` }));
     return;
   }
-  const source = (r) => `${longDay.format(new Date(r.when))}, from “${r.from}”`;
   const group = (heading, status) => {
     const rows = all.filter((r) => r.status === status);
-    return rows.length ? [el("h2", { textContent: heading }), ...rows.map((r) => todoRow(r, showReminders, source(r)))] : [];
+    return rows.length ? [el("h2", { textContent: heading }), ...rows.map((r) => todoRow(r, showReminders, whereLink(r)))] : [];
   };
   const nodes = [...group("To review", "suggested"), ...group("Accepted", "accepted")];
   main.replaceChildren(...(nodes.length ? nodes : [el("div", { className: "empty" },
@@ -480,7 +495,16 @@ function renderDay() {
     ...groups.map(card));
   if (groups.length === 1) groups[0].setOpen(true);
   markPlaying();
-  if (wanted) { reveal(wanted, true); wanted = null; }
+  if (wanted) {
+    const { line, talk } = wanted;
+    wanted = null;
+    document.querySelectorAll(".found").forEach((n) => n.classList.remove("found"));
+    if (line && groups.some((g) => g.own.some((u) => u.id === line))) reveal(line, true);
+    else if (talk) {
+      const g = groups.find((x) => x.key === `c${talk}`);
+      if (g) { g.setOpen(true); $(`g${g.key}`).scrollIntoView({ block: "start" }); }
+    }
+  }
 }
 
 /* The day's conversations: summarised ones, plus runs of lines that have no summary. */
@@ -540,7 +564,14 @@ function cardBody(g) {
   const nodes = [];
   if (!g.sections.length && g.summary.length) nodes.push(el("ul", {}, ...g.summary.map((t) => el("li", { textContent: t }))));
   const open = g.reminders.filter((r) => r.status === "suggested" || r.status === "accepted");
-  nodes.push(...open.map((r) => todoRow(r, () => { renderDay(); countReminders(); })));
+  nodes.push(...open.map((r) => {
+    let jump = null;
+    if (r.line && g.own.some((u) => u.id === r.line)) {
+      jump = el("button", { className: "jump", textContent: "Show the line" });
+      jump.addEventListener("click", () => reveal(r.line, true));
+    }
+    return todoRow(r, () => { renderDay(); countReminders(); }, jump);
+  }));
 
   const copy = el("button", { className: "copy", textContent: "Copy as Markdown" });
   copy.addEventListener("click", async () => {
@@ -595,7 +626,7 @@ function reveal(id, mark) {
   if (mark) node.classList.add("found"); else node.focus({ preventScroll: true });
 }
 
-async function openDay(key, revealId) {
+async function openDay(key, revealId, revealTalk) {
   searching = false;
   reminding = false;
   configuring = false;
@@ -603,7 +634,7 @@ async function openDay(key, revealId) {
   $("settings").setAttribute("aria-pressed", "false");
   $("search").value = "";
   day = key;
-  wanted = revealId || null;
+  wanted = revealId || revealTalk ? { line: revealId || null, talk: revealTalk || null } : null;
   history.replaceState(null, "", `#${key}`);
   try {
     [lines, talks] = await Promise.all([get(`/api/day/${key}`), get(`/api/conversations/${key}`)]);

@@ -111,7 +111,52 @@ _MIGRATIONS = [
     ("utterances", "speaker_id", "INTEGER"),
     ("utterances", "source", "TEXT"),          # imported conversation this line came from
     ("utterances", "source_speaker", "TEXT"),  # that import's own label for who spoke
+    ("reminders", "utterance_id", "INTEGER"),  # the line a reminder came from, when known
 ]
+
+_COMMON_WORDS = frozenset("""
+a about after again all also an and any are as ask at be been before but buy by call can check
+could did do does don for from get go going got had has have he her here him his how i if in
+into is it its just know let like look make me more my need no not now of on one or our out
+over said say see she should so some take tell than that the their them then there these they
+thing things think this to too try up us very want was we well were what when where which
+who why will with would yeah you your
+""".split())
+
+
+def _stems(text: str) -> set[str]:
+    """Content words of a phrase, cut to a rough stem so "spraying" meets "spray"."""
+    words = "".join(ch.lower() if ch.isalnum() else " " for ch in text).split()
+    return {w[:5] for w in words if len(w) >= 3 and w not in _COMMON_WORDS}
+
+
+def best_matching_line(phrase: str, lines: list[tuple[int, str]]) -> int | None:
+    """The id of the line a reminder most plausibly came from, or None if unclear.
+
+    Words that are rare in the conversation count for more. A match needs two
+    shared content words, or one that appears in a single line only.
+    """
+    import math
+
+    wanted = _stems(phrase)
+    if not wanted or not lines:
+        return None
+    stems = [(line_id, _stems(text)) for line_id, text in lines]
+    seen: dict[str, int] = {}
+    for _id, found in stems:
+        for stem in found:
+            seen[stem] = seen.get(stem, 0) + 1
+    best, best_score = None, 0.0
+    for line_id, found in stems:
+        shared = wanted & found
+        if not shared:
+            continue
+        if len(shared) < 2 and not any(seen[stem] == 1 and len(stem) >= 5 for stem in shared):
+            continue
+        score = sum(math.log(1 + len(lines) / seen[stem]) for stem in shared)
+        if score > best_score:
+            best, best_score = line_id, score
+    return best
 
 # Too short to hold a word; Whisper only produces noise on these.
 MIN_TRANSCRIBE_MS = 500
@@ -166,11 +211,15 @@ class Store:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")  # commit() must mean "on disk"
         self.db.executescript(_SCHEMA)
+        added = set()
         for table, column, kind in _MIGRATIONS:
             have = {row[1] for row in self.db.execute(f"PRAGMA table_info({table})")}
             if column not in have:
                 self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+                added.add((table, column))
         self.db.commit()
+        if ("reminders", "utterance_id") in added:
+            self.link_reminders_to_lines()  # reminders saved before lines were tracked
 
     def close(self) -> None:
         self.db.close()
@@ -657,19 +706,37 @@ class Store:
         self.db.commit()
         return len(groups)
 
-    def conversation_text(self, start_ms: int, end_ms: int) -> tuple[str, int]:
-        """The transcript handed to the summariser, and how many words were said."""
+    def conversation_text(self, start_ms: int, end_ms: int) -> tuple[str, int, list[int]]:
+        """The transcript handed to the summariser, how many words were said, and
+        the id of each numbered line."""
         rows = self.db.execute(
-            "SELECT u.start_ms, u.text, s.name FROM utterances u "
+            "SELECT u.id, u.start_ms, u.text, s.name FROM utterances u "
             "LEFT JOIN speakers s ON s.id = u.speaker_id "
             "WHERE u.start_ms >= ? AND u.start_ms <= ? ORDER BY u.start_ms, u.id",
             (start_ms, end_ms),
         ).fetchall()
         transcript = "\n".join(
-            f"[{datetime.fromtimestamp(ts / 1000).strftime('%H:%M')}] {name or 'Unknown'}: {text}"
-            for ts, text, name in rows
+            f"{n}. [{datetime.fromtimestamp(ts / 1000).strftime('%H:%M')}] {name or 'Unknown'}: {text}"
+            for n, (_id, ts, text, name) in enumerate(rows, 1)
         )
-        return transcript, sum(len(text.split()) for _ts, text, _name in rows)
+        return transcript, sum(len(row[2].split()) for row in rows), [row[0] for row in rows]
+
+    def link_reminders_to_lines(self) -> int:
+        """Find the line each unlinked reminder came from, by its wording."""
+        linked = 0
+        rows = self.db.execute(
+            "SELECT r.id, r.text, c.start_ms, c.end_ms FROM reminders r "
+            "JOIN conversations c ON c.id = r.conversation_id WHERE r.utterance_id IS NULL").fetchall()
+        for reminder_id, text, start_ms, end_ms in rows:
+            lines = self.db.execute(
+                "SELECT id, text FROM utterances WHERE start_ms >= ? AND start_ms <= ? "
+                "ORDER BY start_ms, id", (start_ms, end_ms)).fetchall()
+            line_id = best_matching_line(text, lines)
+            if line_id is not None:
+                self.db.execute("UPDATE reminders SET utterance_id = ? WHERE id = ?", (line_id, reminder_id))
+                linked += 1
+        self.db.commit()
+        return linked
 
     def digest_pending(
         self,
@@ -687,7 +754,7 @@ class Store:
         ).fetchall()
         done = 0
         for n, (cid, start_ms, end_ms) in enumerate(pending, 1):
-            text, words = self.conversation_text(start_ms, end_ms)
+            text, words, line_ids = self.conversation_text(start_ms, end_ms)
             if words < MIN_DIGEST_WORDS:
                 self.db.execute("UPDATE conversations SET status = 'short' WHERE id = ?", (cid,))
             else:
@@ -700,9 +767,16 @@ class Store:
                         "UPDATE conversations SET status = 'done', title = ?, summary = ?, engine = ? "
                         "WHERE id = ?",
                         (result["title"], json.dumps(result["summary"]), summarizer.name, cid))
-                    self.db.executemany(
-                        "INSERT INTO reminders (conversation_id, text, created_ms) VALUES (?, ?, ?)",
-                        [(cid, r, start_ms) for r in result["reminders"]])
+                    for reminder in result["reminders"]:
+                        # The model cites a line number; fall back to matching the wording.
+                        if isinstance(reminder, str):
+                            reminder = {"text": reminder, "line": None}
+                        cited = reminder.get("line")
+                        line_id = line_ids[cited - 1] if cited and 1 <= cited <= len(line_ids) else None
+                        self.db.execute(
+                            "INSERT INTO reminders (conversation_id, text, created_ms, utterance_id) "
+                            "VALUES (?, ?, ?, ?)", (cid, reminder["text"], start_ms, line_id))
+                    self.link_reminders_to_lines()
                     done += 1
             self.db.commit()
             self._rewrite_days("start_ms >= ? AND start_ms <= ?", (start_ms, end_ms))
@@ -742,10 +816,10 @@ class Store:
                         "ORDER BY start_ms, id", (cid,))
                 ],
                 "reminders": [
-                    {"id": rid, "text": text, "status": status}
-                    for rid, text, status in self.db.execute(
-                        "SELECT id, text, status FROM reminders WHERE conversation_id = ? ORDER BY id",
-                        (cid,))
+                    {"id": rid, "text": text, "status": status, "line": line_id}
+                    for rid, text, status, line_id in self.db.execute(
+                        "SELECT id, text, status, utterance_id FROM reminders "
+                        "WHERE conversation_id = ? ORDER BY id", (cid,))
                 ],
             })
         return out
@@ -753,12 +827,24 @@ class Store:
     def reminders(self) -> list[dict]:
         """Reminders still worth showing: suggested and accepted, newest first."""
         rows = self.db.execute(
-            "SELECT r.id, r.text, r.status, r.created_ms, c.title FROM reminders r "
+            "SELECT r.id, r.text, r.status, r.created_ms, c.title, c.id, c.start_ms, "
+            "u.id, u.text, u.start_ms FROM reminders r "
             "JOIN conversations c ON c.id = r.conversation_id "
-            "WHERE r.status IN ('suggested', 'accepted') ORDER BY r.created_ms DESC, r.id"
+            "LEFT JOIN utterances u ON u.id = r.utterance_id "
+            "WHERE r.status IN ('suggested', 'accepted') ORDER BY c.start_ms DESC, r.id"
         ).fetchall()
-        return [{"id": rid, "text": text, "status": status, "when": when, "from": title}
-                for rid, text, status, when, title in rows]
+        out = []
+        for rid, text, status, when, title, cid, c_start, line_id, line_text, line_start in rows:
+            anchor = line_start if line_id else c_start
+            out.append({
+                "id": rid, "text": text, "status": status, "when": when, "from": title,
+                # Where to go: the day, the conversation, and the line when it is known.
+                "day": datetime.fromtimestamp(anchor / 1000).strftime("%Y-%m-%d"),
+                "conversation": cid,
+                "start": c_start,
+                "line": {"id": line_id, "text": line_text, "start": line_start} if line_id else None,
+            })
+        return out
 
     def set_reminder_status(self, reminder_id: int, status: str) -> None:
         if status not in REMINDER_STATUSES:
