@@ -50,6 +50,18 @@ re-exported later with `uv run pendant-sync export`.
 
 On macOS the first run asks for Bluetooth permission for your terminal app.
 
+### Reading and listening
+
+```sh
+uv run pendant-sync serve
+```
+
+Opens the Lifelog at http://localhost:4747: each day's transcript, with a strip
+showing when speech happened. Click any line to hear it; playback carries on
+through the conversation. Search covers every day. The page only answers on
+your own machine. Recordings are Ogg Opus, which Chrome and Firefox play;
+older versions of Safari do not.
+
 ### Running in the background
 
 ```sh
@@ -81,6 +93,7 @@ that your computer holds the only copy, so back up the data folder.
 - `ogg.py`: a small Ogg Opus writer.
 - `transcribe.py`: speech-to-text engines (local Whisper by default).
 - `watch.py`: the background loop.
+- `web.py` and `web/index.html`: the Lifelog web app.
 
 ## Using the pendant without the Limitless app
 
@@ -120,7 +133,7 @@ Observed on one pendant; treat as provisional.
 
 1. Run `watch` as a login service.
 2. Speaker labels, and a hosted transcription option.
-3. Daily lifelog view, search and chat over transcripts.
+3. Summaries, reminders and chat over transcripts.
 4. Import of a Limitless data export.
 5. MCP server, Obsidian sync, mobile app.
 

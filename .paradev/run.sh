@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Paradev Run button: starts the dev server on a port that is free for this workspace.
+# Paradev Run button: starts the Lifelog web app on a port that is free for this workspace.
 #
 # Paradev does not assign port ranges, so each workspace derives a preferred port
 # from its name (stable across restarts) and walks upward until it finds a free one.
@@ -35,26 +35,5 @@ echo "run: dev server on http://localhost:$PORT"
 # Record our PID so teardown.sh can stop the server; exec keeps the PID the same.
 echo $$ >"$PID_FILE"
 
-if [ -f package.json ] && grep -q '"dev"[[:space:]]*:' package.json; then
-  if [ -f bun.lock ] || [ -f bun.lockb ]; then pm="bun run"; sep=""
-  elif [ -f pnpm-lock.yaml ]; then pm="pnpm run"; sep=""
-  elif [ -f yarn.lock ]; then pm="yarn run"; sep=""
-  else pm="npm run"; sep="--"
-  fi
-  # Next.js, Express, etc. read $PORT; Vite and Astro only take a --port flag.
-  if grep -Eq '"dev"[[:space:]]*:[[:space:]]*"[^"]*(vite|astro)' package.json; then
-    exec $pm dev $sep --port "$PORT"
-  fi
-  exec $pm dev
-elif [ -x bin/dev ]; then
-  exec bin/dev
-elif [ -x bin/rails ]; then
-  exec bin/rails server -p "$PORT"
-elif [ -f manage.py ]; then
-  exec python3 manage.py runserver "$PORT"
-fi
-
-rm -f "$PID_FILE"
-echo "run: no dev server found (no package.json \"dev\" script, bin/dev, bin/rails or manage.py)." >&2
-echo "run: add your start command to .paradev/run.sh and make it listen on \$PORT." >&2
-exit 1
+# The Lifelog web app: browse transcripts and play audio. Reads ~/PendantSync.
+exec uv run pendant-sync serve --port "$PORT"

@@ -1,4 +1,4 @@
-"""Command-line interface: scan, pair, status, sync, export, transcribe, watch."""
+"""Command-line interface: scan, pair, status, sync, export, transcribe, watch, serve."""
 
 from __future__ import annotations
 
@@ -120,6 +120,8 @@ async def _cmd_export(args) -> int:
 async def _cmd_transcribe(args) -> int:
     store = Store(args.data_dir)
     try:
+        if args.redo:
+            store.forget_transcriptions()
         pending = store.pending_transcription()
         if not pending:
             print("Nothing new to transcribe.")
@@ -170,6 +172,23 @@ async def _cmd_watch(args) -> int:
     return 0
 
 
+async def _cmd_serve(args) -> int:
+    from .web import make_server
+
+    try:
+        server = make_server(args.data_dir, args.port)
+    except OSError as err:
+        raise PendantError(f"could not use port {args.port}: {err.strerror or err}") from None
+    print(f"Lifelog is at http://localhost:{server.server_port}  (data: {args.data_dir})")
+    print("Press Ctrl-C to stop.")
+    try:
+        await asyncio.to_thread(server.serve_forever)
+    finally:
+        server.shutdown()
+        server.server_close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="pendant-sync",
@@ -217,6 +236,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--language", help="language code such as en (default: detect per file)")
     p.add_argument("--device", default="auto",
                    help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
+    p.add_argument("--redo", action="store_true",
+                   help="transcribe everything again, replacing existing transcripts")
     p.set_defaults(func=_cmd_transcribe)
 
     p = sub.add_parser("watch", help="keep syncing and transcribing in the background")
@@ -231,6 +252,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--device", default="auto",
                    help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
     p.set_defaults(func=_cmd_watch)
+
+    p = sub.add_parser("serve", help="open the Lifelog: browse transcripts and play audio")
+    data_args(p)
+    p.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 4747),
+                   help="port to listen on (default: $PORT or 4747)")
+    p.set_defaults(func=_cmd_serve)
 
     args = parser.parse_args(argv)
     try:

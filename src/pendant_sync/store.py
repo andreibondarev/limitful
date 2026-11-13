@@ -195,6 +195,11 @@ class Store:
         self.db.commit()
         return segments
 
+    def forget_transcriptions(self) -> None:
+        """Mark every audio file as not transcribed, so the next run redoes them."""
+        self.db.execute("DELETE FROM transcriptions")
+        self.db.commit()
+
     def pending_transcription(self) -> list[tuple[str, int, int]]:
         """(path, start_ms, duration_ms) of audio files not yet transcribed."""
         return self.db.execute(
@@ -227,8 +232,8 @@ class Store:
             )
             self.db.commit()
             added += len(utterances)
-            if utterances:
-                days.add(datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d"))
+            # Rewrite the day even with no lines: a redo can leave it with fewer.
+            days.add(datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d"))
             if on_progress:
                 on_progress(n, len(pending))
         return added, [self.write_transcript(day) for day in sorted(days)]

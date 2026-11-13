@@ -12,6 +12,11 @@ from typing import Protocol
 
 DEFAULT_MODEL = "large-v3-turbo"
 
+# Whisper invents short phrases ("Thank you.") for noise that slips past the
+# silence filter. On pendant audio those score around -1.0 and real speech
+# around -0.1 to -0.6, so drop anything the model itself is this unsure of.
+MIN_AVG_LOGPROB = -0.8
+
 
 @dataclass(frozen=True)
 class Utterance:
@@ -48,6 +53,6 @@ class WhisperTranscriber:
         utterances = []
         for seg in segments:
             text = seg.text.strip()
-            if text:
+            if text and seg.avg_logprob >= MIN_AVG_LOGPROB:
                 utterances.append(Utterance(int(seg.start * 1000), int(seg.end * 1000), text))
         return utterances

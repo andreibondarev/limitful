@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lifelog</title>
+<style>
+  :root {
+    --paper: #eef2ef;
+    --ink: #13201a;
+    --muted: #5e6e66;
+    --rule: #d0dad3;
+    --accent: #0b6b58;
+    --mark: #f4c63a;
+    --mark-ink: #2a2100;
+    --voice: "Charter", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --chrome: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --gutter: 4.75rem;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0f1613;
+      --ink: #e4ece7;
+      --muted: #8fa097;
+      --rule: #26322c;
+      --accent: #63d2b6;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 11rem; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--chrome);
+    font-size: 15px;
+    line-height: 1.4;
+  }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+  header {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.1rem clamp(1rem, 4vw, 3rem) 0.6rem;
+  }
+  .bar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  h1 {
+    font-family: var(--voice);
+    font-weight: 400;
+    font-size: clamp(1.6rem, 4.2vw, 2.6rem);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    margin: 0 auto 0 0;
+  }
+  .step {
+    width: 2.25rem; height: 2.25rem;
+    border: 1px solid var(--rule); border-radius: 50%;
+    background: none; cursor: pointer;
+    font-size: 1.1rem; line-height: 1;
+  }
+  .step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .step:disabled { opacity: 0.35; cursor: default; }
+  #pick, #search {
+    border: 1px solid var(--rule); border-radius: 999px;
+    background: transparent; padding: 0.4rem 0.85rem;
+  }
+  #search { width: min(100%, 17rem); }
+  #search::placeholder { color: var(--muted); }
+
+  /* The day as a strip: one mark for every stretch of speech. */
+  #strip {
+    position: relative; height: 1.75rem; margin-top: 0.9rem;
+    border-block: 1px solid var(--rule);
+    cursor: pointer;
+  }
+  #strip i {
+    position: absolute; top: 3px; bottom: 3px; min-width: 2px;
+    background: var(--accent); border-radius: 1px;
+  }
+  #strip i.on { background: var(--mark); top: 0; bottom: 0; }
+  #hours { position: relative; height: 1.1rem; color: var(--muted); font-size: 0.75rem; }
+  #hours span { position: absolute; top: 0.15rem; }
+  #hours span:not(:first-child) { transform: translateX(-50%); }
+
+  main { padding: 1.5rem clamp(1rem, 4vw, 3rem) 7rem; max-width: 60rem; }
+  .line {
+    display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr);
+    align-items: baseline;
+    width: 100%; padding: 0.3rem 0; margin: 0;
+    border: 0; background: none; text-align: left; cursor: pointer;
+  }
+  .line time {
+    color: var(--muted); font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .line span {
+    font-family: var(--voice); font-size: 1.2rem; line-height: 1.6;
+    max-width: 68ch;
+    padding: 0 0.3rem; margin-left: -0.3rem; border-radius: 3px;
+  }
+  .line:hover span { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .line.on span { background: var(--mark); color: var(--mark-ink); }
+  .line.found span { box-shadow: 0 0 0 2px var(--accent); }
+  .quiet {
+    margin: 0.9rem 0 0.9rem var(--gutter);
+    color: var(--muted); font-size: 0.82rem;
+    display: flex; align-items: center; gap: 0.75rem; max-width: 68ch;
+  }
+  .quiet::after { content: ""; flex: 1; border-top: 1px dashed var(--rule); }
+  h2 {
+    font-family: var(--voice); font-weight: 400; font-size: 1.25rem;
+    margin: 1.75rem 0 0.4rem;
+  }
+  h2 a { color: var(--accent); text-underline-offset: 3px; }
+  .empty { font-family: var(--voice); font-size: 1.2rem; max-width: 34rem; }
+  .empty code { font-size: 0.85em; }
+  .empty p + p { color: var(--muted); font-family: var(--chrome); font-size: 0.95rem; }
+
+  #player {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 3;
+    display: flex; align-items: center; gap: 0.9rem;
+    padding: 0.7rem clamp(1rem, 4vw, 3rem);
+    background: var(--ink); color: var(--paper);
+  }
+  #player[hidden] { display: none; }
+  #toggle {
+    border: 0; border-radius: 999px; padding: 0.4rem 1rem; cursor: pointer;
+    background: var(--mark); color: var(--mark-ink); font-weight: 600;
+    min-width: 5.2rem;
+  }
+  #now { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--voice); font-size: 1.05rem; }
+  #now time { font-family: var(--chrome); font-size: 0.82rem; opacity: 0.75; margin-right: 0.6rem; font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 560px) {
+    :root { --gutter: 4.4rem; }
+    .line span { font-size: 1.08rem; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1 id="title">Lifelog</h1>
+    <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
+    <button class="step" id="next" aria-label="Next day with recordings">›</button>
+    <input type="date" id="pick" aria-label="Go to a date">
+    <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said">
+  </div>
+  <div id="strip" role="img" aria-label="When speech was recorded during this day"></div>
+  <div id="hours" aria-hidden="true"></div>
+</header>
+<main id="main" aria-live="polite"></main>
+<div id="player" hidden>
+  <button id="toggle">Pause</button>
+  <div id="now"></div>
+</div>
+<audio id="audio" preload="auto"></audio>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const main = $("main"), strip = $("strip"), audio = $("audio");
+const DAY_MS = 86400000, QUIET_MS = 120000;
+const clock = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" });
+const clockSec = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+const longDay = new Intl.DateTimeFormat([], { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+let days = [];        // [{day, lines}] for days that have speech
+let day = null;       // "YYYY-MM-DD" being shown
+let lines = [];       // utterances of that day
+let playing = null;   // utterance being played
+let wanted = null;    // utterance id to reveal after loading a day
+let searching = false;
+
+const pad = (n) => String(n).padStart(2, "0");
+const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dayStart = (key) => { const [y, m, d] = key.split("-").map(Number); return new Date(y, m - 1, d).getTime(); };
+const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
+
+async function get(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function quietFor(ms) {
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `quiet for ${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  return `quiet for ${h} h${m ? ` ${m} min` : ""}`;
+}
+
+function lineButton(u, showDay, sameMinute) {
+  const t = new Date(u.start);
+  // Within a run of speech, only show the time when the minute changes.
+  const b = el("button", { className: "line", id: `u${u.id}`, title: clockSec.format(t) },
+    el("time", { dateTime: t.toISOString(), textContent: sameMinute ? "" : clock.format(t) }),
+    el("span", { textContent: u.text }));
+  b.addEventListener("click", () => showDay ? openDay(showDay, u.id) : play(u));
+  return b;
+}
+
+function renderDay() {
+  $("title").textContent = longDay.format(new Date(dayStart(day)));
+  document.title = `Lifelog, ${day}`;
+  $("pick").value = day;
+  const known = days.map((d) => d.day);
+  $("prev").disabled = !known.some((d) => d < day);
+  $("next").disabled = !known.some((d) => d > day);
+
+  const start = dayStart(day);
+  strip.replaceChildren(...lines.map((u) => {
+    const i = el("i", { id: `s${u.id}` });
+    i.style.left = `${((u.start - start) / DAY_MS) * 100}%`;
+    i.style.width = `${(Math.max(u.end - u.start, 1000) / DAY_MS) * 100}%`;
+    return i;
+  }));
+  $("hours").replaceChildren(...[0, 6, 12, 18].map((h) => {
+    const s = el("span", { textContent: new Intl.DateTimeFormat([], { hour: "numeric" }).format(new Date(start + h * 3600000)) });
+    s.style.left = `${(h / 24) * 100}%`;
+    return s;
+  }));
+
+  if (!lines.length) {
+    main.replaceChildren(el("div", { className: "empty" },
+      el("p", { textContent: "Nothing was said on this day, or nothing has been synced yet." }),
+      el("p", {}, "To bring in new audio from the pendant, run ", el("code", { textContent: "pendant-sync watch" }), ".")));
+    return;
+  }
+  const nodes = [];
+  lines.forEach((u, n) => {
+    const before = lines[n - 1];
+    const gap = before && u.start - before.end > QUIET_MS;
+    if (gap) nodes.push(el("div", { className: "quiet", textContent: quietFor(u.start - before.end) }));
+    const sameMinute = before && !gap && Math.floor(before.start / 60000) === Math.floor(u.start / 60000);
+    nodes.push(lineButton(u, null, sameMinute));
+  });
+  main.replaceChildren(...nodes);
+  markPlaying();
+  if (wanted) {
+    const node = $(`u${wanted}`);
+    wanted = null;
+    if (node) { node.classList.add("found"); node.scrollIntoView({ block: "center" }); node.focus(); }
+  }
+}
+
+async function openDay(key, revealId) {
+  searching = false;
+  $("search").value = "";
+  day = key;
+  wanted = revealId || null;
+  history.replaceState(null, "", `#${key}`);
+  try {
+    lines = await get(`/api/day/${key}`);
+    renderDay();
+  } catch (err) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Could not load this day. ${err.message}` }));
+  }
+}
+
+function step(direction) {
+  const known = days.map((d) => d.day);
+  const target = direction < 0
+    ? known.filter((d) => d < day).pop()
+    : known.find((d) => d > day);
+  if (target) openDay(target);
+}
+
+async function runSearch(query) {
+  searching = true;
+  $("title").textContent = "Search";
+  strip.replaceChildren();
+  let results;
+  try {
+    results = await get(`/api/search?q=${encodeURIComponent(query)}`);
+  } catch (err) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Search failed. ${err.message}` }));
+    return;
+  }
+  if ($("search").value.trim() !== query) return;  // a newer search is on its way
+  if (!results.length) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Nothing found for “${query}”.` }));
+    return;
+  }
+  const nodes = [];
+  let last = null;
+  for (const u of results) {
+    if (u.day !== last) {
+      last = u.day;
+      const a = el("a", { href: `#${u.day}`, textContent: longDay.format(new Date(dayStart(u.day))) });
+      a.addEventListener("click", (e) => { e.preventDefault(); openDay(u.day); });
+      nodes.push(el("h2", {}, a));
+    }
+    nodes.push(lineButton(u, u.day));
+  }
+  main.replaceChildren(...nodes);
+}
+
+/* Playback: one audio element, highlighted line follows the sound. */
+function play(u) {
+  const start = () => { audio.currentTime = u.offset / 1000; audio.play(); };
+  playing = u;
+  if (audio.dataset.src !== u.audio) {
+    audio.dataset.src = u.audio;
+    audio.src = u.audio;
+    audio.addEventListener("loadedmetadata", start, { once: true });
+  } else {
+    start();
+  }
+  markPlaying();
+}
+
+function markPlaying() {
+  document.querySelectorAll(".on").forEach((n) => n.classList.remove("on"));
+  $("player").hidden = !playing;
+  if (!playing) return;
+  $(`u${playing.id}`)?.classList.add("on");
+  $(`s${playing.id}`)?.classList.add("on");
+  const t = new Date(playing.start);
+  $("now").replaceChildren(el("time", { textContent: clockSec.format(t) }), playing.text);
+}
+
+audio.addEventListener("timeupdate", () => {
+  if (!playing) return;
+  const at = audio.currentTime * 1000;
+  const same = lines.filter((u) => u.audio === playing.audio && u.offset <= at + 150);
+  const current = same[same.length - 1];
+  if (current && current.id !== playing.id) { playing = current; markPlaying(); }
+});
+audio.addEventListener("ended", () => {
+  // Carry on into the next recording, so a conversation plays through.
+  const next = lines.find((u) => u.start > playing.start && u.audio !== playing.audio);
+  if (next) play(next); else { playing = null; markPlaying(); }
+});
+audio.addEventListener("play", () => { $("toggle").textContent = "Pause"; });
+audio.addEventListener("pause", () => { $("toggle").textContent = "Play"; });
+audio.addEventListener("error", () => {
+  if (!playing) return;
+  $("now").textContent = "This recording could not be played. Chrome and Firefox play these files; older Safari does not.";
+});
+$("toggle").addEventListener("click", () => audio.paused ? audio.play() : audio.pause());
+
+strip.addEventListener("click", (e) => {
+  if (!lines.length) return;
+  const box = strip.getBoundingClientRect();
+  const at = dayStart(day) + ((e.clientX - box.left) / box.width) * DAY_MS;
+  const nearest = lines.reduce((a, b) => Math.abs(b.start - at) < Math.abs(a.start - at) ? b : a);
+  const node = $(`u${nearest.id}`);
+  node?.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  node?.focus({ preventScroll: true });
+});
+
+$("prev").addEventListener("click", () => step(-1));
+$("next").addEventListener("click", () => step(1));
+$("pick").addEventListener("change", (e) => e.target.value && openDay(e.target.value));
+
+let timer;
+$("search").addEventListener("input", (e) => {
+  clearTimeout(timer);
+  const query = e.target.value.trim();
+  timer = setTimeout(() => query ? runSearch(query) : openDay(day), 200);
+});
+
+document.addEventListener("keydown", (e) => {
+  const typing = e.target.matches("input");
+  if (e.key === "Escape" && searching) { openDay(day); return; }
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "/") { e.preventDefault(); $("search").focus(); }
+  else if (e.key === "ArrowLeft") step(-1);
+  else if (e.key === "ArrowRight") step(1);
+  else if (e.key === " " && playing && !e.target.matches("button")) { e.preventDefault(); $("toggle").click(); }
+});
+
+/* New lines arrive while `pendant-sync watch` runs; pick them up quietly. */
+setInterval(async () => {
+  if (searching || document.hidden || !day) return;
+  try {
+    days = await get("/api/days");
+    const fresh = await get(`/api/day/${day}`);
+    if (fresh.length !== lines.length) { lines = fresh; renderDay(); }
+  } catch { /* the server is away; try again next time */ }
+}, 30000);
+
+(async () => {
+  try {
+    days = await get("/api/days");
+  } catch (err) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Could not load recordings. ${err.message}` }));
+    return;
+  }
+  const [hashDay, hashId] = location.hash.slice(1).split("/");
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(hashDay) ? hashDay
+    : days.length ? days[days.length - 1].day : dayKey(new Date());
+  openDay(start, hashId && Number(hashId));
+})();
+</script>
+</body>
+</html>
