@@ -43,7 +43,7 @@ def save(settings: dict) -> None:
 _KEEP: Any = object()  # "leave this setting as it is"
 
 
-def update(provider: Any = _KEEP, api_key: Any = _KEEP) -> dict:
+def update(provider: Any = _KEEP, api_key: Any = _KEEP, led_brightness: Any = _KEEP) -> dict:
     """Change the given settings and return the result. `None` clears a setting."""
     settings = load()
     if provider is not _KEEP:
@@ -56,6 +56,8 @@ def update(provider: Any = _KEEP, api_key: Any = _KEEP) -> dict:
             settings["anthropic_api_key"] = key
         else:
             settings.pop("anthropic_api_key", None)
+    if led_brightness is not _KEEP:
+        settings["led_brightness"] = led_brightness  # the pendant cannot be asked, so remember it
     save(settings)
     return settings
 

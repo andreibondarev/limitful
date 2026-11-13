@@ -20,7 +20,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+import asyncio
+
 from . import ask as ask_mod
+from . import client as client_mod
 from . import config
 from . import digest as digest_mod
 
@@ -72,7 +75,10 @@ class Library:
         self._link_speakers = link_speakers
         self._lock = threading.Lock()
         # What the server is busy with, shown in the Lifelog.
-        self.job = {"running": False, "what": "", "done": 0, "total": 0, "error": None}
+        self.job = {"running": False, "what": "", "done": 0, "total": 0, "error": None, "note": None}
+        # One Bluetooth conversation with the pendant at a time.
+        self._radio = threading.Lock()
+        self._pendant: dict = {"checked": None, "error": None}
 
     def import_export(self, stream, length: int) -> dict:
         """Save an uploaded export zip, import it, then start linking speakers."""
@@ -81,7 +87,7 @@ class Library:
         with self._lock:
             if self.job["running"]:
                 raise RuntimeError("an import is already running")
-            self.job.update(running=True, what="Importing the export", done=0, total=0, error=None)
+            self.job.update(running=True, what="Importing the export", done=0, total=0, error=None, note=None)
         upload = self.data_dir / "imports" / f"upload-{int(time.time())}.zip"
         try:
             upload.parent.mkdir(parents=True, exist_ok=True)
@@ -109,6 +115,90 @@ class Library:
             "recordings": result.audio_files, "hours": round(result.audio_hours, 1),
             "reminders": result.reminders, "skipped": result.skipped_existing,
         }
+
+    # --- the pendant -----------------------------------------------------------------
+
+    def pendant(self) -> dict:
+        """What was last learned about the pendant, without touching the radio."""
+        return dict(self._pendant, brightness=config.load().get("led_brightness"))
+
+    def _with_radio(self, action):
+        if not self._radio.acquire(blocking=False):
+            raise RuntimeError("already talking to the pendant; try again in a moment")
+        try:
+            return action()
+        finally:
+            self._radio.release()
+
+    def check_pendant(self) -> dict:
+        def check():
+            try:
+                state = asyncio.run(client_mod.read_state())
+            except (client_mod.PendantError, client_mod.BleakError, asyncio.TimeoutError, OSError) as err:
+                self._pendant = {"checked": int(time.time() * 1000), "error": str(err) or type(err).__name__}
+            else:
+                self._pendant = dict(state, checked=int(time.time() * 1000), error=None)
+            return self.pendant()
+
+        return self._with_radio(check)
+
+    def set_brightness(self, percent) -> dict:
+        if not isinstance(percent, int) or isinstance(percent, bool) or not 0 <= percent <= 100:
+            raise ValueError("brightness is a whole number from 0 to 100")
+
+        def apply():
+            try:
+                asyncio.run(client_mod.set_brightness(percent))
+            except (client_mod.PendantError, client_mod.BleakError, asyncio.TimeoutError, OSError) as err:
+                raise ValueError(f"Could not reach the pendant: {err}") from None
+            config.update(led_brightness=percent)
+            return self.pendant()
+
+        return self._with_radio(apply)
+
+    def start_sync(self) -> None:
+        """Pull new audio off the pendant, then transcribe and summarise it, in the background."""
+        with self._lock:
+            if self.job["running"]:
+                raise RuntimeError("something is already running; wait for it to finish")
+            self.job.update(running=True, what="Syncing the pendant", done=0, total=0, error=None, note=None)
+        threading.Thread(target=self._sync_job, daemon=True).start()
+
+    def _sync_job(self) -> None:
+        from . import watch as watch_mod
+        from .speakers import TitanetEmbedder
+        from .store import Store
+        from .transcribe import WhisperTranscriber
+
+        try:
+            if not self._radio.acquire(timeout=20):
+                raise RuntimeError("the pendant is busy")
+            try:
+                provider = config.provider()
+                summarizer = (digest_mod.make_summarizer(provider, None, config.api_key())
+                              if provider else None)
+                store = Store(self.data_dir)
+                try:
+                    result = asyncio.run(watch_mod.run_cycle(
+                        store, ack=True, get_transcriber=WhisperTranscriber,
+                        get_embedder=TitanetEmbedder, summarizer=summarizer,
+                        on_stage=lambda stage: self.job.update(what=stage)))
+                finally:
+                    store.close()
+            finally:
+                self._radio.release()
+            if not result.found:
+                raise RuntimeError("the pendant is not in range, is switched off, "
+                                   "or is connected to another device")
+            if result.error:
+                raise RuntimeError(result.error)
+            self.job["note"] = (f"Synced {result.pages_new} new pages: {result.audio_files} recordings, "
+                                f"{result.lines} lines of speech.")
+        except Exception as err:  # shown in the page
+            self.job["error"] = f"Sync stopped: {err}"
+            self.job["note"] = None
+        finally:
+            self.job.update(running=False, what="")
 
     def settings(self) -> dict:
         """What the Settings page shows. The key itself never leaves the server."""
@@ -151,7 +241,7 @@ class Library:
         with self._lock:
             if self.job["running"]:
                 raise RuntimeError("something is already running; wait for it to finish")
-            self.job.update(running=True, what="Summarising conversations", done=0, total=0, error=None)
+            self.job.update(running=True, what="Summarising conversations", done=0, total=0, error=None, note=None)
         threading.Thread(target=self._digest_job, args=(provider,), daemon=True).start()
 
     def _digest_job(self, provider: str) -> None:
@@ -175,7 +265,7 @@ class Library:
         from .speakers import TitanetEmbedder, load_audio
         from .store import Store
 
-        self.job.update(running=True, what="Recognising speakers", done=0, total=0, error=None)
+        self.job.update(running=True, what="Recognising speakers", done=0, total=0, error=None, note=None)
         try:
             store = Store(self.data_dir)
             try:
@@ -313,6 +403,8 @@ def make_handler(library: Library):
                     return self._json(library.job)
                 if path == "/api/settings":
                     return self._json(library.settings())
+                if path == "/api/pendant":
+                    return self._json(library.pendant())
                 if path == "/api/chats":
                     return self._json(library.chats())
                 found = re.match(r"^/api/chats/(\d+)$", path)
@@ -348,6 +440,23 @@ def make_handler(library: Library):
             if found:
                 library.delete_chat(int(found.group(1)))
                 return self._json({"deleted": int(found.group(1))})
+            if path == "/api/pendant":
+                try:
+                    length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    action = body.get("action") if isinstance(body, dict) else None
+                    if action == "check":
+                        return self._json(library.check_pendant())
+                    if action == "brightness":
+                        return self._json(library.set_brightness(body.get("value")))
+                    if action == "sync":
+                        library.start_sync()
+                        return self._json({"started": True})
+                    raise ValueError("unknown action")
+                except RuntimeError as err:
+                    return self._text(HTTPStatus.CONFLICT, str(err))
+                except ValueError as err:
+                    return self._text(HTTPStatus.BAD_REQUEST, str(err))
             if path in ("/api/settings", "/api/digest"):
                 try:
                     length = min(int(self.headers.get("Content-Length") or 0), 8192)

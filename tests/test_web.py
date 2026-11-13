@@ -293,3 +293,60 @@ def test_summarise_from_the_page(site, monkeypatch):
     assert job["error"] is None
     titles = [t["title"] for t in json.loads(site("/api/conversations/2026-11-13")[2])]
     assert "A new title" in titles and "Shopping and a call" in titles
+
+
+def test_pendant_status_and_light(site, monkeypatch):
+    from limitful import client, config
+
+    reads = {"n": 0}
+
+    async def read_state(timeout=8.0):
+        reads["n"] += 1
+        if reads["n"] == 2:
+            raise client.PendantError("the pendant is not in range")
+        return {"battery": 80, "pages": 100, "free_pages": 9000, "total_pages": 9100,
+                "minutes_waiting": 2.4, "hours_free": 3.6}
+
+    sent = []
+
+    async def set_brightness(percent, timeout=8.0):
+        sent.append(percent)
+
+    monkeypatch.setattr(client, "read_state", read_state)
+    monkeypatch.setattr(client, "set_brightness", set_brightness)
+
+    before = json.loads(site("/api/pendant")[2])
+    assert (before["checked"], before["brightness"]) == (None, None)  # reading the page touches no radio
+    assert reads["n"] == 0
+
+    got = json.loads(site("/api/pendant", JSON, b'{"action": "check"}')[2])
+    assert (got["battery"], got["minutes_waiting"], got["error"]) == (80, 2.4, None) and got["checked"]
+    failed = json.loads(site("/api/pendant", JSON, b'{"action": "check"}')[2])
+    assert failed["error"] == "the pendant is not in range" and "battery" not in failed
+
+    after = json.loads(site("/api/pendant", JSON, b'{"action": "brightness", "value": 35}')[2])
+    assert sent == [35] and after["brightness"] == 35 and config.load()["led_brightness"] == 35
+    for bad in (b'{"action": "brightness", "value": 101}', b'{"action": "brightness", "value": "bright"}',
+                b'{"action": "brightness"}', b'{"action": "explode"}', b'[]'):
+        assert site("/api/pendant", JSON, bad)[0] == 400
+    assert sent == [35]
+    assert site("/api/pendant", {"Content-Type": "text/plain"}, b'{"action": "check"}')[0] == 415
+    assert site("/api/pendant", dict(JSON, Host="evil.example"), b'{"action": "check"}')[0] == 403
+
+
+def test_sync_from_the_page_reports_when_the_pendant_is_away(site, monkeypatch):
+    import time
+
+    from limitful import client
+
+    async def nobody(timeout=5.0):
+        return []
+
+    monkeypatch.setattr(client, "scan", nobody)
+    assert site("/api/pendant", JSON, b'{"action": "sync"}')[0] == 200
+    for _ in range(100):
+        job = json.loads(site("/api/status")[2])
+        if not job["running"]:
+            break
+        time.sleep(0.05)
+    assert job["error"].startswith("Sync stopped: the pendant is not in range")

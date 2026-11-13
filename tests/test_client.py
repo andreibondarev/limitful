@@ -42,6 +42,11 @@ class FakePendant:
     async def disconnect(self):
         self.connected = False
 
+    battery_level = 87
+
+    async def read_gatt_char(self, _uuid):
+        return bytearray([FakePendant.battery_level])
+
     async def start_notify(self, _uuid, callback):
         self.notify = callback
 
@@ -198,3 +203,25 @@ def test_status_timeout_raises(pendant, tmp_path, monkeypatch):
     monkeypatch.setattr(FakePendant, "_send", lambda self, raw: None)
     with pytest.raises(client_mod.PendantError):
         run_sync(tmp_path)
+
+
+def test_battery_storage_and_light(pendant, monkeypatch):
+    async def find(timeout=8.0):
+        return "fake-device"
+
+    monkeypatch.setattr(client_mod, "find", find)
+    pendant.page_indices = list(range(100, 1100))
+    state = asyncio.run(client_mod.read_state())
+    assert state["battery"] == 87 and state["pages"] == 1000
+    assert state["minutes_waiting"] == 24.2  # 1000 pages at about 1.45 s each
+    assert state["hours_free"] == round(100_000 * 1.45 / 3600, 1)
+
+    asyncio.run(client_mod.set_brightness(35))
+    assert pendant.instance.commands[-1] == (26, b"\x08\x23")
+
+    async def nothing(timeout=8.0):
+        return None
+
+    monkeypatch.setattr(client_mod, "find", nothing)
+    with pytest.raises(client_mod.PendantError, match="not in range"):
+        asyncio.run(client_mod.read_state())

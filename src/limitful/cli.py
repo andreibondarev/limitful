@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import __version__, config
 from .client import Pendant, PendantError, pair, scan
+from .protocol import PAGE_SECONDS
 from .store import Store
 from .transcribe import DEFAULT_MODEL
 from .watch import watch
@@ -59,7 +60,17 @@ def _print_state(state) -> None:
 async def _cmd_status(args) -> int:
     device = await _resolve(args.address, args.timeout)
     async with Pendant(device) as pendant:
-        _print_state(await pendant.status())
+        state = await pendant.status()
+        battery = await pendant.battery()
+        if args.brightness is not None:
+            await pendant.set_led_brightness(args.brightness)
+    print(f"battery:       {battery}%" if battery is not None else "battery:       not reported")
+    _print_state(state)
+    hours = state.free_capture_pages * PAGE_SECONDS / 3600
+    print(f"room for:      about {hours:.0f} more hours of audio")
+    if args.brightness is not None:
+        config.update(led_brightness=max(0, min(100, args.brightness)))
+        print(f"light:         set to {max(0, min(100, args.brightness))}%")
     return 0
 
 
@@ -385,8 +396,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--timeout", type=float, default=180.0, help="how long to wait, in seconds")
     p.set_defaults(func=_cmd_pair)
 
-    p = sub.add_parser("status", help="show how much audio is stored on the pendant")
+    p = sub.add_parser("status", help="show the pendant's battery and storage; set its light")
     device_args(p)
+    p.add_argument("--brightness", type=int, metavar="PERCENT",
+                   help="set the brightness of the pendant's light, 0 to 100")
     p.set_defaults(func=_cmd_status)
 
     p = sub.add_parser("sync", help="download stored audio from the pendant")

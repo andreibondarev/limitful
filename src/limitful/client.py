@@ -12,6 +12,8 @@ from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
 
 from .protocol import (
+    BATTERY_CHAR_UUID,
+    PAGE_SECONDS,
     RX_CHAR_UUID,
     SERVICE_UUID,
     TX_CHAR_UUID,
@@ -67,6 +69,44 @@ async def scan(timeout: float = 8.0) -> list[tuple[BLEDevice, int]]:
         if SERVICE_UUID in uuids or "limitless" in name or "pendant" in name:
             pendants.append((device, adv.rssi))
     return sorted(pendants, key=lambda item: -item[1])
+
+
+async def find(timeout: float = 8.0) -> BLEDevice | None:
+    """The first pendant seen advertising, returned as soon as it is seen."""
+    def is_pendant(device: BLEDevice, adv) -> bool:
+        name = (adv.local_name or device.name or "").lower()
+        return SERVICE_UUID in [u.lower() for u in adv.service_uuids] or "limitless" in name or "pendant" in name
+
+    return await BleakScanner.find_device_by_filter(is_pendant, timeout=timeout)
+
+
+async def read_state(timeout: float = 8.0) -> dict:
+    """Connect briefly and report battery and storage. Raises PendantError if out of reach."""
+    device = await find(timeout)
+    if device is None:
+        raise PendantError(
+            "the pendant is not in range, is switched off, or is connected to another device")
+    async with Pendant(device, pairing_timeout=10) as pendant:
+        state = await pendant.status()
+        battery = await pendant.battery()
+    return {
+        "battery": battery,
+        "pages": state.page_count,
+        "free_pages": state.free_capture_pages,
+        "total_pages": state.total_capture_pages,
+        "minutes_waiting": round(state.page_count * PAGE_SECONDS / 60, 1),
+        "hours_free": round(state.free_capture_pages * PAGE_SECONDS / 3600, 1),
+    }
+
+
+async def set_brightness(percent: int, timeout: float = 8.0) -> None:
+    """Connect briefly and set the brightness of the pendant's light."""
+    device = await find(timeout)
+    if device is None:
+        raise PendantError(
+            "the pendant is not in range, is switched off, or is connected to another device")
+    async with Pendant(device, pairing_timeout=10) as pendant:
+        await pendant.set_led_brightness(percent)
 
 
 async def pair(
@@ -185,6 +225,17 @@ class Pendant:
         state = parse_device_status(data)
         if state is not None:
             waiter.set_result(state)
+
+    async def battery(self) -> int | None:
+        """Battery level in percent, or None if the pendant does not say."""
+        try:
+            data = await self._client.read_gatt_char(BATTERY_CHAR_UUID)
+        except (BleakError, asyncio.TimeoutError):
+            return None
+        return int(data[0]) if data and data[0] <= 100 else None
+
+    async def set_led_brightness(self, percent: int) -> None:
+        await self._write(self._encoder.set_led_brightness(percent))
 
     async def status(self) -> StorageState:
         self._status_waiter = asyncio.get_running_loop().create_future()

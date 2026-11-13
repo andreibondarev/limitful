@@ -26,6 +26,13 @@ def test_encoder_counters_advance():
     assert second.payload.hex() == "3a020829" "f20104" "08021000"  # msg 7 {1=41}, request 2
 
 
+def test_led_brightness_is_clamped():
+    payload = p.parse_ble_packet(p.CommandEncoder().set_led_brightness(40)).payload
+    assert payload.hex() == "d201020828" "f20104" "08011000"  # msg 26 {1=40}, request 1
+    assert p.parse_ble_packet(p.CommandEncoder().set_led_brightness(250)).payload[4] == 100
+    assert p.parse_ble_packet(p.CommandEncoder().set_led_brightness(-5)).payload[4] == 0
+
+
 def test_set_time_carries_timestamp():
     ts = 1_763_000_000_123
     payload = p.parse_ble_packet(p.CommandEncoder().set_time(ts)).payload

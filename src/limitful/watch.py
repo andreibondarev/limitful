@@ -37,22 +37,26 @@ async def run_cycle(
     get_embedder: Callable[[], Embedder] | None = None,
     summarizer: Summarizer | None = None,
     scan_timeout: float = 5.0,
+    on_stage: Callable[[str], None] = lambda stage: None,
 ) -> CycleResult:
     """One pass: find the pendant, download, export audio, transcribe."""
     pendants = await client.scan(scan_timeout)
     if not pendants:
         return CycleResult(found=False)
+    on_stage("Downloading from the pendant")
     # Pairing is a one-off, interactive step; do not wait a minute for it here.
     async with client.Pendant(pendants[0][0], pairing_timeout=10) as pendant:
         result = await pendant.sync(store, ack=ack)
     segments = store.export_audio()
     lines = 0
     if get_transcriber is not None and store.pending_transcription():
+        on_stage("Transcribing")
         # Whisper is CPU-heavy and blocking; keep the event loop free.
         lines, _files = await asyncio.to_thread(store.transcribe_pending, get_transcriber())
         if lines and get_embedder is not None:
             await asyncio.to_thread(store.label_speakers, get_embedder(), load_audio)
     if summarizer is not None:
+        on_stage("Summarising conversations")
         try:
             await asyncio.to_thread(store.digest_pending, summarizer)
         except DigestError as err:

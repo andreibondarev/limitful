@@ -66,6 +66,24 @@ copy it as Markdown. Search covers every day. The page only answers on
 your own machine. Recordings are Ogg Opus, which Chrome and Firefox play;
 older versions of Safari do not.
 
+### The pendant, from the app
+
+The Lifelog's Settings page has a Pendant section:
+
+- **Check pendant** reads its battery level, how much audio is waiting and how
+  much room is left.
+- **Sync now** does what `watch` does, once: downloads new audio, frees it on
+  the pendant, then transcribes and summarises it, with progress shown.
+- **Light** sets the brightness of the pendant's light, from off to 100%. The
+  pendant does not report its brightness, so the slider shows the last value
+  set from here.
+
+From the command line, `uv run limitful status` shows the same readings and
+`--brightness 40` sets the light.
+
+No command for pausing recording is known. Hold the pendant's button for two
+seconds to switch it off.
+
 ### Speaker labels
 
 Lines are grouped by voice into "Speaker 1", "Speaker 2" and so on, using a

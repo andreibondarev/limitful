@@ -10,7 +10,8 @@ Shape of the protocol:
   1=message index, 2=fragment sequence, 3=fragment count, 4=payload.
   A payload can span several notifications and must be reassembled.
 * Commands (written to TX) carry one message field plus a request trailer
-  (field 30): 6=set time, 7=acknowledge pages, 8=set mode, 21=get status.
+  (field 30): 6=set time, 7=acknowledge pages, 8=set mode, 21=get status,
+  26=set LED brightness. No command to pause recording is known.
 * In download mode each reassembled payload holds StorageBuffers (field 2):
   2=session, 4=sequence, 5=flash page index, 6=flash page data.
 * A flash page starts with the pendant-clock timestamp (field 1, ms) and the
@@ -26,6 +27,10 @@ from dataclasses import dataclass
 SERVICE_UUID = "632de001-604c-446b-a80f-7963e950f3fb"
 TX_CHAR_UUID = "632de002-604c-446b-a80f-7963e950f3fb"  # host -> pendant (write)
 RX_CHAR_UUID = "632de003-604c-446b-a80f-7963e950f3fb"  # pendant -> host (notify)
+BATTERY_CHAR_UUID = "00002a19-0000-1000-8000-00805f9b34fb"  # standard battery level, 0-100
+
+# A flash page holds about this much audio (measured: 1.4 to 1.5 s).
+PAGE_SECONDS = 1.45
 
 # Opus table-of-contents bytes the pendant's encoder is known to emit.
 VALID_OPUS_TOC = frozenset({0xB8, 0x78, 0xF8, 0xB0, 0x70, 0xF0})
@@ -120,6 +125,10 @@ class CommandEncoder:
 
     def get_status(self) -> bytes:
         return self._command(21, b"")
+
+    def set_led_brightness(self, percent: int) -> bytes:
+        """Set how bright the pendant's light is, 0 (off) to 100."""
+        return self._command(26, _int_field(1, max(0, min(100, int(percent)))))
 
 
 # --- incoming packets ---------------------------------------------------------
