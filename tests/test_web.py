@@ -43,7 +43,7 @@ def site(tmp_path):
     store.close()
     (tmp_path / "secret.txt").write_text("private")
 
-    server = make_server(tmp_path, 0)
+    server = make_server(tmp_path, 0, link_speakers=False)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{server.server_port}"
 
@@ -113,13 +113,21 @@ JSON = {"Content-Type": "application/json"}
 
 def test_speakers_are_shown_and_can_be_renamed(site):
     lines = json.loads(site("/api/day/2026-11-13")[2])
-    assert lines[0]["speaker"] == {"id": 1, "name": "Speaker 1"} and lines[1]["speaker"] is None
+    assert lines[0]["speaker"] == {"id": 1, "name": "Speaker 1", "line": lines[0]["id"]}
+    assert lines[1]["speaker"] is None
     status, _h, body = site("/api/speakers/1", JSON, b'{"name": "Andrei"}')
     assert (status, json.loads(body)) == (200, {"id": 1})
     assert json.loads(site("/api/day/2026-11-13")[2])[0]["speaker"]["name"] == "Andrei"
     # Using a name that exists merges into that speaker.
     assert json.loads(site("/api/speakers/1", JSON, b'{"name": "joseph"}')[2]) == {"id": 2}
-    assert json.loads(site("/api/day/2026-11-13")[2])[0]["speaker"] == {"id": 2, "name": "Joseph"}
+    first = json.loads(site("/api/day/2026-11-13")[2])[0]
+    assert (first["speaker"]["id"], first["speaker"]["name"]) == (2, "Joseph")
+    # Naming one line only: the other line is untouched, and a new person appears.
+    second = json.loads(site("/api/day/2026-11-13")[2])[1]["id"]
+    assert site(f"/api/lines/{second}/speaker", JSON, b'{"name": "Karen"}')[0] == 200
+    after = json.loads(site("/api/day/2026-11-13")[2])
+    assert after[1]["speaker"]["name"] == "Karen" and after[0]["speaker"]["name"] == "Joseph"
+    assert site("/api/lines/999999/speaker", JSON, b'{"name": "X"}')[0] == 400
 
 
 def test_rename_rejects_bad_requests(site):
@@ -155,3 +163,32 @@ def test_reminder_updates_reject_bad_requests(site):
     assert site("/api/reminders/42", JSON, b'{"status": "done"}')[0] == 400
     assert site("/api/reminders/1", {"Content-Type": "text/plain"}, b'{"status": "done"}')[0] == 415
     assert json.loads(site("/api/reminders")[2])[0]["status"] == "suggested"
+
+
+ZIP = {"Content-Type": "application/zip"}
+
+
+def test_import_an_export_through_the_page(site, tmp_path):
+    from test_importer import make_zip
+
+    data = make_zip(tmp_path / "export.zip").read_bytes()
+    status, _h, body = site("/api/import", ZIP, data)
+    assert status == 200
+    got = json.loads(body)
+    assert (got["conversations"], got["lines"], got["recordings"], got["reminders"]) == (1, 3, 2, 1)
+    assert {d["day"] for d in json.loads(site("/api/days")[2])} >= {"2026-11-08", "2026-11-13"}
+    assert not list((tmp_path / "imports").glob("*.zip"))  # the upload is not kept
+    assert json.loads(site("/api/status")[2])["running"] is False
+
+    again = json.loads(site("/api/import", ZIP, data)[2])
+    assert (again["conversations"], again["skipped"]) == (0, 1)
+
+
+def test_import_rejects_bad_uploads(site):
+    assert site("/api/import", ZIP, b"this is not a zip")[0] == 400
+    assert site("/api/import", ZIP, b"")[0] == 400
+    assert site("/api/import", JSON, b"{}")[0] == 415
+    assert site("/api/import", {"Content-Type": "text/plain"}, b"x")[0] == 415
+    assert site("/api/import", dict(ZIP, Host="evil.example"), b"x")[0] == 403
+    assert site("/api/speakers/1", ZIP, b"x")[0] == 415
+    assert json.loads(site("/api/status")[2])["running"] is False

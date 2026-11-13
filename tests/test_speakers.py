@@ -112,3 +112,85 @@ def test_reset_regroups_from_stored_fingerprints(tmp_path):
     assert sorted(lines for _id, _name, lines in store.speakers()) == [3, 4, 5]
     assert all(name.startswith("Speaker ") for _id, name, _lines in store.speakers())
     store.close()
+
+
+# --- imported conversations: per-conversation labels linked to people ------------
+
+def imported_store(tmp_path):
+    """Two imported conversations. In each, labels are different people; voice 0
+    is label "1" in the first conversation and label "2" in the second."""
+    store = make_store(tmp_path)  # 30 s of audio, lines 2 s apart, WHO says who speaks
+    store.db.execute("DELETE FROM utterances")
+    seg = store.db.execute("SELECT path, start_ms FROM segments").fetchone()
+    plan = {"conv-a": {0: "1", 1: "2", 2: "3"}, "conv-b": {0: "2", 1: "1", 2: "3"}}
+    for i, who in enumerate(WHO):
+        for source, labels in plan.items():
+            store.db.execute(
+                "INSERT INTO utterances (segment, start_ms, end_ms, text, source, source_speaker) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (seg[0], seg[1] + i * 2000, seg[1] + i * 2000 + 1900, f"{source} {i}", source, labels[who]))
+    # A short line: no fingerprint of its own, but it shares a label.
+    store.db.execute(
+        "INSERT INTO utterances (segment, start_ms, end_ms, text, source, source_speaker) "
+        "VALUES (?, ?, ?, 'mm', 'conv-a', '1')", (seg[0], seg[1] + 100, seg[1] + 400))
+    store.db.commit()
+    return store
+
+
+def people(store, source):
+    return dict(store.db.execute(
+        "SELECT DISTINCT source_speaker, speaker_id FROM utterances WHERE source = ?", (source,)))
+
+
+def test_imported_speakers_are_linked_across_conversations(tmp_path):
+    store = imported_store(tmp_path)
+    assert store.label_speakers(Voices(), fake_audio) == 0  # nothing recorded from the pendant
+    linked, conflicts = store.link_imported_speakers(Voices(), fake_audio)
+    assert (linked, conflicts) == (6, 0)
+    a, b = people(store, "conv-a"), people(store, "conv-b")
+    assert len(set(a.values())) == 3 and None not in a.values()
+    # The same voices carry different labels in the two conversations.
+    assert (a["1"], a["2"], a["3"]) == (b["2"], b["1"], b["3"])
+    # The short line follows its label.
+    assert store.db.execute("SELECT speaker_id FROM utterances WHERE text = 'mm'").fetchone() == (a["1"],)
+    assert len(store.speakers()) == 3
+    assert store.link_imported_speakers(Voices(), fake_audio) == (0, 0)  # nothing left to do
+    store.close()
+
+
+def test_two_labels_in_one_conversation_never_share_a_person(tmp_path):
+    store = imported_store(tmp_path)
+    # In conv-b the import split voice 0 across two labels, "2" and "4".
+    store.db.execute("UPDATE utterances SET source_speaker = '4' WHERE source = 'conv-b' "
+                     "AND text IN ('conv-b 5', 'conv-b 8', 'conv-b 11')")
+    store.db.commit()
+    linked, conflicts = store.link_imported_speakers(Voices(), fake_audio)
+    assert (linked, conflicts) == (7, 1)
+    b = people(store, "conv-b")
+    assert len(b) == 4 and len(set(b.values())) == 4  # kept apart, though they sound alike
+    assert people(store, "conv-a")["1"] in (b["2"], b["4"])
+    store.close()
+
+
+def test_naming_a_speaker_in_one_conversation_only(tmp_path):
+    store = imported_store(tmp_path)
+    line = store.db.execute(
+        "SELECT id FROM utterances WHERE source = 'conv-a' AND source_speaker = '2' LIMIT 1").fetchone()[0]
+    # Works before any voices are linked, and covers the whole label in that conversation.
+    joseph = store.assign_line_speaker(line, "Joseph")
+    assert people(store, "conv-a") == {"1": None, "2": joseph, "3": None}
+    assert people(store, "conv-b") == {"1": None, "2": None, "3": None}
+
+    store.link_imported_speakers(Voices(), fake_audio)
+    assert people(store, "conv-b")["1"] == joseph  # the same voice elsewhere now carries the name
+    assert {name: lines for _id, name, lines in store.speakers()}["Joseph"] == 8
+
+    # Reassigning to another name leaves no empty speaker behind.
+    other = store.assign_line_speaker(line, "Karen")
+    assert other != joseph and people(store, "conv-a")["2"] == other
+    assert people(store, "conv-b")["1"] == joseph
+    with pytest.raises(ValueError):
+        store.assign_line_speaker(99999, "Nobody")
+    with pytest.raises(ValueError):
+        store.assign_line_speaker(line, "  ")
+    store.close()

@@ -365,107 +365,250 @@ class Store:
         self.db.commit()
         return self._assign_speakers()
 
-    def _assign_speakers(self) -> int:
+    def _voice_book(self):
+        """(average fingerprint, {speaker id: [sum of fingerprints, count]}), or None.
+
+        Speaker centroids are worked out from the lines assigned to each speaker,
+        so merging or reassigning lines never leaves a stale centroid behind.
+        """
         import numpy as np
 
-        (count,) = self.db.execute(
-            "SELECT COUNT(*) FROM utterances WHERE embedding IS NOT NULL").fetchone()
-        if count < MIN_FINGERPRINTS:
-            return 0
-        pending = self.db.execute(
-            "SELECT id, embedding FROM utterances "
-            "WHERE embedding IS NOT NULL AND speaker_id IS NULL ORDER BY start_ms, id"
-        ).fetchall()
-        if not pending:
-            return 0
+        rows = self.db.execute(
+            "SELECT speaker_id, embedding FROM utterances WHERE embedding IS NOT NULL").fetchall()
+        if len(rows) < MIN_FINGERPRINTS:
+            return None
+        total = None
+        sums: dict[int, list] = {}
+        for speaker_id, blob in rows:
+            voice = np.frombuffer(blob, dtype=np.float32).astype(np.float64)
+            total = voice if total is None else total + voice
+            if speaker_id is not None:
+                entry = sums.setdefault(speaker_id, [np.zeros_like(voice), 0])
+                entry[0] = entry[0] + voice
+                entry[1] += 1
+        # The average fingerprint is mostly the microphone and the room, not
+        # anyone's voice. Subtracting it is what makes voices separable.
+        return total / len(rows), sums
+
+    @staticmethod
+    def _match(voice, book, exclude=()) -> int | None:
+        """The known speaker this fingerprint belongs to, if any is close enough."""
+        import numpy as np
+
+        mean, sums = book
 
         def unit(v):
             norm = np.linalg.norm(v)
             return v / norm if norm else v
 
-        # The average fingerprint is mostly the pendant's microphone and the
-        # room, not anyone's voice. Subtracting it is what makes voices separable.
-        total = np.zeros(0, dtype=np.float64)
-        for (blob,) in self.db.execute("SELECT embedding FROM utterances WHERE embedding IS NOT NULL"):
-            v = np.frombuffer(blob, dtype=np.float32)
-            total = v.astype(np.float64) if not total.size else total + v
-        mean = total / count
+        centred = unit(voice - mean)
+        best, best_score = None, MATCH_THRESHOLD
+        for speaker_id, (voice_sum, count) in sums.items():
+            if speaker_id in exclude or not count:
+                continue
+            score = float(centred @ unit(voice_sum / count - mean))
+            if score >= best_score:
+                best, best_score = speaker_id, score
+        return best
 
-        speakers = {
-            sid: [np.frombuffer(blob, dtype=np.float32).astype(np.float64), lines]
-            for sid, blob, lines in self.db.execute("SELECT id, voice_sum, lines FROM speakers")
-        }
+    def _new_speaker(self, name: str | None = None) -> int:
+        cur = self.db.execute("INSERT INTO speakers (name, voice_sum, lines) VALUES ('', x'', 0)")
+        speaker_id = cur.lastrowid
+        self.db.execute("UPDATE speakers SET name = ? WHERE id = ?",
+                        (name or f"Speaker {speaker_id}", speaker_id))
+        return speaker_id
+
+    def _assign_speakers(self) -> int:
+        """Group fingerprinted lines recorded from the pendant into speakers."""
+        import numpy as np
+
+        book = self._voice_book()
+        if book is None:
+            return 0
+        pending = self.db.execute(
+            "SELECT id, embedding FROM utterances WHERE embedding IS NOT NULL "
+            "AND speaker_id IS NULL AND source IS NULL ORDER BY start_ms, id"
+        ).fetchall()
         for uid, blob in pending:
             voice = np.frombuffer(blob, dtype=np.float32).astype(np.float64)
-            centred = unit(voice - mean)
-            best, best_score = None, MATCH_THRESHOLD
-            for sid, (voice_sum, lines) in speakers.items():
-                score = float(centred @ unit(voice_sum / lines - mean))
-                if score >= best_score:
-                    best, best_score = sid, score
-            if best is None:
-                cur = self.db.execute(
-                    "INSERT INTO speakers (name, voice_sum, lines) VALUES ('', ?, 0)",
-                    (np.zeros_like(voice, dtype=np.float32).tobytes(),))
-                best = cur.lastrowid
-                self.db.execute("UPDATE speakers SET name = ? WHERE id = ?", (f"Speaker {best}", best))
-                speakers[best] = [np.zeros_like(voice), 0]
-            speakers[best][0] = speakers[best][0] + voice
-            speakers[best][1] += 1
-            self.db.execute("UPDATE utterances SET speaker_id = ? WHERE id = ?", (best, uid))
-        for sid, (voice_sum, lines) in speakers.items():
-            self.db.execute("UPDATE speakers SET voice_sum = ?, lines = ? WHERE id = ?",
-                            (voice_sum.astype(np.float32).tobytes(), lines, sid))
+            speaker_id = self._match(voice, book)
+            if speaker_id is None:
+                speaker_id = self._new_speaker()
+            entry = book[1].setdefault(speaker_id, [np.zeros_like(voice), 0])
+            entry[0] = entry[0] + voice
+            entry[1] += 1
+            self.db.execute("UPDATE utterances SET speaker_id = ? WHERE id = ?", (speaker_id, uid))
         self.db.commit()
-        ids = [uid for uid, _ in pending]
-        marks = ",".join("?" * len(ids))
-        self._rewrite_days(f"id IN ({marks})", tuple(ids))
+        if pending:
+            marks = ",".join("?" * len(pending))
+            self._rewrite_days(f"id IN ({marks})", tuple(uid for uid, _ in pending))
         return len(pending)
+
+    # Imported conversations already say which lines share a speaker, so a few
+    # long lines per speaker are enough to recognise the voice.
+    _PICKS_PER_SPEAKER = 5
+    _PICK_MAX_MS = 15000
+
+    def link_imported_speakers(
+        self,
+        embedder: Embedder,
+        load_audio: Callable[[Path], "np.ndarray"],
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> tuple[int, int]:
+        """Link the per-conversation speakers of imported conversations to people.
+
+        Returns (speakers linked, conversations where the closest voice was already
+        taken by another speaker of the same conversation).
+        """
+        import numpy as np
+
+        # Every imported speaker without a fingerprint yet, including ones the user
+        # has already named: a named voice is what the others get matched against.
+        groups = self.db.execute(
+            "SELECT source, source_speaker FROM utterances "
+            "WHERE source IS NOT NULL AND source_speaker != '' "
+            "GROUP BY source, source_speaker HAVING SUM(embedding IS NOT NULL) = 0").fetchall()
+        picks = []
+        for source, label in groups:
+            picks += self.db.execute(
+                "SELECT u.id, u.segment, u.start_ms - s.start_ms, u.end_ms - u.start_ms "
+                "FROM utterances u JOIN segments s ON s.path = u.segment "
+                "WHERE u.source = ? AND u.source_speaker = ? AND u.end_ms - u.start_ms >= ? "
+                "AND u.embedding IS NULL ORDER BY u.end_ms - u.start_ms DESC LIMIT ?",
+                (source, label, MIN_SPEAKER_MS, self._PICKS_PER_SPEAKER)).fetchall()
+        picks.sort(key=lambda row: row[1])  # one decode per audio file
+        loaded: tuple[str, "np.ndarray"] | None = None
+        for n, (uid, segment, offset_ms, duration_ms) in enumerate(picks, 1):
+            if loaded is None or loaded[0] != segment:
+                loaded = (segment, load_audio(self.data_dir / segment))
+            first = max(0, offset_ms) * SAMPLE_RATE // 1000
+            clip = loaded[1][first : first + min(duration_ms, self._PICK_MAX_MS) * SAMPLE_RATE // 1000]
+            if len(clip) >= MIN_SPEAKER_MS * SAMPLE_RATE // 1000:
+                voice = np.asarray(embedder.embed(clip), dtype=np.float32)
+                self.db.execute("UPDATE utterances SET embedding = ? WHERE id = ?", (voice.tobytes(), uid))
+                self.db.commit()  # keep write locks short: the Lifelog may be saving too
+            if on_progress:
+                on_progress(n, len(picks))
+        return self._link_imported()
+
+    def _link_imported(self) -> tuple[int, int]:
+        import numpy as np
+
+        book = self._voice_book()
+        if book is None:
+            return 0, 0
+        taken: dict[str, set[int]] = {}
+        for source, speaker_id in self.db.execute(
+                "SELECT DISTINCT source, speaker_id FROM utterances "
+                "WHERE source IS NOT NULL AND speaker_id IS NOT NULL"):
+            taken.setdefault(source, set()).add(speaker_id)
+        # Speakers who said the most first: their fingerprints are the most reliable.
+        groups = self.db.execute(
+            "SELECT source, source_speaker FROM utterances "
+            "WHERE source IS NOT NULL AND source_speaker != '' AND speaker_id IS NULL "
+            "GROUP BY source, source_speaker ORDER BY SUM(end_ms - start_ms) DESC").fetchall()
+        linked = conflicts = 0
+        for source, label in groups:
+            voices = [np.frombuffer(blob, dtype=np.float32).astype(np.float64)
+                      for (blob,) in self.db.execute(
+                          "SELECT embedding FROM utterances WHERE source = ? AND source_speaker = ? "
+                          "AND embedding IS NOT NULL", (source, label))]
+            if not voices:
+                continue  # no audio, or nothing long enough to judge
+            voice = sum(voices) / len(voices)
+            used = taken.setdefault(source, set())
+            # Two speakers of one conversation are different people, whatever the voices say.
+            speaker_id = self._match(voice, book, exclude=used)
+            if used and self._match(voice, book) in used:
+                conflicts += 1
+            if speaker_id is None:
+                speaker_id = self._new_speaker()
+            entry = book[1].setdefault(speaker_id, [np.zeros_like(voice), 0])
+            entry[0] = entry[0] + sum(voices)
+            entry[1] += len(voices)
+            used.add(speaker_id)
+            self.db.execute(
+                "UPDATE utterances SET speaker_id = ? WHERE source = ? AND source_speaker = ?",
+                (speaker_id, source, label))
+            linked += 1
+        self.db.commit()
+        if linked:
+            self.rewrite_all_transcripts()
+        return linked, conflicts
 
     def speakers(self) -> list[tuple[int, str, int]]:
         """(id, name, lines) for every speaker, most lines first."""
         return self.db.execute(
-            "SELECT id, name, lines FROM speakers ORDER BY lines DESC, id").fetchall()
+            "SELECT s.id, s.name, COUNT(u.id) FROM speakers s "
+            "LEFT JOIN utterances u ON u.speaker_id = s.id "
+            "GROUP BY s.id ORDER BY COUNT(u.id) DESC, s.id").fetchall()
 
-    def rename_speaker(self, speaker_id: int, name: str) -> int:
-        """Name a speaker. Giving it another speaker's name merges the two.
-
-        Returns the id that now holds those lines.
-        """
-        import numpy as np
-
+    @staticmethod
+    def _clean_name(name: str) -> str:
         name = " ".join(name.split())
         if not name:
             raise ValueError("a speaker needs a name")
-        row = self.db.execute(
-            "SELECT voice_sum, lines FROM speakers WHERE id = ?", (speaker_id,)).fetchone()
-        if row is None:
+        return name
+
+    def rename_speaker(self, speaker_id: int, name: str) -> int:
+        """Name a speaker everywhere. Giving it another speaker's name merges the two.
+
+        Returns the id that now holds those lines.
+        """
+        name = self._clean_name(name)
+        if self.db.execute("SELECT 1 FROM speakers WHERE id = ?", (speaker_id,)).fetchone() is None:
             raise ValueError(f"there is no speaker {speaker_id}")
         other = self.db.execute(
-            "SELECT id, voice_sum, lines FROM speakers WHERE id != ? AND name = ? COLLATE NOCASE",
+            "SELECT id FROM speakers WHERE id != ? AND name = ? COLLATE NOCASE",
             (speaker_id, name)).fetchone()
         keep = speaker_id
         if other is None:
             self.db.execute("UPDATE speakers SET name = ? WHERE id = ?", (name, speaker_id))
         else:
             keep = other[0]
-            merged = np.frombuffer(other[1], dtype=np.float32) + np.frombuffer(row[0], dtype=np.float32)
-            self.db.execute("UPDATE speakers SET voice_sum = ?, lines = ? WHERE id = ?",
-                            (merged.tobytes(), other[2] + row[1], keep))
             self.db.execute("UPDATE utterances SET speaker_id = ? WHERE speaker_id = ?", (keep, speaker_id))
             self.db.execute("DELETE FROM speakers WHERE id = ?", (speaker_id,))
         self.db.commit()
         self._rewrite_days("speaker_id = ?", (keep,))
         return keep
 
+    def assign_line_speaker(self, utterance_id: int, name: str) -> int:
+        """Say who spoke a line, here only.
+
+        For an imported line this covers every line of the same speaker in that
+        conversation; for a line recorded from the pendant, just that line. The
+        name is matched to an existing speaker or creates a new one.
+        """
+        name = self._clean_name(name)
+        row = self.db.execute(
+            "SELECT source, source_speaker FROM utterances WHERE id = ?", (utterance_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"there is no line {utterance_id}")
+        found = self.db.execute(
+            "SELECT id FROM speakers WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
+        target = found[0] if found else self._new_speaker(name)
+        if row[0] and row[1]:
+            where, params = "source = ? AND source_speaker = ?", (row[0], row[1])
+        else:
+            where, params = "id = ?", (utterance_id,)
+        self.db.execute(f"UPDATE utterances SET speaker_id = ? WHERE {where}", (target, *params))
+        # Drop speakers this left with no lines.
+        self.db.execute(
+            "DELETE FROM speakers WHERE id != ? AND id NOT IN "
+            "(SELECT speaker_id FROM utterances WHERE speaker_id IS NOT NULL)", (target,))
+        self.db.commit()
+        self._rewrite_days(where, params)
+        return target
+
     def reset_speakers(self) -> int:
-        """Forget all speakers and group every stored fingerprint again."""
+        """Forget all speakers and names, and group every stored fingerprint again."""
         self.db.execute("UPDATE utterances SET speaker_id = NULL")
         self.db.execute("DELETE FROM speakers")
         self.db.commit()
         labelled = self._assign_speakers()
-        self._rewrite_days("embedding IS NOT NULL", ())
-        return labelled
+        linked, _conflicts = self._link_imported()
+        self.rewrite_all_transcripts()
+        return labelled + linked
 
     # --- conversations, summaries and reminders ------------------------------------
 

@@ -68,8 +68,10 @@ older versions of Safari do not.
 
 Lines are grouped by voice into "Speaker 1", "Speaker 2" and so on, using a
 small local model (TitaNet, about 40 MB, downloaded on first use). This runs
-automatically after transcription. Click a name in the Lifelog to rename it;
-giving two speakers the same name merges them. From the command line:
+automatically after transcription. Click a name in the Lifelog to rename that
+person everywhere; giving two speakers the same name merges them. "Only this
+conversation" corrects who a speaker is in one conversation without touching
+the rest. From the command line:
 
 ```sh
 uv run limitful speakers                   # label new lines and list speakers
@@ -123,10 +125,18 @@ transcript, the audio, and your reminders. Limitless's transcripts are kept as
 they are; nothing is re-transcribed. Running it again on the same file adds
 nothing.
 
-Limits: speaker numbers from Limitless only mean something within one
-conversation, so imported lines are shown as "Speaker 1", "Speaker 2" and are
-not yet linked to named speakers. Playback of an imported line can start a
-second or two early or late. Chats and account settings are not imported.
+You can also import from the Lifelog page: click Import and choose the zip.
+
+Limitless numbers speakers separately in every conversation. After an import,
+Limitful listens to a few long lines from each of them and links the ones that
+sound alike to the same person, so naming someone once carries across
+conversations. This takes a while and runs in the background from the Lifelog,
+or with `uv run limitful speakers`. Two speakers of one conversation are never
+merged into one person.
+
+Limits: voice matching makes mistakes, so check names in conversations that
+matter. Playback of an imported line can start a second or two early or late.
+Chats and account settings are not imported.
 
 ### Running in the background
 

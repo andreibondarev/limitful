@@ -125,9 +125,22 @@ async def _cmd_export(args) -> int:
 def _label_speakers(store: Store) -> None:
     from .speakers import TitanetEmbedder, load_audio
 
-    labelled = store.label_speakers(TitanetEmbedder(), load_audio)
+    embedder = TitanetEmbedder()
+    labelled = store.label_speakers(embedder, load_audio)
     if labelled:
         print(f"Labelled {labelled} line(s) by speaker.")
+
+    def progress(done: int, total: int) -> None:
+        print(f"\r  listening to imported speakers: {done}/{total}", end="", file=sys.stderr, flush=True)
+        if done == total:
+            print(file=sys.stderr)
+
+    linked, conflicts = store.link_imported_speakers(embedder, load_audio, progress)
+    if linked:
+        print(f"Linked {linked} speaker(s) from imported conversations to people.")
+    if conflicts:
+        print(f"In {conflicts} case(s) the closest voice was already another speaker in the "
+              "same conversation, so a different person was used.")
 
 
 async def _cmd_speakers(args) -> int:

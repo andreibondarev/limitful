@@ -117,6 +117,10 @@
     border: 1px solid var(--accent); border-radius: 4px; background: transparent;
     padding: 0.1rem 0.4rem; width: 12rem; font-weight: 600;
   }
+  .who .here {
+    margin-left: 0.5rem; padding: 0.1rem 0.6rem; font-weight: 400; font-size: 0.8rem;
+    border: 1px solid var(--rule); border-radius: 999px; color: var(--ink);
+  }
   .who small { color: var(--muted); margin-left: 0.6rem; font-size: 0.8rem; }
   .tools {
     display: flex; align-items: center; gap: 1rem;
@@ -163,12 +167,18 @@
   .todo p { margin: 0; flex: 1 1 14rem; }
   .todo small { color: var(--muted); flex-basis: 100%; }
   .todo.accepted { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
-  .todo button, #remind {
+  #status {
+    margin: 0.7rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.9rem;
+    border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent);
+  }
+  #status.failed { border-left-color: #b3261e; background: color-mix(in srgb, #b3261e 10%, transparent); }
+  .todo button, #remind, #import {
     border: 1px solid var(--rule); border-radius: 999px; background: transparent;
     padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
   }
-  .todo button:hover, #remind:hover { border-color: var(--accent); color: var(--accent); }
-  #remind { padding: 0.4rem 0.85rem; font-size: inherit; }
+  .todo button:hover, #remind:hover, #import:hover { border-color: var(--accent); color: var(--accent); }
+  #remind, #import { padding: 0.4rem 0.85rem; font-size: inherit; }
+  #import:disabled { opacity: 0.5; cursor: default; }
   #remind[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .quiet {
     margin: 0.9rem 0 0.9rem var(--gutter);
@@ -214,8 +224,11 @@
     <button class="step" id="next" aria-label="Next day with recordings">›</button>
     <input type="date" id="pick" aria-label="Go to a date">
     <button id="remind" aria-pressed="false">Reminders</button>
+    <button id="import">Import</button>
+    <input type="file" id="file" accept=".zip,application/zip" hidden>
     <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said">
   </div>
+  <p id="status" role="status" hidden></p>
   <div id="strip" role="img" aria-label="When speech was recorded during this day"></div>
   <div id="hours" aria-hidden="true"></div>
 </header>
@@ -333,33 +346,39 @@ async function showReminders() {
 
 function whoRow(speaker) {
   if (!speaker) return el("div", { className: "who unknown", textContent: "Not identified" });
-  // Imported labels are per conversation, not a person we can rename everywhere.
-  if (speaker.id === null) return el("div", { className: "who unknown", textContent: speaker.name });
+  const linked = speaker.id !== null;  // false: an imported label not yet tied to a person
   const row = el("div", { className: "who" });
-  const name = el("button", { textContent: speaker.name, title: "Rename this speaker" });
+  const name = el("button", { textContent: speaker.name, title: "Name this speaker" });
   name.addEventListener("click", () => {
-    const input = el("input", { value: speaker.name, maxLength: 80, ariaLabel: "Speaker name" });
-    const hint = el("small", { textContent: "Enter to save. An existing name merges the two." });
-    row.replaceChildren(input, hint);
+    const input = el("input", { value: linked ? speaker.name : "", placeholder: "Who is this?", maxLength: 80, ariaLabel: "Speaker name" });
+    const here = el("button", { className: "here", textContent: "Only this conversation" });
+    const hint = el("small", { textContent: linked
+      ? "Enter renames this person everywhere."
+      : "Enter names this speaker in this conversation." });
+    row.replaceChildren(input, ...(linked ? [here] : []), hint);
     input.focus(); input.select();
-    let done = false;
-    const cancel = () => { if (!done) { done = true; row.replaceChildren(name); } };
-    input.addEventListener("blur", cancel);
-    input.addEventListener("keydown", async (e) => {
-      if (e.key === "Escape") { cancel(); return; }
-      if (e.key !== "Enter") return;
+    let busy = false;
+    const cancel = () => { if (!busy) row.replaceChildren(name); };
+    const save = async (everywhere) => {
       const value = input.value.trim();
-      if (!value || value === speaker.name) { cancel(); return; }
-      done = true;
+      if (!value || (everywhere && value === speaker.name)) { cancel(); return; }
+      busy = true;
       try {
-        await post(`/api/speakers/${speaker.id}`, { name: value });
+        await post(everywhere ? `/api/speakers/${speaker.id}` : `/api/lines/${speaker.line}/speaker`, { name: value });
         lines = await get(`/api/day/${day}`);
         renderDay();
       } catch (err) {
-        done = false;
-        hint.textContent = `Could not rename. ${err.message}`;
+        busy = false;
+        hint.textContent = `Could not save. ${err.message}`;
       }
+    };
+    // Leaving the field cancels, unless the click went to the button beside it.
+    input.addEventListener("blur", (e) => { if (e.relatedTarget !== here) cancel(); });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") cancel();
+      else if (e.key === "Enter") save(linked);
     });
+    here.addEventListener("click", () => save(false));
   });
   row.append(name);
   return row;
@@ -629,6 +648,60 @@ strip.addEventListener("click", (e) => {
   reveal(nearest.id, false);
 });
 
+/* Importing a Limitless export, and the slower speaker recognition that follows it. */
+function say(text, failed) {
+  const box = $("status");
+  box.hidden = !text;
+  box.textContent = text || "";
+  box.classList.toggle("failed", Boolean(failed));
+}
+
+let watching = null;
+async function watchJob() {
+  let job;
+  try { job = await get("/api/status"); } catch { return; }
+  $("import").disabled = job.running;
+  if (job.running) {
+    say(job.total ? `${job.what}: ${job.done} of ${job.total} clips. You can keep using the page.` : `${job.what}…`);
+    if (!watching) watching = setInterval(watchJob, 3000);
+    return;
+  }
+  if (watching) {
+    clearInterval(watching);
+    watching = null;
+    say(job.error || "Import finished and speakers recognised.", Boolean(job.error));
+    days = await get("/api/days");
+    if (!searching && !reminding) openDay(day);
+  } else if (job.error) {
+    say(job.error, true);
+  }
+}
+
+$("import").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  $("import").disabled = true;
+  say(`Importing ${file.name}. Large exports take a minute; keep this page open.`);
+  try {
+    const res = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/zip" }, body: file });
+    if (!res.ok) throw new Error(await res.text());
+    const r = await res.json();
+    const added = r.conversations
+      ? `Imported ${r.conversations} conversations, ${r.lines} lines and ${r.hours} hours of audio.`
+      : "Nothing new in that export.";
+    say(r.skipped ? `${added} ${r.skipped} conversations were already here.` : added);
+    days = await get("/api/days");
+    countReminders();
+    if (r.conversations && days.length) openDay(days[days.length - 1].day);
+    watchJob();
+  } catch (err) {
+    say(`Import failed. ${err.message}`, true);
+    $("import").disabled = false;
+  }
+});
+
 $("remind").addEventListener("click", () => reminding ? openDay(day) : showReminders());
 $("prev").addEventListener("click", () => step(-1));
 $("next").addEventListener("click", () => step(1));
@@ -675,6 +748,7 @@ setInterval(async () => {
     : days.length ? days[days.length - 1].day : dayKey(new Date());
   await openDay(start, hashId && Number(hashId));
   if (hashDay === "reminders") showReminders();
+  watchJob();
   countReminders();
 })();
 </script>
