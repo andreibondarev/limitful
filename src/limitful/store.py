@@ -537,6 +537,26 @@ class Store:
             self.rewrite_all_transcripts()
         return linked, conflicts
 
+    def unlink_imported_speakers(self) -> int:
+        """Undo automatic linking: imported speakers that were never given a real
+        name go back to their per-conversation labels. Named ones are kept.
+
+        Returns how many per-conversation speakers were unlinked.
+        """
+        auto = "SELECT id FROM speakers WHERE name = 'Speaker ' || id"
+        (count,) = self.db.execute(
+            "SELECT COUNT(*) FROM (SELECT 1 FROM utterances WHERE source IS NOT NULL "
+            f"AND speaker_id IN ({auto}) GROUP BY source, source_speaker)").fetchone()
+        self.db.execute(
+            f"UPDATE utterances SET speaker_id = NULL WHERE source IS NOT NULL AND speaker_id IN ({auto})")
+        self.db.execute(
+            "DELETE FROM speakers WHERE id NOT IN "
+            "(SELECT speaker_id FROM utterances WHERE speaker_id IS NOT NULL)")
+        self.db.commit()
+        if count:
+            self.rewrite_all_transcripts()
+        return count
+
     def speakers(self) -> list[tuple[int, str, int]]:
         """(id, name, lines) for every speaker, most lines first."""
         return self.db.execute(
@@ -607,9 +627,8 @@ class Store:
         self.db.execute("DELETE FROM speakers")
         self.db.commit()
         labelled = self._assign_speakers()
-        linked, _conflicts = self._link_imported()
         self.rewrite_all_transcripts()
-        return labelled + linked
+        return labelled
 
     # --- conversations, summaries and reminders ------------------------------------
 

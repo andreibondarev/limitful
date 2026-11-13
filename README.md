@@ -81,8 +81,10 @@ uv run limitful speakers --reset           # forget names and group again
 
 Limits: labels start once about ten lines have been transcribed, lines shorter
 than 1.5 s are not labelled, a line is given to one speaker even if two people
-spoke in it, and similar voices can be confused. The matching threshold was
-tuned on a small test and will need adjusting on real conversations.
+spoke in it, and similar voices can be confused. The matching was tuned on a
+small test with synthetic voices in one room. A check on real recordings
+suggests the fingerprints pick up the room as much as the voice, so treat
+these labels as a rough guide.
 
 ### Summaries and reminders
 
@@ -127,15 +129,18 @@ nothing.
 
 You can also import from the Lifelog page: click Import and choose the zip.
 
-Limitless numbers speakers separately in every conversation. After an import,
-Limitful listens to a few long lines from each of them and links the ones that
-sound alike to the same person, so naming someone once carries across
-conversations. This takes a while and runs in the background from the Lifelog,
-or with `uv run limitful speakers`. Two speakers of one conversation are never
-merged into one person.
+Limitless numbers speakers separately in every conversation, so imported lines
+show "Speaker 1", "Speaker 2". Click one to name that speaker in that
+conversation.
 
-Limits: voice matching makes mistakes, so check names in conversations that
-matter. Playback of an imported line can start a second or two early or late.
+Matching imported speakers across conversations by voice exists but is
+experimental and off by default (`uv run limitful speakers --link-imported`,
+undone with `--unlink-imported`). On real pendant recordings the voice
+fingerprints were dominated by the room and background noise: 42% of pairs of
+speakers known to be different people scored as the same person. Do not rely
+on it.
+
+Limits: playback of an imported line can start a second or two early or late.
 Chats and account settings are not imported.
 
 ### Running in the background

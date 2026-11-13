@@ -196,3 +196,20 @@ def test_naming_a_speaker_in_one_conversation_only(tmp_path):
     with pytest.raises(ValueError):
         store.assign_line_speaker(line, "  ")
     store.close()
+
+
+def test_unlinking_keeps_named_speakers(tmp_path):
+    store = imported_store(tmp_path)
+    store.link_imported_speakers(Voices(), fake_audio)
+    a = people(store, "conv-a")
+    store.rename_speaker(a["1"], "Andrei")
+    assert store.unlink_imported_speakers() == 4  # two unnamed people, in two conversations each
+    after_a, after_b = people(store, "conv-a"), people(store, "conv-b")
+    assert after_a == {"1": a["1"], "2": None, "3": None}
+    assert after_b["2"] == a["1"] and after_b["1"] is None
+    assert [(name, lines) for _id, name, lines in store.speakers()] == [("Andrei", 11)]
+    assert store.unlink_imported_speakers() == 0
+    # A reset does not quietly link imported speakers again.
+    assert store.reset_speakers() == 0
+    assert set(people(store, "conv-a").values()) == {None}
+    store.close()

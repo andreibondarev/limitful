@@ -63,7 +63,7 @@ _SELECT = (
 class Library:
     """Read-only queries over the data folder."""
 
-    def __init__(self, data_dir: Path, link_speakers: bool = True) -> None:
+    def __init__(self, data_dir: Path, link_speakers: bool = False) -> None:
         self.data_dir = Path(data_dir).resolve()
         self._link_speakers = link_speakers
         self._lock = threading.Lock()
@@ -343,7 +343,7 @@ def make_handler(library: Library):
     return Handler
 
 
-def make_server(data_dir: Path, port: int, link_speakers: bool = True) -> ThreadingHTTPServer:
+def make_server(data_dir: Path, port: int, link_speakers: bool = False) -> ThreadingHTTPServer:
     from .store import Store
 
     # Opening the store creates the database if needed and applies any upgrades,

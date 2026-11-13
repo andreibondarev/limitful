@@ -122,7 +122,7 @@ async def _cmd_export(args) -> int:
     return 0
 
 
-def _label_speakers(store: Store) -> None:
+def _label_speakers(store: Store, link_imported: bool = False) -> None:
     from .speakers import TitanetEmbedder, load_audio
 
     embedder = TitanetEmbedder()
@@ -135,6 +135,8 @@ def _label_speakers(store: Store) -> None:
         if done == total:
             print(file=sys.stderr)
 
+    if not link_imported:
+        return
     linked, conflicts = store.link_imported_speakers(embedder, load_audio, progress)
     if linked:
         print(f"Linked {linked} speaker(s) from imported conversations to people.")
@@ -153,8 +155,10 @@ async def _cmd_speakers(args) -> int:
                 raise PendantError(str(err)) from None
         elif args.reset:
             print(f"Regrouped {store.reset_speakers()} line(s).")
+        elif args.unlink_imported:
+            print(f"Unlinked {store.unlink_imported_speakers()} imported speaker(s); named ones were kept.")
         else:
-            _label_speakers(store)
+            _label_speakers(store, args.link_imported)
         rows = store.speakers()
         if not rows:
             print("No speakers yet. They appear once about ten lines of speech "
@@ -385,6 +389,10 @@ def main(argv: list[str] | None = None) -> int:
                    help="name a speaker; using an existing name merges the two")
     p.add_argument("--reset", action="store_true",
                    help="forget all speakers and names, and group every line again")
+    p.add_argument("--link-imported", action="store_true",
+                   help="experimental: match imported speakers across conversations by voice")
+    p.add_argument("--unlink-imported", action="store_true",
+                   help="undo --link-imported for speakers that were never named")
     p.set_defaults(func=_cmd_speakers)
 
     def llm_args(p) -> None:

@@ -766,7 +766,7 @@ async function watchJob() {
   if (watching) {
     clearInterval(watching);
     watching = null;
-    say(job.error || "Import finished and speakers recognised.", Boolean(job.error));
+    say(job.error || "Import finished.", Boolean(job.error));
     days = await get("/api/days");
     if (!searching && !reminding) openDay(day);
   } else if (job.error) {
