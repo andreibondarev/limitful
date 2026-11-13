@@ -192,3 +192,32 @@ def test_import_rejects_bad_uploads(site):
     assert site("/api/import", dict(ZIP, Host="evil.example"), b"x")[0] == 403
     assert site("/api/speakers/1", ZIP, b"x")[0] == 415
     assert json.loads(site("/api/status")[2])["running"] is False
+
+
+def test_server_upgrades_an_old_database_and_serves_an_empty_folder(tmp_path):
+    import sqlite3
+
+    old = tmp_path / "old"
+    old.mkdir()
+    db = sqlite3.connect(old / "pendant.db")
+    # The layout of the first release: no speaker, source or conversation columns.
+    db.executescript("""
+        CREATE TABLE segments (path TEXT PRIMARY KEY, start_ms INTEGER NOT NULL, duration_ms INTEGER NOT NULL,
+                               first_page INTEGER NOT NULL, last_page INTEGER NOT NULL);
+        CREATE TABLE utterances (id INTEGER PRIMARY KEY, segment TEXT NOT NULL, start_ms INTEGER NOT NULL,
+                                 end_ms INTEGER NOT NULL, text TEXT NOT NULL);
+    """)
+    db.execute("INSERT INTO utterances (segment, start_ms, end_ms, text) VALUES ('', ?, ?, 'hello')", (T0, T0 + 900))
+    db.commit()
+    db.close()
+
+    for folder, expected in ((old, ["hello"]), (tmp_path / "brand-new", [])):
+        server = make_server(folder, 0, link_speakers=False)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        with urllib.request.urlopen(base + "/api/day/2026-11-13") as res:
+            assert [u["text"] for u in json.loads(res.read())] == expected
+        with urllib.request.urlopen(base + "/api/conversations/2026-11-13") as res:
+            assert json.loads(res.read()) == []
+        server.shutdown()
+        server.server_close()

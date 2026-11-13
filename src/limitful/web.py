@@ -341,5 +341,10 @@ def make_handler(library: Library):
 
 
 def make_server(data_dir: Path, port: int, link_speakers: bool = True) -> ThreadingHTTPServer:
+    from .store import Store
+
+    # Opening the store creates the database if needed and applies any upgrades,
+    # so the read-only queries below always see the current layout.
+    Store(data_dir).close()
     library = Library(data_dir, link_speakers)
     return ThreadingHTTPServer(("127.0.0.1", port), make_handler(library))
