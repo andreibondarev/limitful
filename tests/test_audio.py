@@ -66,8 +66,9 @@ def test_ogg_exact_page_multiple_still_ends_stream():
     assert data[data.rfind(b"OggS") + 5] & 0x04
 
 
-def _page(index, ts, frames, session=7):
-    return FlashPage(index=index, session=session, seq=0, data=flash_page(ts, frames))
+def _page(index, ts, frames, session=7, uptime=None):
+    return FlashPage(index=index, session=session, seq=0,
+                     data=flash_page(ts, frames, uptime_ms=uptime))
 
 
 def test_store_dedupes_and_splits_segments_at_gaps(tmp_path):
@@ -75,10 +76,10 @@ def test_store_dedupes_and_splits_segments_at_gaps(tmp_path):
     t0 = 1_763_000_000_000
     frames = [opus_frame(i) for i in range(50)]  # 1 s per page
     assert store.add_page(_page(10, t0, frames))
-    assert store.add_page(_page(11, t0 + 1000, frames))
-    assert not store.add_page(_page(11, t0 + 1000, frames))  # re-sent page
+    assert store.add_page(_page(11, t0 + 1000, frames, session=8))  # session change alone
+    assert not store.add_page(_page(11, t0 + 1000, frames, session=8))  # re-sent page
     assert store.add_page(_page(12, t0 + 60_000, frames))  # a minute later
-    assert store.add_page(_page(13, t0 + 61_000, [],))  # diagnostic page, no audio
+    assert store.add_page(_page(13, t0 + 61_000, []))  # diagnostic page, no audio
     store.commit()
     assert store.page_count() == 4
 
@@ -87,6 +88,32 @@ def test_store_dedupes_and_splits_segments_at_gaps(tmp_path):
     assert [s.start_ms for s in segments] == [t0, t0 + 60_000]
     assert all(s.path.exists() for s in segments)
     assert store.export_audio() == []  # nothing new to export
+    store.close()
+
+
+def test_reused_index_after_pendant_reset_is_not_treated_as_duplicate(tmp_path):
+    store = Store(tmp_path)
+    t0 = 1_763_000_000_000
+    assert store.add_page(_page(0, t0, [opus_frame(i) for i in range(50)], session=1))
+    # The pendant was reset: counters restart, but this is different audio.
+    assert store.add_page(_page(0, t0 + 3_600_000, [opus_frame(i + 9) for i in range(50)], session=1))
+    store.commit()
+    assert [s.start_ms for s in store.export_audio()] == [t0, t0 + 3_600_000]
+    store.close()
+
+
+def test_pages_recorded_before_clock_was_set_get_a_real_time(tmp_path):
+    store = Store(tmp_path)
+    boot = 1_763_000_000_000
+    frames = [opus_frame(i) for i in range(50)]
+    # Clock not yet set: the timestamp is just time since boot.
+    store.add_page(_page(0, 5_000, frames, uptime=5_000))
+    store.add_page(_page(1, 6_000, frames, uptime=6_000))
+    # Clock set from here on.
+    store.add_page(_page(2, boot + 7_000, frames, uptime=7_000))
+    store.commit()
+    (segment,) = store.export_audio()
+    assert (segment.start_ms, segment.duration_ms) == (boot + 5_000, 3000)
     store.close()
 
 

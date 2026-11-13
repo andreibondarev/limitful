@@ -122,6 +122,12 @@ def test_sync_without_ack_leaves_pendant_untouched(pendant, tmp_path):
     assert not fake.connected
 
 
+def test_page_zero_is_stored_and_acked(pendant, tmp_path):
+    pendant.page_indices = [0, 1, 2]
+    result, stored = run_sync(tmp_path, ack=True)
+    assert (result.pages_received, stored, result.acked_up_to) == (3, 3, 2)
+
+
 def test_sync_twice_stores_nothing_new(pendant, tmp_path):
     pendant.page_indices = list(range(10))
     run_sync(tmp_path)

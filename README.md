@@ -7,8 +7,9 @@ no Limitless account or server involved.
 Limitless ends its service on December 1, 2026. This project exists so the
 hardware keeps working after that.
 
-**Status: early.** The protocol code and sync logic are covered by tests against
-a simulated pendant, but have not yet been run against a real device.
+**Status: early, but working.** Pairing, status and read-only sync have been run
+against a real pendant on macOS, and the downloaded audio plays. Freeing space
+on the pendant (`--ack`) is tested against a simulated pendant only.
 
 ## Install
 
@@ -22,6 +23,12 @@ uv sync
 
 The pendant only advertises when no other device is connected to it, so turn
 off Bluetooth on your phone (or quit the Limitless app) first.
+
+The first time, run `pair` and put the pendant in pairing mode: while a light is
+visible, press the button once, then press and hold until the light turns pink,
+and release. Accept the connection request your computer shows. **Pairing mode
+resets the pendant and clears the audio stored on it**, so let the Limitless app
+sync first if you still use it.
 
 ```sh
 uv run pendant-sync scan      # find the pendant
@@ -57,9 +64,23 @@ app or cloud. Leave it off until you trust your local copy.
 - `store.py`: SQLite store of raw pages, and export to audio files.
 - `ogg.py`: a small Ogg Opus writer.
 
+## Hardware notes
+
+Observed on one pendant; treat as provisional.
+
+- Firmware is built on Zephyr. Over USB it appears as "Pendant" by "ZEPHYR"
+  (vendor 0x2fe3, product 0x0110) with a serial port.
+- Bluetooth services: battery, the Limitless data service, and Zephyr's device
+  management (SMP) service, which is normally used for firmware updates.
+- Commands are refused with "Insufficient Encryption" until the host is paired.
+  The pendant only accepts a new host in pairing mode.
+- Audio is mono Opus in 20 ms frames. A flash page is about 4 KB and holds
+  roughly 1.4 s; the pendant reports 95,232 pages, so about 38 hours.
+- The pendant stops recording during silence, so audio arrives as short bursts.
+
 ## Roadmap
 
-1. Verify against real hardware (this is next).
+1. Verify `--ack` and long downloads on real hardware.
 2. Transcription with speaker labels.
 3. Daily lifelog view, search and chat over transcripts.
 4. Import of a Limitless data export.

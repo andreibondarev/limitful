@@ -60,6 +60,14 @@ def test_page_without_audio_is_kept_with_no_frames():
     assert page.opus_frames() == []
 
 
+def test_first_page_after_reset_has_no_index_field_and_reads_as_zero():
+    raw = storage_buffer(0, flash_page(3511, [opus_frame(1)], uptime_ms=3511), session=1)
+    assert 0x28 not in (raw[0], raw[2])  # the index field really is absent
+    page = p.parse_pendant_message(pendant_message(raw))[0]
+    assert (page.index, page.session, page.seq) == (0, 1, 0)
+    assert (page.timestamp_ms, page.uptime_ms) == (3511, 3511)
+
+
 def test_truncated_packet_is_rejected():
     raw = ble_packets(1, b"x" * 50)[0]
     assert p.parse_ble_packet(raw[:-10]) is None

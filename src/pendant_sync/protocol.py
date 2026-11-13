@@ -13,8 +13,10 @@ Shape of the protocol:
   (field 30): 6=set time, 7=acknowledge pages, 8=set mode, 21=get status.
 * In download mode each reassembled payload holds StorageBuffers (field 2):
   2=session, 4=sequence, 5=flash page index, 6=flash page data.
-* A flash page starts with the pendant-clock timestamp (field 1, ms) followed
-  by 0x1a wrappers whose 0x12 subfields contain Opus packets.
+* A flash page starts with the pendant-clock timestamp (field 1, ms) and the
+  time since boot (field 2, ms), followed by 0x1a wrappers whose 0x12 subfields
+  contain Opus packets. Until the clock is set, field 1 equals field 2.
+* Fields holding zero are omitted, so the first page after a reset has no index.
 """
 
 from __future__ import annotations
@@ -190,14 +192,18 @@ class Reassembler:
 
 @dataclass(frozen=True)
 class FlashPage:
-    index: int | None
-    session: int | None
-    seq: int | None
+    index: int
+    session: int
+    seq: int
     data: bytes  # raw flash page bytes, kept so audio can be re-extracted later
 
     @property
     def timestamp_ms(self) -> int:
         return parse_page_timestamp_ms(self.data)
+
+    @property
+    def uptime_ms(self) -> int:
+        return parse_page_uptime_ms(self.data)
 
     def opus_frames(self) -> list[bytes]:
         return extract_opus_frames(self.data)
@@ -229,7 +235,7 @@ def parse_pendant_message(payload: bytes) -> list[FlashPage]:
 
 def _parse_storage_buffer(buf: bytes) -> FlashPage | None:
     pos = 0
-    session = seq = index = None
+    session = seq = index = 0  # zero-valued fields are omitted on the wire
     page_data = None
     while pos < len(buf):
         tag = buf[pos]
@@ -260,6 +266,16 @@ def _parse_storage_buffer(buf: bytes) -> FlashPage | None:
 def parse_page_timestamp_ms(page_data: bytes) -> int:
     if page_data and page_data[0] == 0x08:
         return decode_varint(page_data, 1)[0]
+    return 0
+
+
+def parse_page_uptime_ms(page_data: bytes) -> int:
+    """Milliseconds since the pendant booted (field 2), or 0 if absent."""
+    pos = 0
+    if page_data and page_data[0] == 0x08:
+        _, pos = decode_varint(page_data, 1)
+    if pos < len(page_data) and page_data[pos] == 0x10:
+        return decode_varint(page_data, pos + 1)[0]
     return 0
 
 

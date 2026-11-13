@@ -18,13 +18,16 @@ def opus_frame(seed: int, size: int = 40, toc: int = 0xB8) -> bytes:
     return bytes([toc]) + bytes((seed + i) % 251 for i in range(size - 1))
 
 
-def flash_page(timestamp_ms: int, frames: list[bytes]) -> bytes:
+def flash_page(timestamp_ms: int, frames: list[bytes], uptime_ms: int | None = None) -> bytes:
     audio = b"".join(ld(0x22, f) for f in frames)
-    return vi(0x08, timestamp_ms) + ld(0x1A, vi(0x08, 0) + ld(0x12, audio))
+    uptime = timestamp_ms % 100_000_000 if uptime_ms is None else uptime_ms
+    return vi(0x08, timestamp_ms) + vi(0x10, uptime) + ld(0x1A, vi(0x08, 0) + ld(0x12, audio))
 
 
 def storage_buffer(index: int, page: bytes, session: int = 7, seq: int = 0) -> bytes:
-    return vi(0x10, session) + vi(0x20, seq) + vi(0x28, index) + ld(0x32, page)
+    # Like the pendant, leave out fields whose value is zero.
+    fields = [(0x10, session), (0x20, seq), (0x28, index)]
+    return b"".join(vi(tag, v) for tag, v in fields if v) + ld(0x32, page)
 
 
 def pendant_message(*buffers: bytes) -> bytes:

@@ -239,8 +239,6 @@ class Pendant:
                     page = await asyncio.wait_for(self._pages.get(), STALL_TIMEOUT_S)
                 except asyncio.TimeoutError:
                     break
-                if page.index is None:
-                    continue
                 received += 1
                 if store.add_page(page):
                     new += 1
