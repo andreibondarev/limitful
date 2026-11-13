@@ -145,6 +145,8 @@ def people(store, source):
 def test_imported_speakers_are_linked_across_conversations(tmp_path):
     store = imported_store(tmp_path)
     assert store.label_speakers(Voices(), fake_audio) == 0  # nothing recorded from the pendant
+    # ...and it must not fingerprint every imported line: that is the slow path.
+    assert store.db.execute("SELECT COUNT(*) FROM utterances WHERE embedding IS NOT NULL").fetchone() == (0,)
     linked, conflicts = store.link_imported_speakers(Voices(), fake_audio)
     assert (linked, conflicts) == (6, 0)
     a, b = people(store, "conv-a"), people(store, "conv-b")

@@ -349,7 +349,8 @@ class Store:
         todo = self.db.execute(
             "SELECT u.id, u.segment, u.start_ms - s.start_ms, u.end_ms - u.start_ms "
             "FROM utterances u JOIN segments s ON s.path = u.segment "
-            "WHERE u.embedding IS NULL AND u.end_ms - u.start_ms >= ? ORDER BY u.segment",
+            "WHERE u.embedding IS NULL AND u.source IS NULL AND u.end_ms - u.start_ms >= ? "
+            "ORDER BY u.segment",
             (MIN_SPEAKER_MS,),
         ).fetchall()
         loaded: tuple[str, "np.ndarray"] | None = None
@@ -362,7 +363,7 @@ class Store:
                 continue  # the file is shorter than the transcript claims
             voice = np.asarray(embedder.embed(clip), dtype=np.float32)
             self.db.execute("UPDATE utterances SET embedding = ? WHERE id = ?", (voice.tobytes(), uid))
-        self.db.commit()
+            self.db.commit()  # keep write locks short: the Lifelog may be saving too
         return self._assign_speakers()
 
     def _voice_book(self):
