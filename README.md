@@ -1,4 +1,9 @@
-<p align="center"><img src="assets/logo.svg" width="112" alt="Limitful logo: a star whose every ray is stopped by a bar"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.svg">
+    <img src="assets/wordmark.svg" width="340" alt="Limitful*, with the footnote: limits apply">
+  </picture>
+</p>
 
 # Limitful
 
