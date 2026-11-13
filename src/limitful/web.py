@@ -201,6 +201,9 @@ class Library:
 
 
 def make_handler(library: Library):
+    # Read once: a page newer than the running server would call addresses it lacks.
+    index = _INDEX.read_bytes()
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "limitful"
 
@@ -215,7 +218,7 @@ def make_handler(library: Library):
             path = unquote(url.path)
             try:
                 if path == "/":
-                    return self._send(HTTPStatus.OK, _INDEX.read_bytes(), "text/html; charset=utf-8")
+                    return self._send(HTTPStatus.OK, index, "text/html; charset=utf-8")
                 if path == "/api/days":
                     return self._json(library.days())
                 if path.startswith("/api/day/"):
