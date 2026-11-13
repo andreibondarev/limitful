@@ -106,7 +106,9 @@ class Store:
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.data_dir / "pendant.db")
+        # Transcription runs in a worker thread; callers never use the store from
+        # two threads at once, so sharing one connection is safe.
+        self.db = sqlite3.connect(self.data_dir / "pendant.db", check_same_thread=False)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")  # commit() must mean "on disk"
         self.db.executescript(_SCHEMA)

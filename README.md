@@ -8,8 +8,8 @@ Limitless ends its service on December 1, 2026. This project exists so the
 hardware keeps working after that.
 
 **Status: early, but working.** Pairing, status and read-only sync have been run
-against a real pendant on macOS, and the downloaded audio plays. Freeing space
-on the pendant (`--ack`) is tested against a simulated pendant only.
+against a real pendant on macOS, and so has freeing space on the pendant
+(`--ack`). Only tested on macOS so far.
 
 ## Install
 
@@ -34,20 +34,32 @@ sync first if you still use it.
 uv run pendant-sync scan      # find the pendant
 uv run pendant-sync pair      # first use only: pair this computer with it
 uv run pendant-sync status    # how much audio is stored on it
-uv run pendant-sync sync      # download everything into ./data
+uv run pendant-sync sync      # download everything into ~/PendantSync
 uv run pendant-sync transcribe  # turn new audio into text, on this machine
 ```
 
-Transcripts are written to `data/transcripts/<date>.md`, one timestamped line
+Transcripts are written to `transcripts/<date>.md`, one timestamped line
 per utterance. Transcription uses Whisper (`large-v3-turbo`) locally; the model
 is about 1.6 GB and downloads on first use. No audio leaves your computer.
 
-Audio lands in `data/audio/<date>/<time>.ogg` (Ogg Opus, plays in VLC, ffmpeg
-and most browsers). The raw pages from the pendant are kept in
-`data/pendant.db`, so audio can be re-exported later with
-`uv run pendant-sync export`.
+Everything is stored in `~/PendantSync` (change it with `--data-dir` or the
+`PENDANT_SYNC_DATA` environment variable). Audio lands in
+`audio/<date>/<time>.ogg` (Ogg Opus, plays in VLC, ffmpeg and most browsers).
+The raw pages from the pendant are kept in `pendant.db`, so audio can be
+re-exported later with `uv run pendant-sync export`.
 
 On macOS the first run asks for Bluetooth permission for your terminal app.
+
+### Running in the background
+
+```sh
+uv run pendant-sync watch
+```
+
+`watch` checks for the pendant every two minutes. When it is in range it
+downloads new audio, frees that audio on the pendant, and transcribes it. Leave
+it running in a terminal. Use `--keep` to leave audio on the pendant and
+`--no-transcribe` to download only.
 
 ### Freeing space on the pendant
 
@@ -58,9 +70,8 @@ same pages again next time (they are skipped locally).
 uv run pendant-sync sync --ack
 ```
 
-`--ack` tells the pendant to delete pages once they are safely on disk. Until
-Limitless shuts down, anything you free this way will never reach the Limitless
-app or cloud. Leave it off until you trust your local copy.
+`--ack` tells the pendant to delete pages once they are safely on disk. After
+that your computer holds the only copy, so back up the data folder.
 
 ## How it works
 
@@ -69,6 +80,7 @@ app or cloud. Leave it off until you trust your local copy.
 - `store.py`: SQLite store of raw pages, and export to audio files.
 - `ogg.py`: a small Ogg Opus writer.
 - `transcribe.py`: speech-to-text engines (local Whisper by default).
+- `watch.py`: the background loop.
 
 ## Using the pendant without the Limitless app
 
@@ -106,7 +118,7 @@ Observed on one pendant; treat as provisional.
 
 ## Roadmap
 
-1. Verify `--ack` and long downloads on real hardware.
+1. Run `watch` as a login service.
 2. Speaker labels, and a hosted transcription option.
 3. Daily lifelog view, search and chat over transcripts.
 4. Import of a Limitless data export.

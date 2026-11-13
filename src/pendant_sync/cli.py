@@ -1,9 +1,10 @@
-"""Command-line interface: scan, pair, status, sync, export, transcribe."""
+"""Command-line interface: scan, pair, status, sync, export, transcribe, watch."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 import time
 from pathlib import Path
@@ -12,6 +13,11 @@ from . import __version__
 from .client import Pendant, PendantError, pair, scan
 from .store import Store
 from .transcribe import DEFAULT_MODEL
+from .watch import watch
+
+
+def default_data_dir() -> Path:
+    return Path(os.environ.get("PENDANT_SYNC_DATA") or Path.home() / "PendantSync")
 
 
 async def _resolve(address: str | None, timeout: float):
@@ -141,6 +147,29 @@ async def _cmd_transcribe(args) -> int:
         store.close()
 
 
+async def _cmd_watch(args) -> int:
+    store = Store(args.data_dir)
+    cached: list = []
+
+    def get_transcriber():
+        if not cached:
+            from .transcribe import WhisperTranscriber
+
+            print(f"Loading {args.model} (downloads on first use)...", flush=True)
+            cached.append(WhisperTranscriber(args.model, args.language, args.device))
+        return cached[0]
+
+    print(f"Watching for the pendant every {args.interval:.0f} s. Data: {args.data_dir}")
+    print("Synced audio is " + ("kept on" if args.keep else "freed from") + " the pendant. "
+          "Press Ctrl-C to stop.")
+    try:
+        await watch(store, interval=args.interval, ack=not args.keep,
+                    get_transcriber=None if args.no_transcribe else get_transcriber)
+    finally:
+        store.close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="pendant-sync",
@@ -154,8 +183,9 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--timeout", type=float, default=8.0, help="scan time in seconds")
 
     def data_args(p) -> None:
-        p.add_argument("--data-dir", type=Path, default=Path("data"),
-                       help="where recordings are stored (default: ./data)")
+        p.add_argument("--data-dir", type=Path, default=default_data_dir(),
+                       help="where recordings are stored (default: ~/PendantSync, "
+                            "or $PENDANT_SYNC_DATA)")
 
     p = sub.add_parser("scan", help="list pendants advertising nearby")
     p.add_argument("--timeout", type=float, default=8.0)
@@ -188,6 +218,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--device", default="auto",
                    help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
     p.set_defaults(func=_cmd_transcribe)
+
+    p = sub.add_parser("watch", help="keep syncing and transcribing in the background")
+    data_args(p)
+    p.add_argument("--interval", type=float, default=120.0,
+                   help="seconds between sync attempts (default: 120)")
+    p.add_argument("--keep", action="store_true",
+                   help="do not free synced audio on the pendant")
+    p.add_argument("--no-transcribe", action="store_true", help="download audio only")
+    p.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL})")
+    p.add_argument("--language", help="language code such as en (default: detect per file)")
+    p.add_argument("--device", default="auto",
+                   help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
+    p.set_defaults(func=_cmd_watch)
 
     args = parser.parse_args(argv)
     try:
