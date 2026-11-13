@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from . import ask as ask_mod
 from . import config
 from . import digest as digest_mod
 
@@ -324,6 +325,8 @@ def make_handler(library: Library):
             path = urlparse(self.path).path
             if path == "/api/import":
                 return self._import()
+            if path == "/api/ask":
+                return self._ask()
             if path in ("/api/settings", "/api/digest"):
                 try:
                     length = min(int(self.headers.get("Content-Length") or 0), 8192)
@@ -363,6 +366,45 @@ def make_handler(library: Library):
                 return self._text(HTTPStatus.BAD_REQUEST, str(err))
             except sqlite3.Error as err:
                 return self._text(HTTPStatus.INTERNAL_SERVER_ERROR, f"Could not save: {err}")
+
+        def _ask(self) -> None:
+            """Answer a question, sending progress as it happens.
+
+            The reply is one JSON object per line: {"step": ...} while Claude looks
+            things up, then {"answer": ..., "lines": ...} or {"error": ...}.
+            """
+            try:
+                length = min(int(self.headers.get("Content-Length") or 0), 1 << 20)
+                body = json.loads(self.rfile.read(length) or b"{}")
+                history = body.get("messages") if isinstance(body, dict) else None
+                if not isinstance(history, list) or not history:
+                    raise ValueError("ask a question first")
+            except ValueError as err:
+                return self._text(HTTPStatus.BAD_REQUEST, str(err))
+            if config.provider() != "claude":
+                return self._text(HTTPStatus.BAD_REQUEST,
+                                  "Ask needs Claude. Choose Claude in Settings first; "
+                                  "your questions and the transcripts it reads are sent to Anthropic.")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()  # no length: the reply ends when the connection closes
+
+            def emit(item: dict) -> None:
+                try:
+                    self.wfile.write(json.dumps(item).encode() + b"\n")
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass  # the reader left; let the answer finish quietly
+
+            try:
+                emit(ask_mod.answer(library.data_dir, history[-40:], config.api_key(),
+                                    on_step=lambda step: emit({"step": step})))
+            except digest_mod.DigestError as err:
+                emit({"error": str(err)})
+            except Exception as err:  # never leave the page waiting on a broken stream
+                emit({"error": f"Something went wrong: {err}"})
 
         def _import(self) -> None:
             try:

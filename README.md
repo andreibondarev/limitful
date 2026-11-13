@@ -162,6 +162,22 @@ on it.
 Limits: playback of an imported line can start a second or two early or late.
 Chats and account settings are not imported.
 
+### Ask
+
+The Lifelog's Ask page answers questions about what was said: "what did I agree
+to with Joseph?", "what did they say a session costs?". Claude looks through
+your transcripts with three tools (search lines, list conversations, read a
+conversation), then answers. Each fact carries a small link showing when it was
+said; clicking it opens that line and plays it, so you can check the answer
+against the recording. Follow-up questions keep the thread's context.
+
+From the command line: `uv run limitful ask "what did I agree to this week?"`.
+
+Ask needs Claude chosen in Settings. Your questions and the transcript lines
+Claude reads are sent to Anthropic. Search is by literal words, not meaning,
+so Claude tries several phrasings; it can still miss things said in unexpected
+words. The thread lives in the page and is gone when you reload it.
+
 ### Running in the background
 
 ```sh
@@ -194,6 +210,7 @@ that your computer holds the only copy, so back up the data folder.
 - `transcribe.py`: speech-to-text engines (local Whisper by default).
 - `speakers.py`: voice fingerprints for speaker labels.
 - `digest.py`: titles, summaries and reminders from a language model.
+- `ask.py`: question answering over the transcripts, with citations.
 - `config.py`: saved settings, including the API key.
 - `importer.py`: import of a Limitless data export.
 - `watch.py`: the background loop.
@@ -238,7 +255,7 @@ Observed on one pendant; treat as provisional.
 1. Run `watch` as a login service.
 2. Better speaker labels (splitting a line between two voices), and a hosted
    transcription option.
-3. Chat over transcripts, and an MCP server.
+3. An MCP server, so other assistants can query the transcripts; search by meaning.
 4. Link imported speakers to named speakers; import chats.
 5. MCP server, Obsidian sync, mobile app.
 

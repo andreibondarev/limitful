@@ -179,12 +179,43 @@
     border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent);
   }
   #status.failed { border-left-color: #b3261e; background: color-mix(in srgb, #b3261e 10%, transparent); }
-  .todo button, #remind, #settings, .pill {
+  .todo button, #remind, #settings, #ask, .pill {
     border: 1px solid var(--rule); border-radius: 999px; background: transparent;
     padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
   }
   .todo button:hover, #remind:hover, #settings:hover, .pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  #remind, #settings, .pill { padding: 0.4rem 0.85rem; font-size: inherit; }
+  #remind, #settings, #ask, .pill { padding: 0.4rem 0.85rem; font-size: inherit; }
+  #ask:hover { border-color: var(--accent); color: var(--accent); }
+  #ask[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .chat { max-width: 44rem; }
+  .chat .lead { font-family: var(--voice); font-size: 1.2rem; line-height: 1.5; margin: 0 0 1rem; }
+  .chat .tries { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; }
+  .chat .asked {
+    margin: 1.8rem 0 0.7rem; padding-left: 0.9rem; border-left: 3px solid var(--mark);
+    font-family: var(--voice); font-size: 1.3rem; line-height: 1.35; white-space: pre-wrap;
+  }
+  .chat .asked:first-child { margin-top: 0.3rem; }
+  .chat .reply { font-family: var(--voice); font-size: 1.12rem; line-height: 1.6; }
+  .chat .reply p { margin: 0 0 0.8rem; }
+  .chat .reply ul { margin: 0 0 0.8rem; padding-left: 1.2rem; }
+  .chat .reply li { margin-bottom: 0.3rem; }
+  .chat .cite {
+    font-family: var(--chrome); font-size: 0.72rem; font-variant-numeric: tabular-nums; white-space: nowrap;
+    margin: 0 0.15rem; padding: 0.05rem 0.4rem; border-radius: 999px; text-decoration: none;
+    color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    vertical-align: 0.12em;
+  }
+  .chat .cite:hover { background: var(--accent); color: var(--paper); }
+  .chat .working { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.8rem; }
+  .chat .working.failed { color: #b3261e; }
+  .chat form { display: flex; gap: 0.6rem; align-items: flex-end; margin-top: 1.6rem; }
+  .chat textarea {
+    flex: 1; min-height: 2.9rem; max-height: 12rem; resize: vertical; font: inherit; color: inherit;
+    font-family: var(--voice); font-size: 1.1rem; line-height: 1.4;
+    border: 1px solid var(--rule); border-radius: 10px; background: transparent; padding: 0.6rem 0.8rem;
+  }
+  .chat textarea::placeholder { color: var(--muted); }
+  .chat .fine { margin-top: 0.6rem; color: var(--muted); font-size: 0.8rem; }
   .pill:disabled { opacity: 0.5; cursor: default; }
   .pill.main { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .pill.main:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--paper); }
@@ -269,6 +300,7 @@
     <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
     <button class="step" id="next" aria-label="Next day with recordings">›</button>
     <input type="date" id="pick" aria-label="Go to a date">
+    <button id="ask" aria-pressed="false">Ask</button>
     <button id="remind" aria-pressed="false">Reminders</button>
     <button id="settings" aria-pressed="false">Settings</button>
     <input type="file" id="file" accept=".zip,application/zip" hidden>
@@ -310,6 +342,9 @@ let searching = false;
 let talks = [];       // summarised conversations of the day
 let reminding = false;
 let configuring = false;
+let asking = false;
+let chat = [];        // the Ask thread: [{ role, content, lines }]
+let chatBusy = false;
 let groups = [];              // the day's conversation cards
 const openCards = new Set();  // cards the reader has opened, kept across refreshes
 const TALK_GAP_MS = 300000;   // a silence this long separates unsummarised conversations
@@ -392,6 +427,8 @@ async function countReminders() {
 async function showReminders() {
   reminding = true;
   configuring = false;
+  asking = false;
+  $("ask").setAttribute("aria-pressed", "false");
   history.replaceState(null, "", "#reminders");
   $("remind").setAttribute("aria-pressed", "true");
   $("settings").setAttribute("aria-pressed", "false");
@@ -643,6 +680,8 @@ async function openDay(key, revealId, revealTalk, startPlaying) {
   searching = false;
   reminding = false;
   configuring = false;
+  asking = false;
+  $("ask").setAttribute("aria-pressed", "false");
   $("remind").setAttribute("aria-pressed", "false");
   $("settings").setAttribute("aria-pressed", "false");
   $("search").value = "";
@@ -670,6 +709,8 @@ async function runSearch(query) {
   searching = true;
   reminding = false;
   configuring = false;
+  asking = false;
+  $("ask").setAttribute("aria-pressed", "false");
   $("remind").setAttribute("aria-pressed", "false");
   $("settings").setAttribute("aria-pressed", "false");
   $("title").textContent = "Search";
@@ -855,7 +896,7 @@ async function watchJob() {
     watching = null;
     say(job.error || "Finished.", Boolean(job.error));
     days = await get("/api/days");
-    if (!searching && !reminding && !configuring) openDay(day);
+    if (!searching && !reminding && !configuring && !asking) openDay(day);
   } else if (job.error) {
     say(job.error, true);
   }
@@ -890,6 +931,8 @@ async function showSettings() {
   configuring = true;
   reminding = false;
   searching = false;
+  asking = false;
+  $("ask").setAttribute("aria-pressed", "false");
   history.replaceState(null, "", "#settings");
   $("settings").setAttribute("aria-pressed", "true");
   $("remind").setAttribute("aria-pressed", "false");
@@ -961,6 +1004,138 @@ async function showSettings() {
 }
 $("settings").addEventListener("click", () => configuring ? openDay(day) : showSettings());
 
+/* Ask: questions about what was said, answered from the transcripts with links to the lines. */
+const shortWhen = new Intl.DateTimeFormat([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+/* An answer is plain text with "- " lists, **bold** and [L123] citations. Build it as nodes. */
+function replyNodes(text, cited) {
+  const inline = (line) => {
+    const out = [];
+    for (const part of line.split(/(\*\*[^*]+\*\*|\[L\d+\])/)) {
+      const ref = part.match(/^\[L(\d+)\]$/);
+      if (ref) {
+        const where = cited[ref[1]];
+        if (!where) continue;  // an id the model was never shown
+        const a = el("a", { className: "cite", href: `#${where.day}/${ref[1]}`, title: `“${where.text}”`,
+          textContent: shortWhen.format(new Date(where.start)) });
+        a.addEventListener("click", (e) => { e.preventDefault(); openDay(where.day, Number(ref[1]), where.conversation, true); });
+        out.push(a);
+      } else if (/^\*\*[^*]+\*\*$/.test(part)) out.push(el("b", { textContent: part.slice(2, -2) }));
+      else if (part) out.push(part);
+    }
+    return out;
+  };
+  const nodes = [];
+  for (const block of text.split(/\n\s*\n/)) {
+    let list = null, para = [];
+    const flush = () => { if (para.length) { nodes.push(el("p", {}, ...inline(para.join(" ")))); para = []; } };
+    for (const line of block.split("\n")) {
+      const item = line.match(/^\s*[-*•]\s+(.*)$/);
+      if (item) {
+        flush();
+        if (!list) { list = el("ul"); nodes.push(list); }
+        list.append(el("li", {}, ...inline(item[1])));
+      } else { list = null; para.push(line.trim()); }
+    }
+    flush();
+  }
+  return nodes;
+}
+
+function showAsk() {
+  asking = true;
+  searching = false; reminding = false; configuring = false;
+  history.replaceState(null, "", "#ask");
+  for (const [id, on] of [["ask", true], ["remind", false], ["settings", false]]) $(id).setAttribute("aria-pressed", String(on));
+  $("title").textContent = "Ask";
+  strip.replaceChildren();
+
+  const box = el("div", { className: "chat" });
+  const working = el("p", { className: "working", role: "status" });
+  const field = el("textarea", { rows: 1, placeholder: "Ask about anything you've said or heard", ariaLabel: "Your question" });
+  const go = el("button", { className: "pill main", textContent: "Ask", type: "submit" });
+  const form = el("form", {}, field, go);
+  const fresh = el("button", { className: "pill", textContent: "New chat", type: "button", hidden: !chat.length });
+
+  const paint = () => {
+    const thread = [];
+    for (const turn of chat) {
+      if (turn.role === "user") thread.push(el("p", { className: "asked", textContent: turn.content }));
+      else thread.push(el("div", { className: "reply" }, ...replyNodes(turn.content, turn.lines || {})));
+    }
+    const lead = chat.length ? [] : [
+      el("p", { className: "lead", textContent: "Ask what was said, what you agreed to, or when something came up. Answers link to the lines they come from, so you can hear the moment." }),
+      el("div", { className: "tries" }, ...[
+        "What did I agree to do this week?",
+        "Who did I talk to most recently, and about what?",
+        "What were the main things discussed on my busiest day?",
+      ].map((q) => { const b = el("button", { className: "pill", textContent: q, type: "button" }); b.addEventListener("click", () => send(q)); return b; })),
+    ];
+    fresh.hidden = !chat.length;
+    box.replaceChildren(...lead, ...thread, working, form,
+      el("p", { className: "fine" }, "Your questions and the transcript lines Claude reads are sent to Anthropic. ", fresh));
+  };
+
+  const send = async (question) => {
+    question = question.trim();
+    if (!question || chatBusy) return;
+    chatBusy = true;
+    chat.push({ role: "user", content: question });
+    field.value = "";
+    paint();
+    go.disabled = true;
+    working.classList.remove("failed");
+    working.textContent = "Thinking…";
+    working.scrollIntoView({ block: "nearest" });
+    let failure = null;
+    try {
+      const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: chat.map(({ role, content }) => ({ role, content })) }) });
+      if (!res.ok) throw new Error(await res.text());
+      const reader = res.body.getReader(), decoder = new TextDecoder();
+      let buffer = "", done = false;
+      const take = (line) => {
+        if (!line.trim()) return;
+        const item = JSON.parse(line);
+        if (item.step) working.textContent = `${item.step}…`;
+        else if (item.error) failure = item.error;
+        else if (item.answer) { chat.push({ role: "assistant", content: item.answer, lines: item.lines }); done = true; }
+      };
+      for (;;) {
+        const { value, done: ended } = await reader.read();
+        if (value) {
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n");
+          buffer = parts.pop();
+          parts.forEach(take);
+        }
+        if (ended) { take(buffer); break; }
+      }
+      if (!done && !failure) failure = "The answer was cut off. Try again.";
+    } catch (err) { failure = err.message; }
+    chatBusy = false;
+    if (failure) {
+      chat.pop();  // the question was not answered; put it back in the box to retry
+      if (asking) { paint(); field.value = question; }
+    } else if (asking) paint();
+    go.disabled = false;
+    working.textContent = failure ? `No answer. ${failure}` : "";
+    working.classList.toggle("failed", Boolean(failure));
+    if (asking) { (failure ? working : form).scrollIntoView({ block: "nearest" }); field.focus(); }
+  };
+
+  form.addEventListener("submit", (e) => { e.preventDefault(); send(field.value); });
+  field.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(field.value); }
+  });
+  fresh.addEventListener("click", () => { if (!chatBusy) { chat = []; paint(); field.focus(); } });
+  paint();
+  main.replaceChildren(box);
+  if (chatBusy) { go.disabled = true; working.textContent = "Still working on the last question…"; }
+  field.focus();
+}
+$("ask").addEventListener("click", () => asking ? openDay(day) : showAsk());
+
 $("remind").addEventListener("click", () => reminding ? openDay(day) : showReminders());
 $("home").addEventListener("click", (e) => {
   e.preventDefault();
@@ -978,8 +1153,8 @@ $("search").addEventListener("input", (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  const typing = e.target.matches("input");
-  if (e.key === "Escape" && (searching || reminding || configuring)) { openDay(day); return; }
+  const typing = e.target.matches("input, textarea");
+  if (e.key === "Escape" && (searching || reminding || configuring || asking)) { openDay(day); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "/") { e.preventDefault(); $("search").focus(); }
   else if (e.shiftKey && track && e.key === "ArrowLeft") jumpTo(position() - 10);
@@ -991,7 +1166,7 @@ document.addEventListener("keydown", (e) => {
 
 /* New lines arrive while `limitful watch` runs; pick them up quietly. */
 setInterval(async () => {
-  if (searching || reminding || configuring || document.hidden || !day) return;
+  if (searching || reminding || configuring || asking || document.hidden || !day) return;
   try {
     days = await get("/api/days");
     const [fresh, freshTalks] = await Promise.all([get(`/api/day/${day}`), get(`/api/conversations/${day}`)]);
@@ -1014,6 +1189,7 @@ setInterval(async () => {
   await openDay(start, hashId && Number(hashId));
   if (hashDay === "reminders") showReminders();
   if (hashDay === "settings") showSettings();
+  if (hashDay === "ask") showAsk();
   watchJob();
   countReminders();
 })();

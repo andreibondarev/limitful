@@ -1,4 +1,4 @@
-"""Command-line interface: scan, pair, status, sync, export, transcribe, speakers, digest, import, watch, serve."""
+"""Command-line interface: scan, pair, status, sync, export, transcribe, speakers, digest, ask, import, watch, serve."""
 
 from __future__ import annotations
 
@@ -242,6 +242,24 @@ async def _cmd_digest(args) -> int:
         store.close()
 
 
+async def _cmd_ask(args) -> int:
+    from . import ask
+    from .digest import DigestError
+
+    if (args.provider or config.provider()) != "claude":
+        raise PendantError("ask needs Claude: pass --provider claude or choose it in Settings. "
+                           "Your question and the transcripts it reads are sent to Anthropic.")
+    Store(args.data_dir).close()  # make sure the database is up to date
+    try:
+        result = await asyncio.to_thread(
+            ask.answer, args.data_dir, [{"role": "user", "content": args.question}], config.api_key(),
+            args.llm_model or ask.CLAUDE_MODEL, lambda step: print(f"  {step}", file=sys.stderr))
+    except DigestError as err:
+        raise PendantError(str(err)) from None
+    print(result["answer"])
+    return 0
+
+
 async def _cmd_transcribe(args) -> int:
     store = Store(args.data_dir)
     try:
@@ -411,6 +429,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("file", type=Path, help="the export zip")
     data_args(p)
     p.set_defaults(func=_cmd_import)
+
+    p = sub.add_parser("ask", help="ask a question about what was said (uses Claude)")
+    p.add_argument("question")
+    data_args(p)
+    llm_args(p)
+    p.set_defaults(func=_cmd_ask)
 
     p = sub.add_parser("watch", help="keep syncing and transcribing in the background")
     data_args(p)
