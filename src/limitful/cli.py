@@ -1,4 +1,4 @@
-"""Command-line interface: scan, pair, status, sync, export, transcribe, speakers, digest, watch, serve."""
+"""Command-line interface: scan, pair, status, sync, export, transcribe, speakers, digest, import, watch, serve."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import os
 import sys
+import zipfile
 import time
 from pathlib import Path
 
@@ -147,6 +148,32 @@ async def _cmd_speakers(args) -> int:
                   "(each 1.5 s or longer) have been transcribed.")
         for speaker_id, name, lines in rows:
             print(f"{speaker_id:4d}  {name}  ({lines} line{'s' if lines != 1 else ''})")
+        return 0
+    finally:
+        store.close()
+
+
+async def _cmd_import(args) -> int:
+    from .importer import import_limitless
+
+    if not args.file.is_file():
+        raise PendantError(f"no such file: {args.file}")
+    store = Store(args.data_dir)
+    try:
+        try:
+            result = await asyncio.to_thread(import_limitless, store, args.file)
+        except zipfile.BadZipFile:
+            raise PendantError(f"{args.file} is not a zip file") from None
+        print(f"Imported {result.conversations} conversation(s), {result.lines} line(s) "
+              f"({result.lines_with_audio} with audio), {result.audio_files} recording(s) "
+              f"({result.audio_hours:.1f} h) and {result.reminders} reminder(s).")
+        if result.skipped_existing:
+            print(f"Skipped {result.skipped_existing} conversation(s) imported before.")
+        if result.utc_offset_minutes is not None:
+            hours = result.utc_offset_minutes / 60
+            print(f"Audio file names were read as UTC{hours:+g}h, the best fit to the transcripts.")
+        for item in result.not_imported:
+            print(f"Not imported yet: {item}")
         return 0
     finally:
         store.close()
@@ -358,6 +385,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--redo", action="store_true",
                    help="discard existing summaries and reminders and write them again")
     p.set_defaults(func=_cmd_digest)
+
+    p = sub.add_parser("import", help="import a data export (.zip) from the Limitless service")
+    p.add_argument("file", type=Path, help="the export zip")
+    data_args(p)
+    p.set_defaults(func=_cmd_import)
 
     p = sub.add_parser("watch", help="keep syncing and transcribing in the background")
     data_args(p)

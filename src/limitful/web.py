@@ -21,6 +21,8 @@ _INDEX = Path(__file__).parent / "web" / "index.html"
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 _SEARCH_LIMIT = 200
+# Imported lines can sit a second or two after their audio; start playback early.
+_IMPORT_LEAD_MS = 1500
 
 
 def _day_of(ms: int) -> str:
@@ -28,21 +30,28 @@ def _day_of(ms: int) -> str:
 
 
 def _utterance(row) -> dict:
-    uid, start_ms, end_ms, text, segment, segment_start, speaker_id, speaker = row
+    uid, start_ms, end_ms, text, segment, segment_start, speaker_id, speaker, label = row
+    if speaker_id:
+        who = {"id": speaker_id, "name": speaker}
+    elif label:  # an imported line: the label only holds within its conversation
+        who = {"id": None, "name": f"Speaker {label}"}
+    else:
+        who = None
+    has_audio = bool(segment) and segment_start is not None
     return {
-        "speaker": {"id": speaker_id, "name": speaker} if speaker_id else None,
+        "speaker": who,
         "id": uid,
         "start": start_ms,
         "end": end_ms,
         "text": text,
-        "audio": "/" + segment,
-        "offset": max(0, start_ms - segment_start),
+        "audio": "/" + segment if has_audio else None,
+        "offset": max(0, start_ms - segment_start - (_IMPORT_LEAD_MS if label else 0)) if has_audio else 0,
     }
 
 
 _SELECT = (
-    "SELECT u.id, u.start_ms, u.end_ms, u.text, u.segment, s.start_ms, u.speaker_id, p.name "
-    "FROM utterances u JOIN segments s ON s.path = u.segment "
+    "SELECT u.id, u.start_ms, u.end_ms, u.text, u.segment, s.start_ms, u.speaker_id, p.name, "
+    "u.source_speaker FROM utterances u LEFT JOIN segments s ON s.path = u.segment "
     "LEFT JOIN speakers p ON p.id = u.speaker_id "
 )
 

@@ -69,6 +69,9 @@ CREATE TABLE IF NOT EXISTS speakers (
     voice_sum BLOB    NOT NULL,         -- sum of this speaker's fingerprints
     lines     INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS imports (
+    key TEXT PRIMARY KEY               -- one row per imported file, so imports can be re-run
+);
 CREATE TABLE IF NOT EXISTS conversations (
     id       INTEGER PRIMARY KEY,
     start_ms INTEGER NOT NULL,
@@ -98,6 +101,8 @@ REMINDER_STATUSES = ("suggested", "accepted", "done", "dismissed")
 _MIGRATIONS = [
     ("utterances", "embedding", "BLOB"),       # voice fingerprint, float32
     ("utterances", "speaker_id", "INTEGER"),
+    ("utterances", "source", "TEXT"),          # imported conversation this line came from
+    ("utterances", "source_speaker", "TEXT"),  # that import's own label for who spoke
 ]
 
 # Too short to hold a word; Whisper only produces noise on these.
@@ -290,8 +295,8 @@ class Store:
         start_ms = int(start.timestamp() * 1000)
         end_ms = int(start.replace(hour=23, minute=59, second=59).timestamp() * 1000) + 1000
         rows = self.db.execute(
-            "SELECT u.start_ms, u.text, s.name FROM utterances u "
-            "LEFT JOIN speakers s ON s.id = u.speaker_id "
+            "SELECT u.start_ms, u.text, COALESCE(s.name, 'Speaker ' || u.source_speaker) "
+            "FROM utterances u LEFT JOIN speakers s ON s.id = u.speaker_id "
             "WHERE u.start_ms >= ? AND u.start_ms < ? ORDER BY u.start_ms, u.id",
             (start_ms, end_ms),
         ).fetchall()
@@ -325,6 +330,9 @@ class Store:
             for (ms,) in self.db.execute(f"SELECT start_ms FROM utterances WHERE {where}", params)
         }
         return [self.write_transcript(day) for day in sorted(days)]
+
+    def rewrite_all_transcripts(self) -> list[Path]:
+        return self._rewrite_days("1 = 1", ())
 
     def label_speakers(self, embedder: Embedder, load_audio: Callable[[Path], "np.ndarray"]) -> int:
         """Fingerprint new lines and group them into speakers. Returns lines labelled."""

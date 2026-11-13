@@ -107,6 +107,25 @@ of existing reminders.
 
 Not yet verified against either service: the logic is tested with stand-ins.
 
+### Importing your Limitless history
+
+Request a data export from Limitless (with "Include audio files" ticked) before
+the service ends, then:
+
+```sh
+uv run limitful import ~/Downloads/data-export_2026-11-13_19-19-43.zip
+```
+
+This brings in every conversation with its title, section headings and
+transcript, the audio, and your reminders. Limitless's transcripts are kept as
+they are; nothing is re-transcribed. Running it again on the same file adds
+nothing.
+
+Limits: speaker numbers from Limitless only mean something within one
+conversation, so imported lines are shown as "Speaker 1", "Speaker 2" and are
+not yet linked to named speakers. Playback of an imported line can start a
+second or two early or late. Chats and account settings are not imported.
+
 ### Running in the background
 
 ```sh
@@ -139,6 +158,7 @@ that your computer holds the only copy, so back up the data folder.
 - `transcribe.py`: speech-to-text engines (local Whisper by default).
 - `speakers.py`: voice fingerprints for speaker labels.
 - `digest.py`: titles, summaries and reminders from a language model.
+- `importer.py`: import of a Limitless data export.
 - `watch.py`: the background loop.
 - `web.py` and `web/index.html`: the Lifelog web app.
 
@@ -182,7 +202,7 @@ Observed on one pendant; treat as provisional.
 2. Better speaker labels (splitting a line between two voices), and a hosted
    transcription option.
 3. Chat over transcripts, and an MCP server.
-4. Import of a Limitless data export.
+4. Link imported speakers to named speakers; import chats.
 5. MCP server, Obsidian sync, mobile app.
 
 ## Development

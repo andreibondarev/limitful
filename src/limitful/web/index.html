@@ -103,6 +103,7 @@
   }
   .line:hover span { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   .line.on span { background: var(--mark); color: var(--mark-ink); }
+  .line.mute { cursor: default; }
   .line.found span { box-shadow: 0 0 0 2px var(--accent); }
   .who { margin: 0.75rem 0 0 var(--gutter); font-size: 0.85rem; min-height: 1.5rem; }
   .who button {
@@ -234,6 +235,7 @@ function lineButton(u, showDay, sameMinute) {
   const b = el("button", { className: "line", id: `u${u.id}`, title: clockSec.format(t) },
     el("time", { dateTime: t.toISOString(), textContent: sameMinute ? "" : clock.format(t) }),
     el("span", { textContent: u.text }));
+  if (!u.audio && !showDay) b.classList.add("mute");
   b.addEventListener("click", () => showDay ? openDay(showDay, u.id) : play(u));
   return b;
 }
@@ -304,6 +306,8 @@ async function showReminders() {
 
 function whoRow(speaker) {
   if (!speaker) return el("div", { className: "who unknown", textContent: "Not identified" });
+  // Imported labels are per conversation, not a person we can rename everywhere.
+  if (speaker.id === null) return el("div", { className: "who unknown", textContent: speaker.name });
   const row = el("div", { className: "who" });
   const name = el("button", { textContent: speaker.name, title: "Rename this speaker" });
   name.addEventListener("click", () => {
@@ -374,7 +378,8 @@ function renderDay() {
       if (u.start <= talk.end) nodes.push(talkBlock(talk));
     }
     // Say who is speaking whenever it changes (or after a silence).
-    const changed = !before || gap || (before.speaker?.id ?? 0) !== (u.speaker?.id ?? 0);
+    const who = (x) => x.speaker ? (x.speaker.id ?? x.speaker.name) : 0;
+    const changed = !before || gap || who(before) !== who(u);
     if (labelled && changed) nodes.push(whoRow(u.speaker));
     const sameMinute = before && !gap && Math.floor(before.start / 60000) === Math.floor(u.start / 60000);
     nodes.push(lineButton(u, null, sameMinute));
@@ -446,6 +451,7 @@ async function runSearch(query) {
 
 /* Playback: one audio element, highlighted line follows the sound. */
 function play(u) {
+  if (!u.audio) return;  // imported line with no recording
   const start = () => { audio.currentTime = u.offset / 1000; audio.play(); };
   playing = u;
   if (audio.dataset.src !== u.audio) {
