@@ -89,6 +89,43 @@ async def _cmd_pair(args) -> int:
     return 0
 
 
+async def _cmd_retime(args) -> int:
+    store = Store(args.data_dir)
+    try:
+        pending = store.pending_retime()
+        if not pending:
+            print("Every imported recording is already re-timed.")
+            return 0
+        from .transcribe import WhisperTranscriber
+
+        total_h = sum(duration for _p, _s, duration in pending) / 3_600_000
+        print(f"{len(pending)} imported recording(s) to re-time, {total_h:.1f} h of audio. "
+              "Newest first; safe to stop and run again.")
+        whisper = WhisperTranscriber(args.model, args.language, args.device)
+        started = time.monotonic()
+        files = found = lines = 0
+        audio_ms = 0
+        for path, _start, duration in pending:
+            if args.minutes and time.monotonic() - started > args.minutes * 60:
+                break
+            words = await asyncio.to_thread(whisper.words, args.data_dir / path)
+            got, of = store.retime_recording(path, words)
+            files, found, lines, audio_ms = files + 1, found + got, lines + of, audio_ms + duration
+            print(f"\r  {files}/{len(pending)} recordings, {audio_ms / 3_600_000:.1f} h", end="",
+                  file=sys.stderr, flush=True)
+        print(file=sys.stderr)
+        took = time.monotonic() - started
+        print(f"Re-timed {lines} line(s) in {files} recording(s) ({audio_ms / 60000:.0f} min of audio, "
+              f"{took / 60:.0f} min). {found} were found by their words; the rest moved with a neighbour.")
+        left = len(pending) - files
+        if left:
+            print(f"{left} recording(s) left. Run the command again to continue.")
+        store.rewrite_all_transcripts()
+        return 0
+    finally:
+        store.close()
+
+
 async def _cmd_pause(args) -> int:
     store = Store(args.data_dir)
     try:
@@ -424,6 +461,14 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("pair", help="pair this computer with the pendant (first use)")
     p.add_argument("--timeout", type=float, default=180.0, help="how long to wait, in seconds")
     p.set_defaults(func=_cmd_pair)
+
+    p = sub.add_parser("retime", help="fix the timing of imported lines against their audio")
+    data_args(p)
+    p.add_argument("--minutes", type=float, default=0, help="stop after this many minutes (default: run to the end)")
+    p.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL})")
+    p.add_argument("--language", help="language code such as en (default: detect per file)")
+    p.add_argument("--device", default="auto", help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
+    p.set_defaults(func=_cmd_retime)
 
     for name, text in (("pause", "stop keeping audio: what the pendant records from now is deleted at sync"),
                        ("resume", "keep audio again after a pause")):

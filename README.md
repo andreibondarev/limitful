@@ -190,7 +190,21 @@ fingerprints were dominated by the room and background noise: 42% of pairs of
 speakers known to be different people scored as the same person. Do not rely
 on it.
 
-Limits: playback of an imported line can start a second or two early or late.
+Limitless's timestamps are rounded to the second and run about a second late
+(measured: median 0.9 s, up to nearly 5 s), so imported lines trail their audio.
+To fix that:
+
+```sh
+uv run limitful retime            # add --device mps on Apple Silicon to go faster
+```
+
+This listens to each imported recording with local Whisper, finds where each
+line's words are actually said, and moves the line there. Limitless's text and
+speakers are kept; only the times change, and the original times are saved.
+It takes roughly a quarter of the audio's length, works newest first, and can
+be stopped and run again. Lines too short to find on their own move with the
+nearest line that was found.
+
 Chats and account settings are not imported.
 
 ### Ask

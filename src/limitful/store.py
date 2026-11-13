@@ -132,7 +132,47 @@ _MIGRATIONS = [
     ("utterances", "source", "TEXT"),          # imported conversation this line came from
     ("utterances", "source_speaker", "TEXT"),  # that import's own label for who spoke
     ("reminders", "utterance_id", "INTEGER"),  # the line a reminder came from, when known
+    ("utterances", "orig_start_ms", "INTEGER"),  # an imported line's own timestamp, once re-timed
+    ("segments", "retimed", "INTEGER"),          # 1 once its imported lines have been re-timed
+    ("conversations", "source", "TEXT"),         # the import it came from, once known
+    ("sections", "orig_start_ms", "INTEGER"),    # a heading's own position, once re-timed
 ]
+
+# Imported timestamps are rounded to the second and run about a second late.
+# Re-timing looks for each line's words in a local transcript of the same audio.
+RETIME_MIN_WORDS = 4       # shorter lines cannot be located reliably on their own
+RETIME_MATCH = 0.75        # how alike the words must be to count as found
+RETIME_WINDOW_S = 10.0     # how far from its timestamp a line may really be
+
+
+def _plain_words(text: str) -> list[str]:
+    return "".join(ch.lower() if ch.isalnum() or ch == "'" else " " for ch in text).split()
+
+
+def locate_lines(lines: list[tuple[float, str]], words: list[tuple[float, str]]) -> list[float | None]:
+    """Where each line (its claimed second, its text) really starts, given the
+    words heard in the recording and when. None where it could not be found."""
+    import difflib
+
+    heard = [(at, plain[0]) for at, word in words for plain in [_plain_words(word)] if plain]
+    times = [at for at, _ in heard]
+    found: list[float | None] = []
+    for claimed, text in lines:
+        want = _plain_words(text)
+        best_score, best_at = 0.0, None
+        if len(want) >= RETIME_MIN_WORDS:
+            import bisect
+
+            lo = bisect.bisect_left(times, claimed - RETIME_WINDOW_S)
+            hi = bisect.bisect_right(times, claimed + RETIME_WINDOW_S)
+            for i in range(lo, hi):
+                got = [w for _, w in heard[i : i + len(want)]]
+                score = difflib.SequenceMatcher(None, want, got, autojunk=False).ratio()
+                # Prefer the candidate nearest the claimed time when two match equally.
+                if score > best_score + 1e-9:
+                    best_score, best_at = score, heard[i][0]
+        found.append(best_at if best_score >= RETIME_MATCH else None)
+    return found
 
 _COMMON_WORDS = frozenset("""
 a about after again all also an and any are as ask at be been before but buy by call can check
@@ -327,7 +367,8 @@ class Store:
             with open(path, "wb") as f:
                 duration_ms = write_ogg_opus(f, seg["frames"])
             self.db.execute(
-                "INSERT OR REPLACE INTO segments VALUES (?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO segments (path, start_ms, duration_ms, first_page, last_page) "
+                "VALUES (?, ?, ?, ?, ?)",
                 (str(rel), seg["start_ms"], duration_ms, seg["first_page"], seg["last_page"]),
             )
             segments.append(Segment(path, seg["start_ms"], duration_ms))
@@ -944,3 +985,67 @@ class Store:
         self.db.execute("DELETE FROM chat_messages WHERE chat_id = ?", (chat_id,))
         self.db.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
         self.db.commit()
+
+    # --- re-timing imported lines -------------------------------------------------------
+
+    def pending_retime(self) -> list[tuple[str, int, int]]:
+        """(path, start_ms, duration_ms) of imported recordings whose lines are not re-timed."""
+        return self.db.execute(
+            "SELECT s.path, s.start_ms, s.duration_ms FROM segments s "
+            "WHERE s.retimed IS NULL AND EXISTS "
+            "(SELECT 1 FROM utterances u WHERE u.segment = s.path AND u.source IS NOT NULL) "
+            "ORDER BY s.start_ms DESC").fetchall()
+
+    def retime_recording(self, path: str, words: list[tuple[float, str]]) -> tuple[int, int]:
+        """Move the imported lines of one recording to where their words are heard.
+
+        Lines too short to find on their own move with the nearest line that was
+        found. Each line's original timestamp is kept. Returns (lines found, lines).
+        """
+        import statistics
+
+        (file_start,) = self.db.execute("SELECT start_ms FROM segments WHERE path = ?", (path,)).fetchone()
+        rows = self.db.execute(
+            "SELECT id, COALESCE(orig_start_ms, start_ms), end_ms - start_ms, text, source FROM utterances "
+            "WHERE segment = ? AND source IS NOT NULL ORDER BY COALESCE(orig_start_ms, start_ms), id",
+            (path,)).fetchall()
+        claimed = [(orig - file_start) / 1000 for _id, orig, _dur, _text, _source in rows]
+        found = locate_lines([(at, row[3]) for at, row in zip(claimed, rows)], words)
+        shifts = [None if at is None else at - was for at, was in zip(found, claimed)]
+        known = [(was, shift) for was, shift in zip(claimed, shifts) if shift is not None]
+        typical = statistics.median(shift for _was, shift in known) if known else 0.0
+        sources = set()
+        for (uid, orig, duration, _text, source), was, shift in zip(rows, claimed, shifts):
+            if shift is None:
+                # Borrow the correction of the nearest located line, if one is close by.
+                near = min(known, key=lambda item: abs(item[0] - was), default=None)
+                shift = near[1] if near and abs(near[0] - was) <= 30 else typical
+            start = max(file_start, orig + round(shift * 1000))
+            self.db.execute(
+                "UPDATE utterances SET start_ms = ?, end_ms = ?, orig_start_ms = ? WHERE id = ?",
+                (start, start + duration, orig, uid))
+            sources.add(source)
+        # Conversations and their headings are placed by line times, so move them too.
+        for source in sources:
+            first, last, first_orig = self.db.execute(
+                "SELECT MIN(start_ms), MAX(end_ms), MIN(COALESCE(orig_start_ms, start_ms)) "
+                "FROM utterances WHERE source = ?", (source,)).fetchone()
+            row = self.db.execute(
+                "SELECT id FROM conversations WHERE engine = 'limitless' AND "
+                "(source = ? OR (source IS NULL AND start_ms = ?))", (source, first_orig)).fetchone()
+            if row is None:
+                continue
+            self.db.execute("UPDATE conversations SET start_ms = ?, end_ms = ?, source = ? WHERE id = ?",
+                            (first, last, source, row[0]))
+            for sid, at in self.db.execute(
+                    "SELECT id, COALESCE(orig_start_ms, start_ms) FROM sections WHERE conversation_id = ?",
+                    (row[0],)).fetchall():
+                moved = self.db.execute(
+                    "SELECT start_ms FROM utterances WHERE source = ? AND COALESCE(orig_start_ms, start_ms) >= ? "
+                    "ORDER BY COALESCE(orig_start_ms, start_ms), id LIMIT 1", (source, at)).fetchone()
+                if moved:
+                    self.db.execute("UPDATE sections SET start_ms = ?, orig_start_ms = ? WHERE id = ?",
+                                    (moved[0], at, sid))
+        self.db.execute("UPDATE segments SET retimed = 1 WHERE path = ?", (path,))
+        self.db.commit()
+        return len(known), len(rows)

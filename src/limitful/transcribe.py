@@ -56,3 +56,17 @@ class WhisperTranscriber:
             if text and seg.avg_logprob >= MIN_AVG_LOGPROB:
                 utterances.append(Utterance(int(seg.start * 1000), int(seg.end * 1000), text))
         return utterances
+
+    def words(self, audio_path: Path) -> list[tuple[float, str]]:
+        """Every word heard in a recording with the second it starts at.
+
+        Used to place lines transcribed elsewhere at the right moment in the audio.
+        """
+        segments, _info = self._model.transcribe(
+            str(audio_path),
+            language=self._language,
+            vad_filter=True,
+            condition_on_previous_text=False,
+            word_timestamps=True,
+        )
+        return [(word.start, word.word) for seg in segments for word in (seg.words or [])]

@@ -41,7 +41,7 @@ def _day_of(ms: int) -> str:
 
 
 def _utterance(row) -> dict:
-    uid, start_ms, end_ms, text, segment, segment_start, speaker_id, speaker, label = row
+    uid, start_ms, end_ms, text, segment, segment_start, speaker_id, speaker, label, retimed = row
     if speaker_id:
         who = {"id": speaker_id, "name": speaker, "line": uid}
     elif label:  # an imported line: the label only holds within its conversation
@@ -56,13 +56,15 @@ def _utterance(row) -> dict:
         "end": end_ms,
         "text": text,
         "audio": "/" + segment if has_audio else None,
-        "offset": max(0, start_ms - segment_start - (_IMPORT_LEAD_MS if label else 0)) if has_audio else 0,
+        # Imported lines that have not been re-timed run late, so start those early.
+        "offset": max(0, start_ms - segment_start - (_IMPORT_LEAD_MS if label and retimed is None else 0))
+        if has_audio else 0,
     }
 
 
 _SELECT = (
     "SELECT u.id, u.start_ms, u.end_ms, u.text, u.segment, s.start_ms, u.speaker_id, p.name, "
-    "u.source_speaker FROM utterances u LEFT JOIN segments s ON s.path = u.segment "
+    "u.source_speaker, u.orig_start_ms FROM utterances u LEFT JOIN segments s ON s.path = u.segment "
     "LEFT JOIN speakers p ON p.id = u.speaker_id "
 )
 
