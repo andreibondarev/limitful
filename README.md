@@ -35,7 +35,12 @@ uv run pendant-sync scan      # find the pendant
 uv run pendant-sync pair      # first use only: pair this computer with it
 uv run pendant-sync status    # how much audio is stored on it
 uv run pendant-sync sync      # download everything into ./data
+uv run pendant-sync transcribe  # turn new audio into text, on this machine
 ```
+
+Transcripts are written to `data/transcripts/<date>.md`, one timestamped line
+per utterance. Transcription uses Whisper (`large-v3-turbo`) locally; the model
+is about 1.6 GB and downloads on first use. No audio leaves your computer.
 
 Audio lands in `data/audio/<date>/<time>.ogg` (Ogg Opus, plays in VLC, ffmpeg
 and most browsers). The raw pages from the pendant are kept in
@@ -63,6 +68,7 @@ app or cloud. Leave it off until you trust your local copy.
 - `client.py`: connect, set the clock, read storage status, download pages.
 - `store.py`: SQLite store of raw pages, and export to audio files.
 - `ogg.py`: a small Ogg Opus writer.
+- `transcribe.py`: speech-to-text engines (local Whisper by default).
 
 ## Hardware notes
 
@@ -81,7 +87,7 @@ Observed on one pendant; treat as provisional.
 ## Roadmap
 
 1. Verify `--ack` and long downloads on real hardware.
-2. Transcription with speaker labels.
+2. Speaker labels, and a hosted transcription option.
 3. Daily lifelog view, search and chat over transcripts.
 4. Import of a Limitless data export.
 5. MCP server, Obsidian sync, mobile app.

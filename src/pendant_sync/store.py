@@ -16,9 +16,11 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 from .ogg import packet_samples, write_ogg_opus
 from .protocol import MIN_VALID_TIMESTAMP_MS, FlashPage, extract_opus_frames
+from .transcribe import Transcriber
 
 # A jump this large between consecutive pages starts a new audio file.
 SEGMENT_GAP_MS = 3000
@@ -42,7 +44,23 @@ CREATE TABLE IF NOT EXISTS segments (
     first_page  INTEGER NOT NULL,
     last_page   INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS transcriptions (
+    segment        TEXT PRIMARY KEY,    -- segments.path
+    engine         TEXT NOT NULL,
+    transcribed_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS utterances (
+    id       INTEGER PRIMARY KEY,
+    segment  TEXT    NOT NULL,          -- segments.path
+    start_ms INTEGER NOT NULL,          -- wall-clock time
+    end_ms   INTEGER NOT NULL,
+    text     TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS utterances_start ON utterances (start_ms);
 """
+
+# Too short to hold a word; Whisper only produces noise on these.
+MIN_TRANSCRIBE_MS = 500
 
 
 @dataclass(frozen=True)
@@ -174,3 +192,60 @@ class Store:
         self.db.execute("UPDATE pages SET exported = 1 WHERE exported = 0")
         self.db.commit()
         return segments
+
+    def pending_transcription(self) -> list[tuple[str, int, int]]:
+        """(path, start_ms, duration_ms) of audio files not yet transcribed."""
+        return self.db.execute(
+            "SELECT path, start_ms, duration_ms FROM segments "
+            "WHERE path NOT IN (SELECT segment FROM transcriptions) ORDER BY start_ms"
+        ).fetchall()
+
+    def transcribe_pending(
+        self,
+        transcriber: Transcriber,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> tuple[int, list[Path]]:
+        """Transcribe new audio files. Returns (utterances added, transcript files written)."""
+        pending = self.pending_transcription()
+        added = 0
+        days: set[str] = set()
+        for n, (path, start_ms, duration_ms) in enumerate(pending, 1):
+            utterances = []
+            if duration_ms >= MIN_TRANSCRIBE_MS:
+                utterances = transcriber.transcribe(self.data_dir / path)
+            # Replace rather than append, so an interrupted run cannot duplicate text.
+            self.db.execute("DELETE FROM utterances WHERE segment = ?", (path,))
+            self.db.executemany(
+                "INSERT INTO utterances (segment, start_ms, end_ms, text) VALUES (?, ?, ?, ?)",
+                [(path, start_ms + u.start_ms, start_ms + u.end_ms, u.text) for u in utterances],
+            )
+            self.db.execute(
+                "INSERT OR REPLACE INTO transcriptions VALUES (?, ?, ?)",
+                (path, transcriber.name, int(time.time() * 1000)),
+            )
+            self.db.commit()
+            added += len(utterances)
+            if utterances:
+                days.add(datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d"))
+            if on_progress:
+                on_progress(n, len(pending))
+        return added, [self.write_transcript(day) for day in sorted(days)]
+
+    def write_transcript(self, day: str) -> Path:
+        """Rewrite the Markdown transcript for one local-time day (YYYY-MM-DD)."""
+        start = datetime.strptime(day, "%Y-%m-%d")
+        start_ms = int(start.timestamp() * 1000)
+        end_ms = int(start.replace(hour=23, minute=59, second=59).timestamp() * 1000) + 1000
+        rows = self.db.execute(
+            "SELECT start_ms, text FROM utterances WHERE start_ms >= ? AND start_ms < ? "
+            "ORDER BY start_ms, id",
+            (start_ms, end_ms),
+        ).fetchall()
+        lines = [f"# {day}", ""]
+        for ts, text in rows:
+            clock = datetime.fromtimestamp(ts / 1000).strftime("%H:%M:%S")
+            lines.append(f"- **{clock}** {text}")
+        path = self.data_dir / "transcripts" / f"{day}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(lines) + "\n")
+        return path

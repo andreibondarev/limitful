@@ -1,15 +1,17 @@
-"""Command-line interface: scan, status, sync, export."""
+"""Command-line interface: scan, pair, status, sync, export, transcribe."""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
 import sys
+import time
 from pathlib import Path
 
 from . import __version__
 from .client import Pendant, PendantError, pair, scan
 from .store import Store
+from .transcribe import DEFAULT_MODEL
 
 
 async def _resolve(address: str | None, timeout: float):
@@ -108,6 +110,36 @@ async def _cmd_export(args) -> int:
     return 0
 
 
+async def _cmd_transcribe(args) -> int:
+    store = Store(args.data_dir)
+    try:
+        pending = store.pending_transcription()
+        if not pending:
+            print("Nothing new to transcribe.")
+            return 0
+        from .transcribe import WhisperTranscriber
+
+        print(f"Loading {args.model} (downloads on first use)...", file=sys.stderr)
+        transcriber = WhisperTranscriber(args.model, args.language, args.device)
+
+        def progress(done: int, total: int) -> None:
+            print(f"\r  {done}/{total} files", end="", file=sys.stderr, flush=True)
+
+        started = time.monotonic()
+        added, files = store.transcribe_pending(transcriber, progress)
+        print(file=sys.stderr)
+        audio_s = sum(duration for _, _, duration in pending) / 1000
+        took = time.monotonic() - started
+        print(f"Transcribed {audio_s / 60:.1f} min of audio in {took:.0f} s: {added} line(s).")
+        if not added:
+            print("No speech was detected in the new audio.")
+        for path in files:
+            print(f"  {path}")
+        return 0
+    finally:
+        store.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="pendant-sync",
@@ -147,6 +179,14 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("export", help="write downloaded pages as Ogg Opus files")
     data_args(p)
     p.set_defaults(func=_cmd_export)
+
+    p = sub.add_parser("transcribe", help="turn downloaded audio into text, locally")
+    data_args(p)
+    p.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL})")
+    p.add_argument("--language", help="language code such as en (default: detect per file)")
+    p.add_argument("--device", default="auto",
+                   help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
+    p.set_defaults(func=_cmd_transcribe)
 
     args = parser.parse_args(argv)
     try:
