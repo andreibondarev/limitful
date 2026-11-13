@@ -1,0 +1,426 @@
+"""Command-line interface: scan, pair, status, sync, export, transcribe, speakers, digest, import, watch, serve."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import os
+import sys
+import zipfile
+import time
+from pathlib import Path
+
+from . import __version__
+from .client import Pendant, PendantError, pair, scan
+from .store import Store
+from .transcribe import DEFAULT_MODEL
+from .watch import watch
+
+
+def default_data_dir() -> Path:
+    if os.environ.get("LIMITFUL_DATA"):
+        return Path(os.environ["LIMITFUL_DATA"])
+    legacy = Path.home() / "PendantSync"  # the folder used before the project was named
+    current = Path.home() / "Limitful"
+    return legacy if legacy.exists() and not current.exists() else current
+
+
+async def _resolve(address: str | None, timeout: float):
+    if address:
+        return address
+    pendants = await scan(timeout)
+    if not pendants:
+        raise PendantError(
+            "no pendant found. It only advertises when it is not connected to "
+            "another device, so turn off Bluetooth on your phone (or quit the "
+            "Limitless app) and try again."
+        )
+    if len(pendants) > 1:
+        print(f"{len(pendants)} pendants found; using the strongest signal.", file=sys.stderr)
+    return pendants[0][0]
+
+
+async def _cmd_scan(args) -> int:
+    pendants = await scan(args.timeout)
+    if not pendants:
+        print("No pendant found.")
+        return 1
+    for device, rssi in pendants:
+        print(f"{device.address}  {device.name or '(unnamed)'}  rssi {rssi} dBm")
+    return 0
+
+
+def _print_state(state) -> None:
+    print(f"stored pages:  {state.page_count} ({state.oldest_flash_page}..{state.newest_flash_page})")
+    print(f"free pages:    {state.free_capture_pages} of {state.total_capture_pages}")
+    print(f"session:       {state.current_storage_session}")
+
+
+async def _cmd_status(args) -> int:
+    device = await _resolve(args.address, args.timeout)
+    async with Pendant(device) as pendant:
+        _print_state(await pendant.status())
+    return 0
+
+
+async def _cmd_pair(args) -> int:
+    print("Put the pendant in pairing mode now: press and release the button, then")
+    print("immediately press and hold until the purple light goes out. Blue means ready.")
+    print("This is a factory reset: it erases any audio still stored on the pendant.")
+    print(f"Accept the pairing request if your computer shows one. Waiting {args.timeout:.0f} s...")
+    state = await pair(args.timeout)
+    if state is None:
+        print("Gave up: the pendant never accepted this computer.")
+        return 1
+    print("Paired. The pendant accepted this computer.")
+    _print_state(state)
+    return 0
+
+
+def _print_segments(segments) -> None:
+    total_s = sum(s.duration_ms for s in segments) / 1000
+    print(f"Exported {len(segments)} audio file(s), {total_s / 60:.1f} min.")
+    for seg in segments:
+        print(f"  {seg.path}  ({seg.duration_ms / 1000:.0f} s)")
+
+
+async def _cmd_sync(args) -> int:
+    store = Store(args.data_dir)
+    try:
+        device = await _resolve(args.address, args.timeout)
+
+        def progress(received: int, total: int) -> None:
+            print(f"\r  {received}/{total} pages", end="", file=sys.stderr, flush=True)
+
+        async with Pendant(device) as pendant:
+            result = await pendant.sync(store, ack=args.ack, on_progress=progress)
+        if result.pages_received:
+            print(file=sys.stderr)
+
+        if result.reason == "empty":
+            print("Nothing stored on the pendant.")
+        else:
+            print(f"Received {result.pages_received} pages ({result.pages_new} new), "
+                  f"finished: {result.reason}.")
+            if result.acked_up_to is not None:
+                print(f"Pendant freed pages up to {result.acked_up_to}.")
+            elif not args.ack:
+                print("Pendant storage untouched (run with --ack to free synced pages).")
+        if not args.no_export:
+            _print_segments(store.export_audio())
+        return 0 if result.reason != "stalled" else 2
+    finally:
+        store.close()
+
+
+async def _cmd_export(args) -> int:
+    store = Store(args.data_dir)
+    try:
+        _print_segments(store.export_audio())
+    finally:
+        store.close()
+    return 0
+
+
+def _label_speakers(store: Store) -> None:
+    from .speakers import TitanetEmbedder, load_audio
+
+    labelled = store.label_speakers(TitanetEmbedder(), load_audio)
+    if labelled:
+        print(f"Labelled {labelled} line(s) by speaker.")
+
+
+async def _cmd_speakers(args) -> int:
+    store = Store(args.data_dir)
+    try:
+        if args.rename:
+            try:
+                store.rename_speaker(int(args.rename[0]), args.rename[1])
+            except ValueError as err:
+                raise PendantError(str(err)) from None
+        elif args.reset:
+            print(f"Regrouped {store.reset_speakers()} line(s).")
+        else:
+            _label_speakers(store)
+        rows = store.speakers()
+        if not rows:
+            print("No speakers yet. They appear once about ten lines of speech "
+                  "(each 1.5 s or longer) have been transcribed.")
+        for speaker_id, name, lines in rows:
+            print(f"{speaker_id:4d}  {name}  ({lines} line{'s' if lines != 1 else ''})")
+        return 0
+    finally:
+        store.close()
+
+
+async def _cmd_import(args) -> int:
+    from .importer import import_limitless
+
+    if not args.file.is_file():
+        raise PendantError(f"no such file: {args.file}")
+    store = Store(args.data_dir)
+    try:
+        try:
+            result = await asyncio.to_thread(import_limitless, store, args.file)
+        except zipfile.BadZipFile:
+            raise PendantError(f"{args.file} is not a zip file") from None
+        print(f"Imported {result.conversations} conversation(s), {result.lines} line(s) "
+              f"({result.lines_with_audio} with audio), {result.audio_files} recording(s) "
+              f"({result.audio_hours:.1f} h) and {result.reminders} reminder(s).")
+        if result.skipped_existing:
+            print(f"Skipped {result.skipped_existing} conversation(s) imported before.")
+        if result.utc_offset_minutes is not None:
+            hours = result.utc_offset_minutes / 60
+            print(f"Audio file names were read as UTC{hours:+g}h, the best fit to the transcripts.")
+        for item in result.not_imported:
+            print(f"Not imported yet: {item}")
+        return 0
+    finally:
+        store.close()
+
+
+_CHOOSE_PROVIDER = (
+    "choose what writes the summaries: --provider claude (better; sends transcripts to "
+    "Anthropic) or --provider ollama (runs on this computer). "
+    "Set LIMITFUL_LLM to make the choice stick."
+)
+
+
+def _summarizer(args):
+    from .digest import make_summarizer
+
+    provider = args.provider or os.environ.get("LIMITFUL_LLM")
+    if not provider:
+        raise PendantError(_CHOOSE_PROVIDER)
+    try:
+        return make_summarizer(provider, args.llm_model)
+    except ValueError as err:
+        raise PendantError(str(err)) from None
+
+
+async def _cmd_digest(args) -> int:
+    from .digest import DigestError
+
+    summarizer = _summarizer(args)
+    store = Store(args.data_dir)
+    try:
+        if args.redo:
+            store.forget_digests()
+
+        def progress(done: int, total: int) -> None:
+            print(f"\r  {done}/{total} conversations", end="", file=sys.stderr, flush=True)
+
+        try:
+            done = await asyncio.to_thread(store.digest_pending, summarizer, progress)
+        except DigestError as err:
+            print(file=sys.stderr)
+            raise PendantError(f"{err}. Conversations already summarised were kept.") from None
+        print(file=sys.stderr)
+        print(f"Summarised {done} conversation(s) with {summarizer.name}.")
+        waiting = [r for r in store.reminders() if r["status"] == "suggested"]
+        if waiting:
+            print(f"{len(waiting)} suggested reminder(s) to review in the Lifelog.")
+        return 0
+    finally:
+        store.close()
+
+
+async def _cmd_transcribe(args) -> int:
+    store = Store(args.data_dir)
+    try:
+        if args.redo:
+            store.forget_transcriptions()
+        pending = store.pending_transcription()
+        if not pending:
+            print("Nothing new to transcribe.")
+            return 0
+        from .transcribe import WhisperTranscriber
+
+        print(f"Loading {args.model} (downloads on first use)...", file=sys.stderr)
+        transcriber = WhisperTranscriber(args.model, args.language, args.device)
+
+        def progress(done: int, total: int) -> None:
+            print(f"\r  {done}/{total} files", end="", file=sys.stderr, flush=True)
+
+        started = time.monotonic()
+        added, files = store.transcribe_pending(transcriber, progress)
+        print(file=sys.stderr)
+        audio_s = sum(duration for _, _, duration in pending) / 1000
+        took = time.monotonic() - started
+        print(f"Transcribed {audio_s / 60:.1f} min of audio in {took:.0f} s: {added} line(s).")
+        if not added:
+            print("No speech was detected in the new audio.")
+        if not args.no_speakers:
+            _label_speakers(store)
+        for path in files:
+            print(f"  {path}")
+        return 0
+    finally:
+        store.close()
+
+
+async def _cmd_watch(args) -> int:
+    store = Store(args.data_dir)
+    cached: list = []
+
+    def get_transcriber():
+        if not cached:
+            from .transcribe import WhisperTranscriber
+
+            print(f"Loading {args.model} (downloads on first use)...", flush=True)
+            cached.append(WhisperTranscriber(args.model, args.language, args.device))
+        return cached[0]
+
+    embedders: list = []
+
+    def get_embedder():
+        if not embedders:
+            from .speakers import TitanetEmbedder
+
+            embedders.append(TitanetEmbedder())
+        return embedders[0]
+
+    summarizer = None
+    if args.provider or os.environ.get("LIMITFUL_LLM"):
+        summarizer = _summarizer(args)
+
+    print(f"Watching for the pendant every {args.interval:.0f} s. Data: {args.data_dir}")
+    print("Synced audio is " + ("kept on" if args.keep else "freed from") + " the pendant. "
+          "Press Ctrl-C to stop.")
+    try:
+        await watch(store, interval=args.interval, ack=not args.keep,
+                    get_transcriber=None if args.no_transcribe else get_transcriber,
+                    get_embedder=None if args.no_transcribe or args.no_speakers else get_embedder,
+                    summarizer=summarizer)
+    finally:
+        store.close()
+    return 0
+
+
+async def _cmd_serve(args) -> int:
+    from .web import make_server
+
+    try:
+        server = make_server(args.data_dir, args.port)
+    except OSError as err:
+        raise PendantError(f"could not use port {args.port}: {err.strerror or err}") from None
+    print(f"Lifelog is at http://localhost:{server.server_port}  (data: {args.data_dir})")
+    print("Press Ctrl-C to stop.")
+    try:
+        await asyncio.to_thread(server.serve_forever)
+    finally:
+        server.shutdown()
+        server.server_close()
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="limitful",
+        description="Pull recordings off a Limitless Pendant over Bluetooth.",
+    )
+    parser.add_argument("--version", action="version", version=__version__)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    def device_args(p) -> None:
+        p.add_argument("--address", help="pendant address from `scan` (default: auto-detect)")
+        p.add_argument("--timeout", type=float, default=8.0, help="scan time in seconds")
+
+    def data_args(p) -> None:
+        p.add_argument("--data-dir", type=Path, default=default_data_dir(),
+                       help="where recordings are stored (default: ~/Limitful, "
+                            "or $LIMITFUL_DATA)")
+
+    p = sub.add_parser("scan", help="list pendants advertising nearby")
+    p.add_argument("--timeout", type=float, default=8.0)
+    p.set_defaults(func=_cmd_scan)
+
+    p = sub.add_parser("pair", help="pair this computer with the pendant (first use)")
+    p.add_argument("--timeout", type=float, default=180.0, help="how long to wait, in seconds")
+    p.set_defaults(func=_cmd_pair)
+
+    p = sub.add_parser("status", help="show how much audio is stored on the pendant")
+    device_args(p)
+    p.set_defaults(func=_cmd_status)
+
+    p = sub.add_parser("sync", help="download stored audio from the pendant")
+    device_args(p)
+    data_args(p)
+    p.add_argument("--ack", action="store_true",
+                   help="free synced pages on the pendant (deletes its copy)")
+    p.add_argument("--no-export", action="store_true", help="skip writing audio files")
+    p.set_defaults(func=_cmd_sync)
+
+    p = sub.add_parser("export", help="write downloaded pages as Ogg Opus files")
+    data_args(p)
+    p.set_defaults(func=_cmd_export)
+
+    p = sub.add_parser("transcribe", help="turn downloaded audio into text, locally")
+    data_args(p)
+    p.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL})")
+    p.add_argument("--language", help="language code such as en (default: detect per file)")
+    p.add_argument("--device", default="auto",
+                   help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
+    p.add_argument("--redo", action="store_true",
+                   help="transcribe everything again, replacing existing transcripts")
+    p.add_argument("--no-speakers", action="store_true", help="skip speaker labels")
+    p.set_defaults(func=_cmd_transcribe)
+
+    p = sub.add_parser("speakers", help="label lines by speaker; list, name or merge speakers")
+    data_args(p)
+    p.add_argument("--rename", nargs=2, metavar=("ID", "NAME"),
+                   help="name a speaker; using an existing name merges the two")
+    p.add_argument("--reset", action="store_true",
+                   help="forget all speakers and names, and group every line again")
+    p.set_defaults(func=_cmd_speakers)
+
+    def llm_args(p) -> None:
+        p.add_argument("--provider", choices=["claude", "ollama"],
+                       help="what writes summaries (default: $LIMITFUL_LLM)")
+        p.add_argument("--llm-model", help="model name for that provider")
+
+    p = sub.add_parser("digest", help="title and summarise conversations, and suggest reminders")
+    data_args(p)
+    llm_args(p)
+    p.add_argument("--redo", action="store_true",
+                   help="discard existing summaries and reminders and write them again")
+    p.set_defaults(func=_cmd_digest)
+
+    p = sub.add_parser("import", help="import a data export (.zip) from the Limitless service")
+    p.add_argument("file", type=Path, help="the export zip")
+    data_args(p)
+    p.set_defaults(func=_cmd_import)
+
+    p = sub.add_parser("watch", help="keep syncing and transcribing in the background")
+    data_args(p)
+    p.add_argument("--interval", type=float, default=120.0,
+                   help="seconds between sync attempts (default: 120)")
+    p.add_argument("--keep", action="store_true",
+                   help="do not free synced audio on the pendant")
+    p.add_argument("--no-transcribe", action="store_true", help="download audio only")
+    p.add_argument("--no-speakers", action="store_true", help="skip speaker labels")
+    llm_args(p)
+    p.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL})")
+    p.add_argument("--language", help="language code such as en (default: detect per file)")
+    p.add_argument("--device", default="auto",
+                   help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
+    p.set_defaults(func=_cmd_watch)
+
+    p = sub.add_parser("serve", help="open the Lifelog: browse transcripts and play audio")
+    data_args(p)
+    p.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 4747),
+                   help="port to listen on (default: $PORT or 4747)")
+    p.set_defaults(func=_cmd_serve)
+
+    args = parser.parse_args(argv)
+    try:
+        return asyncio.run(args.func(args))
+    except PendantError as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())

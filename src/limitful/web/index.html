@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lifelog</title>
+<style>
+  :root {
+    --paper: #eef2ef;
+    --ink: #13201a;
+    --muted: #5e6e66;
+    --rule: #d0dad3;
+    --accent: #0b6b58;
+    --mark: #f4c63a;
+    --mark-ink: #2a2100;
+    --voice: "Charter", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --chrome: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --gutter: 4.75rem;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0f1613;
+      --ink: #e4ece7;
+      --muted: #8fa097;
+      --rule: #26322c;
+      --accent: #63d2b6;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 11rem; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--chrome);
+    font-size: 15px;
+    line-height: 1.4;
+  }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+  header {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    padding: 1.1rem clamp(1rem, 4vw, 3rem) 0.6rem;
+  }
+  .bar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  h1 {
+    font-family: var(--voice);
+    font-weight: 400;
+    font-size: clamp(1.6rem, 3.6vw, 2.3rem);
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    margin: 0 auto 0 0;
+  }
+  .step {
+    width: 2.25rem; height: 2.25rem;
+    border: 1px solid var(--rule); border-radius: 50%;
+    background: none; cursor: pointer;
+    font-size: 1.1rem; line-height: 1;
+  }
+  .step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .step:disabled { opacity: 0.35; cursor: default; }
+  #pick, #search {
+    border: 1px solid var(--rule); border-radius: 999px;
+    background: transparent; padding: 0.4rem 0.85rem;
+  }
+  #search { width: min(100%, 13rem); }
+  #search::placeholder { color: var(--muted); }
+
+  /* The day as a strip: one mark for every stretch of speech. */
+  #strip {
+    position: relative; height: 1.75rem; margin-top: 0.9rem;
+    border-block: 1px solid var(--rule);
+    cursor: pointer;
+  }
+  #strip i {
+    position: absolute; top: 3px; bottom: 3px; min-width: 2px;
+    background: var(--accent); border-radius: 1px;
+  }
+  #strip i.on { background: var(--mark); top: 0; bottom: 0; }
+  #hours { position: relative; height: 1.1rem; color: var(--muted); font-size: 0.75rem; }
+  #hours span { position: absolute; top: 0.15rem; }
+  #hours span:not(:first-child) { transform: translateX(-50%); }
+
+  main { padding: 1.5rem clamp(1rem, 4vw, 3rem) 7rem; max-width: 60rem; }
+  .line {
+    display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr);
+    align-items: baseline;
+    width: 100%; padding: 0.3rem 0; margin: 0;
+    border: 0; background: none; text-align: left; cursor: pointer;
+  }
+  .line time {
+    color: var(--muted); font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .line span {
+    font-family: var(--voice); font-size: 1.2rem; line-height: 1.6;
+    max-width: 68ch;
+    padding: 0 0.3rem; margin-left: -0.3rem; border-radius: 3px;
+  }
+  .line:hover span { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .line.on span { background: var(--mark); color: var(--mark-ink); }
+  .line.mute { cursor: default; }
+  .line.found span { box-shadow: 0 0 0 2px var(--accent); }
+  .who { margin: 0.75rem 0 0 var(--gutter); font-size: 0.85rem; min-height: 1.5rem; }
+  .who button {
+    border: 0; background: none; padding: 0; cursor: pointer;
+    font-weight: 600; color: var(--accent);
+    text-decoration: underline dotted transparent; text-underline-offset: 3px;
+  }
+  .who button:hover { text-decoration-color: currentColor; }
+  .who.unknown { color: var(--muted); }
+  .who input {
+    border: 1px solid var(--accent); border-radius: 4px; background: transparent;
+    padding: 0.1rem 0.4rem; width: 12rem; font-weight: 600;
+  }
+  .who small { color: var(--muted); margin-left: 0.6rem; font-size: 0.8rem; }
+  .tools {
+    display: flex; align-items: center; gap: 1rem;
+    margin: 0 0 0.6rem var(--gutter); color: var(--muted); font-size: 0.85rem;
+  }
+  #all, .copy {
+    border: 1px solid var(--rule); border-radius: 999px; background: transparent;
+    padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
+  }
+  #all:hover, .copy:hover { border-color: var(--accent); color: var(--accent); }
+  .card { border-top: 1px solid var(--rule); }
+  .card > summary {
+    display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr); align-items: baseline;
+    padding: 0.85rem 0; cursor: pointer; list-style: none;
+  }
+  .card > summary::-webkit-details-marker { display: none; }
+  .card > summary time { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+  .card > summary h2 { margin: 0; font-size: 1.35rem; line-height: 1.25; max-width: 68ch; }
+  .card > summary h2.untitled { color: var(--muted); font-style: italic; font-size: 1.12rem; }
+  .card > summary:hover h2 { color: var(--accent); }
+  .card[open] > summary h2 { color: var(--accent); }
+  .card .meta { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+  .card .body { padding: 0 0 1.4rem; }
+  .card .body > ul {
+    margin: 0 0 0.6rem var(--gutter); padding-left: 1.1rem; max-width: 68ch;
+    color: var(--muted); font-size: 0.95rem; line-height: 1.5;
+  }
+  .card .body > .todo, .card .copy { margin-left: var(--gutter); }
+  .card .copy { margin-top: 0.4rem; }
+  .card h3 {
+    margin: 1.6rem 0 0.2rem var(--gutter); max-width: 68ch;
+    font-family: var(--voice); font-size: 1.18rem; font-weight: 600; line-height: 1.3;
+  }
+  .card h4 {
+    margin: 1rem 0 0.1rem var(--gutter); max-width: 68ch;
+    font-size: 0.92rem; font-weight: 600; color: var(--muted);
+  }
+  .todo {
+    display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap;
+    margin-top: 0.5rem; padding: 0.45rem 0.7rem;
+    border-left: 3px solid var(--mark); background: color-mix(in srgb, var(--mark) 14%, transparent);
+    border-radius: 0 4px 4px 0; max-width: 68ch;
+  }
+  .todo p { margin: 0; flex: 1 1 14rem; }
+  .todo small { color: var(--muted); flex-basis: 100%; }
+  .todo.accepted { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+  .todo button, #remind {
+    border: 1px solid var(--rule); border-radius: 999px; background: transparent;
+    padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
+  }
+  .todo button:hover, #remind:hover { border-color: var(--accent); color: var(--accent); }
+  #remind { padding: 0.4rem 0.85rem; font-size: inherit; }
+  #remind[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .quiet {
+    margin: 0.9rem 0 0.9rem var(--gutter);
+    color: var(--muted); font-size: 0.82rem;
+    display: flex; align-items: center; gap: 0.75rem; max-width: 68ch;
+  }
+  .quiet::after { content: ""; flex: 1; border-top: 1px dashed var(--rule); }
+  h2 {
+    font-family: var(--voice); font-weight: 400; font-size: 1.25rem;
+    margin: 1.75rem 0 0.4rem;
+  }
+  h2 a { color: var(--accent); text-underline-offset: 3px; }
+  .empty { font-family: var(--voice); font-size: 1.2rem; max-width: 34rem; }
+  .empty code { font-size: 0.85em; }
+  .empty p + p { color: var(--muted); font-family: var(--chrome); font-size: 0.95rem; }
+
+  #player {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 3;
+    display: flex; align-items: center; gap: 0.9rem;
+    padding: 0.7rem clamp(1rem, 4vw, 3rem);
+    background: var(--ink); color: var(--paper);
+  }
+  #player[hidden] { display: none; }
+  #toggle {
+    border: 0; border-radius: 999px; padding: 0.4rem 1rem; cursor: pointer;
+    background: var(--mark); color: var(--mark-ink); font-weight: 600;
+    min-width: 5.2rem;
+  }
+  #now { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--voice); font-size: 1.05rem; }
+  #now time { font-family: var(--chrome); font-size: 0.82rem; opacity: 0.75; margin-right: 0.6rem; font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 560px) {
+    :root { --gutter: 4.4rem; }
+    .line span { font-size: 1.08rem; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1 id="title">Lifelog</h1>
+    <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
+    <button class="step" id="next" aria-label="Next day with recordings">›</button>
+    <input type="date" id="pick" aria-label="Go to a date">
+    <button id="remind" aria-pressed="false">Reminders</button>
+    <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said">
+  </div>
+  <div id="strip" role="img" aria-label="When speech was recorded during this day"></div>
+  <div id="hours" aria-hidden="true"></div>
+</header>
+<main id="main" aria-live="polite"></main>
+<div id="player" hidden>
+  <button id="toggle">Pause</button>
+  <div id="now"></div>
+</div>
+<audio id="audio" preload="auto"></audio>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const main = $("main"), strip = $("strip"), audio = $("audio");
+const DAY_MS = 86400000, QUIET_MS = 120000;
+const clock = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" });
+const clockSec = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+const longDay = new Intl.DateTimeFormat([], { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+let days = [];        // [{day, lines}] for days that have speech
+let day = null;       // "YYYY-MM-DD" being shown
+let lines = [];       // utterances of that day
+let playing = null;   // utterance being played
+let wanted = null;    // utterance id to reveal after loading a day
+let searching = false;
+let talks = [];       // summarised conversations of the day
+let reminding = false;
+let groups = [];              // the day's conversation cards
+const openCards = new Set();  // cards the reader has opened, kept across refreshes
+const TALK_GAP_MS = 300000;   // a silence this long separates unsummarised conversations
+
+const pad = (n) => String(n).padStart(2, "0");
+const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const dayStart = (key) => { const [y, m, d] = key.split("-").map(Number); return new Date(y, m - 1, d).getTime(); };
+const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
+
+async function get(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function quietFor(ms) {
+  const min = Math.round(ms / 60000);
+  if (min < 60) return `quiet for ${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  return `quiet for ${h} h${m ? ` ${m} min` : ""}`;
+}
+
+function lineButton(u, showDay, sameMinute) {
+  const t = new Date(u.start);
+  // Within a run of speech, only show the time when the minute changes.
+  const b = el("button", { className: "line", id: `u${u.id}`, title: clockSec.format(t) },
+    el("time", { dateTime: t.toISOString(), textContent: sameMinute ? "" : clock.format(t) }),
+    el("span", { textContent: u.text }));
+  if (!u.audio && !showDay) b.classList.add("mute");
+  b.addEventListener("click", () => showDay ? openDay(showDay, u.id) : play(u));
+  return b;
+}
+
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+/* A reminder with the actions that fit its state. `after` runs once it is saved. */
+function todoRow(r, after, source) {
+  const row = el("div", { className: `todo ${r.status}` }, el("p", { textContent: r.text }));
+  const act = (label, status) => {
+    const b = el("button", { textContent: label });
+    b.addEventListener("click", async () => {
+      try { await post(`/api/reminders/${r.id}`, { status }); r.status = status; after(); }
+      catch (err) { row.append(el("small", { textContent: `Could not save. ${err.message}` })); }
+    });
+    return b;
+  };
+  if (r.status === "suggested") row.append(act("Accept", "accepted"), act("Dismiss", "dismissed"));
+  else if (r.status === "accepted") row.append(act("Done", "done"), act("Dismiss", "dismissed"));
+  if (source) row.append(el("small", { textContent: source }));
+  return row;
+}
+
+async function countReminders() {
+  try {
+    const waiting = (await get("/api/reminders")).filter((r) => r.status === "suggested").length;
+    $("remind").textContent = waiting ? `Reminders (${waiting})` : "Reminders";
+  } catch { /* leave the label as it is */ }
+}
+
+async function showReminders() {
+  reminding = true;
+  history.replaceState(null, "", "#reminders");
+  $("remind").setAttribute("aria-pressed", "true");
+  $("title").textContent = "Reminders";
+  strip.replaceChildren();
+  let all;
+  try { all = await get("/api/reminders"); }
+  catch (err) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Could not load reminders. ${err.message}` }));
+    return;
+  }
+  const source = (r) => `${longDay.format(new Date(r.when))}, from “${r.from}”`;
+  const group = (heading, status) => {
+    const rows = all.filter((r) => r.status === status);
+    return rows.length ? [el("h2", { textContent: heading }), ...rows.map((r) => todoRow(r, showReminders, source(r)))] : [];
+  };
+  const nodes = [...group("To review", "suggested"), ...group("Accepted", "accepted")];
+  main.replaceChildren(...(nodes.length ? nodes : [el("div", { className: "empty" },
+    el("p", { textContent: "No reminders to review." }),
+    el("p", {}, "They are suggested when conversations are summarised. Run ", el("code", { textContent: "limitful digest" }), "."))]));
+  countReminders();
+}
+
+function whoRow(speaker) {
+  if (!speaker) return el("div", { className: "who unknown", textContent: "Not identified" });
+  // Imported labels are per conversation, not a person we can rename everywhere.
+  if (speaker.id === null) return el("div", { className: "who unknown", textContent: speaker.name });
+  const row = el("div", { className: "who" });
+  const name = el("button", { textContent: speaker.name, title: "Rename this speaker" });
+  name.addEventListener("click", () => {
+    const input = el("input", { value: speaker.name, maxLength: 80, ariaLabel: "Speaker name" });
+    const hint = el("small", { textContent: "Enter to save. An existing name merges the two." });
+    row.replaceChildren(input, hint);
+    input.focus(); input.select();
+    let done = false;
+    const cancel = () => { if (!done) { done = true; row.replaceChildren(name); } };
+    input.addEventListener("blur", cancel);
+    input.addEventListener("keydown", async (e) => {
+      if (e.key === "Escape") { cancel(); return; }
+      if (e.key !== "Enter") return;
+      const value = input.value.trim();
+      if (!value || value === speaker.name) { cancel(); return; }
+      done = true;
+      try {
+        await post(`/api/speakers/${speaker.id}`, { name: value });
+        lines = await get(`/api/day/${day}`);
+        renderDay();
+      } catch (err) {
+        done = false;
+        hint.textContent = `Could not rename. ${err.message}`;
+      }
+    });
+  });
+  row.append(name);
+  return row;
+}
+
+function renderDay() {
+  $("title").textContent = longDay.format(new Date(dayStart(day)));
+  document.title = `Lifelog, ${day}`;
+  $("pick").value = day;
+  const known = days.map((d) => d.day);
+  $("prev").disabled = !known.some((d) => d < day);
+  $("next").disabled = !known.some((d) => d > day);
+
+  const start = dayStart(day);
+  strip.replaceChildren(...lines.map((u) => {
+    const i = el("i", { id: `s${u.id}` });
+    i.style.left = `${((u.start - start) / DAY_MS) * 100}%`;
+    i.style.width = `${(Math.max(u.end - u.start, 1000) / DAY_MS) * 100}%`;
+    return i;
+  }));
+  $("hours").replaceChildren(...[0, 6, 12, 18].map((h) => {
+    const s = el("span", { textContent: new Intl.DateTimeFormat([], { hour: "numeric" }).format(new Date(start + h * 3600000)) });
+    s.style.left = `${(h / 24) * 100}%`;
+    return s;
+  }));
+
+  if (!lines.length) {
+    main.replaceChildren(el("div", { className: "empty" },
+      el("p", { textContent: "Nothing was said on this day, or nothing has been synced yet." }),
+      el("p", {}, "To bring in new audio from the pendant, run ", el("code", { textContent: "limitful watch" }), ".")));
+    return;
+  }
+  groups = buildGroups();
+  const toggleAll = el("button", { id: "all", textContent: "Open all" });
+  toggleAll.addEventListener("click", () => {
+    const open = toggleAll.textContent === "Open all";
+    groups.forEach((g) => g.setOpen(open));
+    toggleAll.textContent = open ? "Close all" : "Open all";
+  });
+  const count = `${groups.length} conversation${groups.length === 1 ? "" : "s"}`;
+  main.replaceChildren(
+    el("div", { className: "tools" }, el("span", { textContent: count }), toggleAll),
+    ...groups.map(card));
+  if (groups.length === 1) groups[0].setOpen(true);
+  markPlaying();
+  if (wanted) { reveal(wanted, true); wanted = null; }
+}
+
+/* The day's conversations: summarised ones, plus runs of lines that have no summary. */
+function buildGroups() {
+  const out = [], taken = new Set();
+  for (const t of talks) {
+    const own = lines.filter((u) => u.start >= t.start && u.start <= t.end);
+    if (!own.length) continue;
+    own.forEach((u) => taken.add(u.id));
+    out.push({ ...t, key: `c${t.id}`, own });
+  }
+  let run = null;
+  for (const u of lines) {
+    if (taken.has(u.id)) { run = null; continue; }
+    if (!run || u.start - run.end > TALK_GAP_MS) {
+      run = { key: `l${u.start}`, start: u.start, end: u.end, title: null, summary: [], sections: [], reminders: [], own: [] };
+      out.push(run);
+    }
+    run.own.push(u);
+    run.end = Math.max(run.end, u.end);
+  }
+  return out.sort((x, y) => x.start - y.start);
+}
+
+function lengthOf(ms) {
+  const min = Math.round(ms / 60000);
+  if (min < 1) return "under a minute";
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`;
+}
+
+function card(g) {
+  const first = g.own[0].text;
+  const title = g.title || (first.length > 70 ? `${first.slice(0, 70)}…` : first);
+  const waiting = g.reminders.filter((r) => r.status === "suggested").length;
+  const meta = [lengthOf(g.end - g.start), `${g.own.length} line${g.own.length === 1 ? "" : "s"}`];
+  if (waiting) meta.push(`${waiting} reminder${waiting === 1 ? "" : "s"} to review`);
+  const body = el("div", { className: "body" });
+  const box = el("details", { className: "card", id: `g${g.key}` },
+    el("summary", {},
+      el("time", { textContent: clock.format(new Date(g.start)) }),
+      el("div", {},
+        el("h2", { textContent: title, className: g.title ? "" : "untitled" }),
+        el("p", { className: "meta", textContent: meta.join(", ") }))),
+    body);
+  // The transcript is only built when the card is first opened: days can hold thousands of lines.
+  const fill = () => { if (!body.childElementCount) { body.append(...cardBody(g)); markPlaying(); } };
+  box.addEventListener("toggle", () => {
+    if (box.open) { openCards.add(g.key); fill(); } else openCards.delete(g.key);
+  });
+  g.setOpen = (open) => { if (open) { openCards.add(g.key); fill(); } else openCards.delete(g.key); box.open = open; };
+  if (openCards.has(g.key)) g.setOpen(true);
+  return box;
+}
+
+function cardBody(g) {
+  const nodes = [];
+  if (!g.sections.length && g.summary.length) nodes.push(el("ul", {}, ...g.summary.map((t) => el("li", { textContent: t }))));
+  const open = g.reminders.filter((r) => r.status === "suggested" || r.status === "accepted");
+  nodes.push(...open.map((r) => todoRow(r, () => { renderDay(); countReminders(); })));
+
+  const copy = el("button", { className: "copy", textContent: "Copy as Markdown" });
+  copy.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(asMarkdown(g)); copy.textContent = "Copied"; }
+    catch { copy.textContent = "Could not copy"; }
+    setTimeout(() => { copy.textContent = "Copy as Markdown"; }, 2000);
+  });
+  nodes.push(copy);
+
+  const labelled = g.own.some((u) => u.speaker);
+  const who = (x) => x.speaker ? (x.speaker.id ?? x.speaker.name) : 0;
+  const headings = [...g.sections];
+  g.own.forEach((u, n) => {
+    const before = g.own[n - 1];
+    let fresh = !before;
+    while (headings.length && headings[0].start <= u.start) {
+      const heading = headings.shift();
+      nodes.push(el(heading.level === 2 ? "h3" : "h4", { textContent: heading.title }));
+      fresh = true;
+    }
+    const gap = before && u.start - before.end > QUIET_MS;
+    if (gap) nodes.push(el("div", { className: "quiet", textContent: quietFor(u.start - before.end) }));
+    // Say who is speaking whenever it changes, and at the top of each section.
+    if (labelled && (fresh || gap || who(before) !== who(u))) nodes.push(whoRow(u.speaker));
+    const sameMinute = !fresh && !gap && Math.floor(before.start / 60000) === Math.floor(u.start / 60000);
+    nodes.push(lineButton(u, null, sameMinute));
+  });
+  return nodes;
+}
+
+function asMarkdown(g) {
+  const out = [`# ${g.title || "Conversation"}`, ""];
+  const headings = [...g.sections];
+  for (const u of g.own) {
+    while (headings.length && headings[0].start <= u.start) {
+      const heading = headings.shift();
+      out.push("", `${"#".repeat(heading.level)} ${heading.title}`, "");
+    }
+    out.push(`- **${clockSec.format(new Date(u.start))}** ${u.speaker ? `${u.speaker.name}: ` : ""}${u.text}`);
+  }
+  return out.join("\n") + "\n";
+}
+
+/* Open the card holding a line and bring the line into view. */
+function reveal(id, mark) {
+  const g = groups.find((x) => x.own.some((u) => u.id === id));
+  if (!g) return;
+  g.setOpen(true);
+  const node = $(`u${id}`);
+  if (!node) return;
+  node.scrollIntoView({ block: "center" });
+  if (mark) node.classList.add("found"); else node.focus({ preventScroll: true });
+}
+
+async function openDay(key, revealId) {
+  searching = false;
+  reminding = false;
+  $("remind").setAttribute("aria-pressed", "false");
+  $("search").value = "";
+  day = key;
+  wanted = revealId || null;
+  history.replaceState(null, "", `#${key}`);
+  try {
+    [lines, talks] = await Promise.all([get(`/api/day/${key}`), get(`/api/conversations/${key}`)]);
+    renderDay();
+  } catch (err) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Could not load this day. ${err.message}` }));
+  }
+}
+
+function step(direction) {
+  const known = days.map((d) => d.day);
+  const target = direction < 0
+    ? known.filter((d) => d < day).pop()
+    : known.find((d) => d > day);
+  if (target) openDay(target);
+}
+
+async function runSearch(query) {
+  searching = true;
+  reminding = false;
+  $("remind").setAttribute("aria-pressed", "false");
+  $("title").textContent = "Search";
+  strip.replaceChildren();
+  let results;
+  try {
+    results = await get(`/api/search?q=${encodeURIComponent(query)}`);
+  } catch (err) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Search failed. ${err.message}` }));
+    return;
+  }
+  if ($("search").value.trim() !== query) return;  // a newer search is on its way
+  if (!results.length) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Nothing found for “${query}”.` }));
+    return;
+  }
+  const nodes = [];
+  let last = null;
+  for (const u of results) {
+    if (u.day !== last) {
+      last = u.day;
+      const a = el("a", { href: `#${u.day}`, textContent: longDay.format(new Date(dayStart(u.day))) });
+      a.addEventListener("click", (e) => { e.preventDefault(); openDay(u.day); });
+      nodes.push(el("h2", {}, a));
+    }
+    nodes.push(lineButton(u, u.day));
+  }
+  main.replaceChildren(...nodes);
+}
+
+/* Playback: one audio element, highlighted line follows the sound. */
+function play(u) {
+  if (!u.audio) return;  // imported line with no recording
+  const start = () => { audio.currentTime = u.offset / 1000; audio.play(); };
+  playing = u;
+  if (audio.dataset.src !== u.audio) {
+    audio.dataset.src = u.audio;
+    audio.src = u.audio;
+    audio.addEventListener("loadedmetadata", start, { once: true });
+  } else {
+    start();
+  }
+  markPlaying();
+}
+
+function markPlaying() {
+  document.querySelectorAll(".on").forEach((n) => n.classList.remove("on"));
+  $("player").hidden = !playing;
+  if (!playing) return;
+  $(`u${playing.id}`)?.classList.add("on");
+  $(`s${playing.id}`)?.classList.add("on");
+  const t = new Date(playing.start);
+  $("now").replaceChildren(el("time", { textContent: clockSec.format(t) }), playing.text);
+}
+
+audio.addEventListener("timeupdate", () => {
+  if (!playing) return;
+  const at = audio.currentTime * 1000;
+  const same = lines.filter((u) => u.audio === playing.audio && u.offset <= at + 150);
+  const current = same[same.length - 1];
+  if (current && current.id !== playing.id) { playing = current; markPlaying(); }
+});
+audio.addEventListener("ended", () => {
+  // Carry on into the next recording, so a conversation plays through.
+  const next = lines.find((u) => u.start > playing.start && u.audio !== playing.audio);
+  if (next) play(next); else { playing = null; markPlaying(); }
+});
+audio.addEventListener("play", () => { $("toggle").textContent = "Pause"; });
+audio.addEventListener("pause", () => { $("toggle").textContent = "Play"; });
+audio.addEventListener("error", () => {
+  if (!playing) return;
+  $("now").textContent = "This recording could not be played. Chrome and Firefox play these files; older Safari does not.";
+});
+$("toggle").addEventListener("click", () => audio.paused ? audio.play() : audio.pause());
+
+strip.addEventListener("click", (e) => {
+  if (!lines.length) return;
+  const box = strip.getBoundingClientRect();
+  const at = dayStart(day) + ((e.clientX - box.left) / box.width) * DAY_MS;
+  const nearest = lines.reduce((a, b) => Math.abs(b.start - at) < Math.abs(a.start - at) ? b : a);
+  reveal(nearest.id, false);
+});
+
+$("remind").addEventListener("click", () => reminding ? openDay(day) : showReminders());
+$("prev").addEventListener("click", () => step(-1));
+$("next").addEventListener("click", () => step(1));
+$("pick").addEventListener("change", (e) => e.target.value && openDay(e.target.value));
+
+let timer;
+$("search").addEventListener("input", (e) => {
+  clearTimeout(timer);
+  const query = e.target.value.trim();
+  timer = setTimeout(() => query ? runSearch(query) : openDay(day), 200);
+});
+
+document.addEventListener("keydown", (e) => {
+  const typing = e.target.matches("input");
+  if (e.key === "Escape" && (searching || reminding)) { openDay(day); return; }
+  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "/") { e.preventDefault(); $("search").focus(); }
+  else if (e.key === "ArrowLeft") step(-1);
+  else if (e.key === "ArrowRight") step(1);
+  else if (e.key === " " && playing && !e.target.matches("button")) { e.preventDefault(); $("toggle").click(); }
+});
+
+/* New lines arrive while `limitful watch` runs; pick them up quietly. */
+setInterval(async () => {
+  if (searching || reminding || document.hidden || !day) return;
+  try {
+    days = await get("/api/days");
+    const [fresh, freshTalks] = await Promise.all([get(`/api/day/${day}`), get(`/api/conversations/${day}`)]);
+    if (fresh.length !== lines.length || freshTalks.length !== talks.length) {
+      lines = fresh; talks = freshTalks; renderDay(); countReminders();
+    }
+  } catch { /* the server is away; try again next time */ }
+}, 30000);
+
+(async () => {
+  try {
+    days = await get("/api/days");
+  } catch (err) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Could not load recordings. ${err.message}` }));
+    return;
+  }
+  const [hashDay, hashId] = location.hash.slice(1).split("/");
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(hashDay) ? hashDay
+    : days.length ? days[days.length - 1].day : dayKey(new Date());
+  await openDay(start, hashId && Number(hashId));
+  if (hashDay === "reminders") showReminders();
+  countReminders();
+})();
+</script>
+</body>
+</html>
