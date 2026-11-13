@@ -56,6 +56,9 @@
     letter-spacing: -0.01em;
     margin: 0 auto 0 0;
   }
+  #home { display: flex; border-radius: 9px; flex: none; }
+  #home svg { display: block; }
+  #home:hover { filter: brightness(1.12); }
   .step {
     width: 2.25rem; height: 2.25rem;
     border: 1px solid var(--rule); border-radius: 50%;
@@ -258,6 +261,7 @@
 <body>
 <header>
   <div class="bar">
+    <a id="home" href="#" aria-label="Limitful: go to the latest day" title="Limitful* (*limits apply)"><svg viewBox="0 0 128 128" width="36" height="36" aria-hidden="true"><rect x="4" y="4" width="120" height="120" rx="28" fill="#0b6b58"/><path d="M 34 30 h 15 v 54 h 34 v 14 h -49 Z" fill="#eef2ef"/><g transform="translate(84 44)" fill="#f4c63a"><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(0)"/><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(60)"/><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(120)"/><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(180)"/><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(240)"/><path d="M -1.43 0 L -3.52 -18.48 A 3.52 3.52 0 0 1 3.52 -18.48 L 1.43 0 Z" transform="rotate(300)"/><circle r="2.31"/></g></svg></a>
     <h1 id="title">Lifelog</h1>
     <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
     <button class="step" id="next" aria-label="Next day with recordings">›</button>
@@ -910,6 +914,10 @@ async function showSettings() {
 $("settings").addEventListener("click", () => configuring ? openDay(day) : showSettings());
 
 $("remind").addEventListener("click", () => reminding ? openDay(day) : showReminders());
+$("home").addEventListener("click", (e) => {
+  e.preventDefault();
+  openDay(days.length ? days[days.length - 1].day : dayKey(new Date()));
+});
 $("prev").addEventListener("click", () => step(-1));
 $("next").addEventListener("click", () => step(1));
 $("pick").addEventListener("change", (e) => e.target.value && openDay(e.target.value));
