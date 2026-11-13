@@ -1,0 +1,25 @@
+[project]
+name = "pendant-sync"
+version = "0.1.0"
+description = "Open-source desktop sync client for the Limitless Pendant: pull recordings off the device over Bluetooth."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = ["bleak>=0.22"]
+
+[project.scripts]
+pendant-sync = "pendant_sync.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pendant_sync"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]

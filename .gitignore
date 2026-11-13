@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+dist/
+.env
+.env.*
+.DS_Store
+
+# Recordings pulled off the pendant. Never commit these.
+/data/
