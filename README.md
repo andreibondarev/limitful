@@ -24,9 +24,9 @@ uv sync
 The pendant only advertises when no other device is connected to it, so turn
 off Bluetooth on your phone (or quit the Limitless app) first.
 
-The first time, run `pair` and put the pendant in pairing mode: while a light is
-visible, press the button once, then press and hold until the light turns pink,
-and release. Accept the connection request your computer shows. **Pairing mode
+The first time, run `pair` and put the pendant in pairing mode: press and
+release the button, then immediately press and hold until the purple light goes
+out, and release. A blue light means it is ready to pair. Accept the connection request your computer shows. **Pairing mode
 resets the pendant and clears the audio stored on it**, so let the Limitless app
 sync first if you still use it.
 
@@ -69,6 +69,26 @@ app or cloud. Leave it off until you trust your local copy.
 - `store.py`: SQLite store of raw pages, and export to audio files.
 - `ogg.py`: a small Ogg Opus writer.
 - `transcribe.py`: speech-to-text engines (local Whisper by default).
+
+## Using the pendant without the Limitless app
+
+Summarised from Limitless's help centre, which is due to go offline with the
+service. The pendant has one button, on its side, and one light.
+
+- **Power on or off:** hold the button for two seconds.
+- **Mark a moment:** one quick press.
+- **Factory reset and pairing mode:** press and release, then immediately press
+  and hold. A purple light appears; keep holding until it goes out, then
+  release. A blue light means it is ready to pair. This deletes any recordings
+  not yet synced.
+- **Solid red light (recovery mode):** hold the button for ten seconds or more
+  until the light goes out.
+- **Charging:** any standard USB-C charger, but not a Power Delivery (PD)
+  charger. It keeps recording while it charges.
+
+Light colours: blue is ready to pair, purple is a factory reset in progress,
+solid red is recovery mode, blinking or breathing red is an error. White,
+orange and green indicate recording and charging states.
 
 ## Hardware notes
 

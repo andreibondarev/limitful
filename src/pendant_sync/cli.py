@@ -53,8 +53,9 @@ async def _cmd_status(args) -> int:
 
 
 async def _cmd_pair(args) -> int:
-    print("Put the pendant in pairing mode now: while a light is visible, press once,")
-    print("then press and hold until the light turns pink, then release.")
+    print("Put the pendant in pairing mode now: press and release the button, then")
+    print("immediately press and hold until the purple light goes out. Blue means ready.")
+    print("This is a factory reset: it erases any audio still stored on the pendant.")
     print(f"Accept the pairing request if your computer shows one. Waiting {args.timeout:.0f} s...")
     state = await pair(args.timeout)
     if state is None:
