@@ -172,13 +172,37 @@
     border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent);
   }
   #status.failed { border-left-color: #b3261e; background: color-mix(in srgb, #b3261e 10%, transparent); }
-  .todo button, #remind, #import {
+  .todo button, #remind, #settings, .pill {
     border: 1px solid var(--rule); border-radius: 999px; background: transparent;
     padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
   }
-  .todo button:hover, #remind:hover, #import:hover { border-color: var(--accent); color: var(--accent); }
-  #remind, #import { padding: 0.4rem 0.85rem; font-size: inherit; }
-  #import:disabled { opacity: 0.5; cursor: default; }
+  .todo button:hover, #remind:hover, #settings:hover, .pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  #remind, #settings, .pill { padding: 0.4rem 0.85rem; font-size: inherit; }
+  .pill:disabled { opacity: 0.5; cursor: default; }
+  .pill.main { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .pill.main:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--paper); }
+  #settings[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .setup { max-width: 38rem; }
+  .setup h2 { margin: 0 0 0.3rem; font-size: 1.45rem; }
+  .setup h2:not(:first-child) { margin-top: 2.4rem; }
+  .setup > p { margin: 0 0 1rem; color: var(--muted); line-height: 1.5; }
+  .setup fieldset { border: 0; margin: 0 0 1rem; padding: 0; }
+  .setup label.choice {
+    display: grid; grid-template-columns: 1.4rem 1fr; gap: 0 0.4rem; align-items: baseline;
+    padding: 0.7rem 0; border-top: 1px solid var(--rule); cursor: pointer;
+  }
+  .setup label.choice b { font-weight: 600; }
+  .setup label.choice span { grid-column: 2; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+  .setup .key { margin: 0 0 1rem 1.8rem; }
+  .setup .key label { display: block; font-size: 0.9rem; margin-bottom: 0.25rem; }
+  .setup .key input {
+    width: min(100%, 24rem); border: 1px solid var(--rule); border-radius: 6px;
+    background: transparent; padding: 0.45rem 0.6rem; font-family: ui-monospace, monospace; font-size: 0.85rem;
+  }
+  .setup .key small { display: block; margin-top: 0.35rem; color: var(--muted); line-height: 1.45; }
+  .setup .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+  .setup .note { margin: 0.7rem 0 0; font-size: 0.9rem; }
+  .setup .note.failed { color: #b3261e; }
   #remind[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .quiet {
     margin: 0.9rem 0 0.9rem var(--gutter);
@@ -235,7 +259,7 @@
     <button class="step" id="next" aria-label="Next day with recordings">›</button>
     <input type="date" id="pick" aria-label="Go to a date">
     <button id="remind" aria-pressed="false">Reminders</button>
-    <button id="import">Import</button>
+    <button id="settings" aria-pressed="false">Settings</button>
     <input type="file" id="file" accept=".zip,application/zip" hidden>
     <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said">
   </div>
@@ -273,6 +297,7 @@ let wanted = null;    // utterance id to reveal after loading a day
 let searching = false;
 let talks = [];       // summarised conversations of the day
 let reminding = false;
+let configuring = false;
 let groups = [];              // the day's conversation cards
 const openCards = new Set();  // cards the reader has opened, kept across refreshes
 const TALK_GAP_MS = 300000;   // a silence this long separates unsummarised conversations
@@ -340,8 +365,10 @@ async function countReminders() {
 
 async function showReminders() {
   reminding = true;
+  configuring = false;
   history.replaceState(null, "", "#reminders");
   $("remind").setAttribute("aria-pressed", "true");
+  $("settings").setAttribute("aria-pressed", "false");
   $("title").textContent = "Reminders";
   strip.replaceChildren();
   let all;
@@ -560,7 +587,9 @@ function reveal(id, mark) {
 async function openDay(key, revealId) {
   searching = false;
   reminding = false;
+  configuring = false;
   $("remind").setAttribute("aria-pressed", "false");
+  $("settings").setAttribute("aria-pressed", "false");
   $("search").value = "";
   day = key;
   wanted = revealId || null;
@@ -584,7 +613,9 @@ function step(direction) {
 async function runSearch(query) {
   searching = true;
   reminding = false;
+  configuring = false;
   $("remind").setAttribute("aria-pressed", "false");
+  $("settings").setAttribute("aria-pressed", "false");
   $("title").textContent = "Search";
   strip.replaceChildren();
   let results;
@@ -757,29 +788,28 @@ let watching = null;
 async function watchJob() {
   let job;
   try { job = await get("/api/status"); } catch { return; }
-  $("import").disabled = job.running;
+  document.querySelectorAll(".busy-off").forEach((b) => { b.disabled = job.running; });
   if (job.running) {
-    say(job.total ? `${job.what}: ${job.done} of ${job.total} clips. You can keep using the page.` : `${job.what}…`);
+    say(job.total ? `${job.what}: ${job.done} of ${job.total}. You can keep using the page.` : `${job.what}…`);
     if (!watching) watching = setInterval(watchJob, 3000);
     return;
   }
   if (watching) {
     clearInterval(watching);
     watching = null;
-    say(job.error || "Import finished.", Boolean(job.error));
+    say(job.error || "Finished.", Boolean(job.error));
     days = await get("/api/days");
-    if (!searching && !reminding) openDay(day);
+    if (!searching && !reminding && !configuring) openDay(day);
   } else if (job.error) {
     say(job.error, true);
   }
 }
 
-$("import").addEventListener("click", () => $("file").click());
 $("file").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file) return;
-  $("import").disabled = true;
+  document.querySelectorAll(".busy-off").forEach((b) => { b.disabled = true; });
   say(`Importing ${file.name}. Large exports take a minute; keep this page open.`);
   try {
     const res = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/zip" }, body: file });
@@ -795,9 +825,84 @@ $("file").addEventListener("change", async (e) => {
     watchJob();
   } catch (err) {
     say(`Import failed. ${err.message}`, true);
-    $("import").disabled = false;
+    document.querySelectorAll(".busy-off").forEach((b) => { b.disabled = false; });
   }
 });
+
+/* Settings: what writes summaries, the Anthropic key, and importing an export. */
+async function showSettings() {
+  configuring = true;
+  reminding = false;
+  searching = false;
+  history.replaceState(null, "", "#settings");
+  $("settings").setAttribute("aria-pressed", "true");
+  $("remind").setAttribute("aria-pressed", "false");
+  $("title").textContent = "Settings";
+  strip.replaceChildren();
+  let now;
+  try { now = await get("/api/settings"); }
+  catch (err) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Could not load settings. ${err.message}` }));
+    return;
+  }
+  const choice = (value, name, about) => {
+    const radio = el("input", { type: "radio", name: "provider", value, checked: (now.provider || "") === value });
+    return el("label", { className: "choice" }, radio, el("b", { textContent: name }), el("span", { textContent: about }));
+  };
+  const key = el("input", { type: "password", id: "key", autocomplete: "off", spellcheck: false,
+    placeholder: now.has_key ? `A key is saved (${now.key_hint}). Type a new one to replace it.` : "sk-ant-…" });
+  const keyHelp = el("small", { textContent: now.has_key
+    ? "Kept on this computer in ~/.config/limitful/config.json and sent only to Anthropic."
+    : "Optional. Leave it empty to use your sign-in from the Anthropic command-line tool (ant auth login). A key is kept on this computer in ~/.config/limitful/config.json and sent only to Anthropic." });
+  const forget = el("button", { className: "pill", textContent: "Remove saved key", hidden: !now.has_key });
+  const keyBox = el("div", { className: "key" }, el("label", { htmlFor: "key", textContent: "Anthropic API key" }), key, keyHelp);
+  const note = el("p", { className: "note", role: "status" });
+  const tell = (text, failed) => { note.textContent = text; note.classList.toggle("failed", Boolean(failed)); };
+  const save = el("button", { className: "pill main", textContent: "Save" });
+  // Only switched on and off by running jobs when there is something to run it with.
+  const run = el("button", { className: now.provider ? "pill busy-off" : "pill", textContent: "Summarise new conversations now", disabled: !now.provider });
+  const picked = () => document.querySelector('input[name="provider"]:checked')?.value ?? "";
+  const options = el("fieldset", {},
+    el("legend", { hidden: true, textContent: "What writes summaries" }),
+    choice("", "Off", "Conversations recorded from the pendant keep their opening words as a title."),
+    choice("claude", "Claude", `Best results, using ${now.claude_model}. The transcript of each conversation is sent to Anthropic, and usage is billed to your Anthropic account.`),
+    keyBox,
+    choice("ollama", "Ollama", `Runs on this computer with the ${now.ollama_model} model, so nothing leaves it. Weaker, and Ollama must be running.`));
+  const showKey = () => { keyBox.hidden = picked() !== "claude"; };
+  options.addEventListener("change", showKey);
+
+  const send = async (body, done) => {
+    save.disabled = true;
+    tell(body.provider === "claude" ? "Checking with Anthropic…" : "Saving…");
+    try { await post("/api/settings", body); await showSettings(); done(); }
+    catch (err) { tell(`Could not save. ${err.message}`, true); save.disabled = false; }
+  };
+  save.addEventListener("click", () => {
+    const body = { provider: picked() };
+    if (key.value.trim()) body.api_key = key.value.trim();
+    send(body, () => say("Settings saved."));
+  });
+  forget.addEventListener("click", () => send({ provider: picked() === "claude" ? "" : picked(), api_key: "" }, () => say("Key removed.")));
+  run.addEventListener("click", async () => {
+    try { await post("/api/digest", {}); watchJob(); }
+    catch (err) { tell(err.message, true); }
+  });
+
+  const pick = el("button", { className: "pill busy-off", textContent: "Choose an export zip" });
+  pick.addEventListener("click", () => $("file").click());
+  main.replaceChildren(el("div", { className: "setup" },
+    el("h2", { textContent: "Summaries" }),
+    el("p", { textContent: "A title, a short summary and suggested reminders for each conversation recorded from the pendant. Conversations imported from Limitless already have theirs." }),
+    options,
+    el("div", { className: "row" }, save, run, forget),
+    note,
+    el("h2", { textContent: "Import from Limitless" }),
+    el("p", { textContent: "Bring in a data export: conversations, transcripts, audio and reminders. Importing the same export twice adds nothing." }),
+    el("div", { className: "row" }, pick)));
+  showKey();
+  watchJob();
+}
+$("settings").addEventListener("click", () => configuring ? openDay(day) : showSettings());
 
 $("remind").addEventListener("click", () => reminding ? openDay(day) : showReminders());
 $("prev").addEventListener("click", () => step(-1));
@@ -813,7 +918,7 @@ $("search").addEventListener("input", (e) => {
 
 document.addEventListener("keydown", (e) => {
   const typing = e.target.matches("input");
-  if (e.key === "Escape" && (searching || reminding)) { openDay(day); return; }
+  if (e.key === "Escape" && (searching || reminding || configuring)) { openDay(day); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "/") { e.preventDefault(); $("search").focus(); }
   else if (e.shiftKey && track && e.key === "ArrowLeft") jumpTo(position() - 10);
@@ -825,7 +930,7 @@ document.addEventListener("keydown", (e) => {
 
 /* New lines arrive while `limitful watch` runs; pick them up quietly. */
 setInterval(async () => {
-  if (searching || reminding || document.hidden || !day) return;
+  if (searching || reminding || configuring || document.hidden || !day) return;
   try {
     days = await get("/api/days");
     const [fresh, freshTalks] = await Promise.all([get(`/api/day/${day}`), get(`/api/conversations/${day}`)]);
@@ -847,6 +952,7 @@ setInterval(async () => {
     : days.length ? days[days.length - 1].day : dayKey(new Date());
   await openDay(start, hashId && Number(hashId));
   if (hashDay === "reminders") showReminders();
+  if (hashDay === "settings") showSettings();
   watchJob();
   countReminders();
 })();

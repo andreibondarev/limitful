@@ -10,7 +10,7 @@ import zipfile
 import time
 from pathlib import Path
 
-from . import __version__
+from . import __version__, config
 from .client import Pendant, PendantError, pair, scan
 from .store import Store
 from .transcribe import DEFAULT_MODEL
@@ -199,18 +199,18 @@ async def _cmd_import(args) -> int:
 _CHOOSE_PROVIDER = (
     "choose what writes the summaries: --provider claude (better; sends transcripts to "
     "Anthropic) or --provider ollama (runs on this computer). "
-    "Set LIMITFUL_LLM to make the choice stick."
+    "Choose once in the Lifelog's Settings to make it stick."
 )
 
 
 def _summarizer(args):
     from .digest import make_summarizer
 
-    provider = args.provider or os.environ.get("LIMITFUL_LLM")
+    provider = args.provider or config.provider()
     if not provider:
         raise PendantError(_CHOOSE_PROVIDER)
     try:
-        return make_summarizer(provider, args.llm_model)
+        return make_summarizer(provider, args.llm_model, config.api_key())
     except ValueError as err:
         raise PendantError(str(err)) from None
 
@@ -298,7 +298,7 @@ async def _cmd_watch(args) -> int:
         return embedders[0]
 
     summarizer = None
-    if args.provider or os.environ.get("LIMITFUL_LLM"):
+    if args.provider or config.provider():
         summarizer = _summarizer(args)
 
     print(f"Watching for the pendant every {args.interval:.0f} s. Data: {args.data_dir}")
@@ -397,7 +397,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def llm_args(p) -> None:
         p.add_argument("--provider", choices=["claude", "ollama"],
-                       help="what writes summaries (default: $LIMITFUL_LLM)")
+                       help="what writes summaries (default: the choice saved in Settings)")
         p.add_argument("--llm-model", help="model name for that provider")
 
     p = sub.add_parser("digest", help="title and summarise conversations, and suggest reminders")

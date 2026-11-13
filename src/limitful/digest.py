@@ -110,11 +110,12 @@ def clean(result: object) -> dict:
 class ClaudeSummarizer:
     """Anthropic's API. Credentials come from the environment or `ant auth login`."""
 
-    def __init__(self, model: str = CLAUDE_MODEL) -> None:
+    def __init__(self, model: str = CLAUDE_MODEL, api_key: str | None = None) -> None:
         import anthropic
 
         self._anthropic = anthropic
-        self._client = anthropic.Anthropic()
+        # With no key given, the SDK looks in the environment and for an `ant` login.
+        self._client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
         self._model = model
         self.name = f"claude:{model}"
 
@@ -197,9 +198,32 @@ class OllamaSummarizer:
             raise DigestError("the local model's reply was not valid JSON") from None
 
 
-def make_summarizer(provider: str, model: str | None = None) -> Summarizer:
+def check_claude(api_key: str | None = None, model: str = CLAUDE_MODEL) -> None:
+    """Confirm Anthropic accepts these credentials, without spending anything.
+
+    Raises DigestError with a plain explanation if not.
+    """
+    import anthropic
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+        client.models.retrieve(model)
+    except anthropic.AuthenticationError:
+        raise DigestError("Anthropic did not accept that key" if api_key
+                          else "not signed in to Anthropic") from None
+    except anthropic.PermissionDeniedError:
+        raise DigestError("that key is not allowed to use the API") from None
+    except anthropic.APIConnectionError:
+        raise DigestError("could not reach the Anthropic API") from None
+    except anthropic.APIStatusError as err:
+        raise DigestError(f"Anthropic API error {err.status_code}") from None
+    except anthropic.AnthropicError as err:
+        raise DigestError(f"not signed in to Anthropic ({err})") from None
+
+
+def make_summarizer(provider: str, model: str | None = None, api_key: str | None = None) -> Summarizer:
     if provider == "claude":
-        return ClaudeSummarizer(model or CLAUDE_MODEL)
+        return ClaudeSummarizer(model or CLAUDE_MODEL, api_key)
     if provider == "ollama":
         return OllamaSummarizer(model or OLLAMA_MODEL)
     raise ValueError(f"unknown provider {provider!r}; use claude or ollama")

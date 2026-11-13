@@ -98,20 +98,30 @@ reminders. They appear above each conversation in the Lifelog and in the
 Markdown transcripts. Reminders are suggestions: accept or dismiss them in the
 Lifelog, where the Reminders button lists everything waiting.
 
-You choose what does the reading, and nothing is sent anywhere until you do:
+You choose what does the reading, and nothing is sent anywhere until you do.
+The easiest way is the Lifelog's Settings page, which also has a "Summarise new
+conversations now" button:
 
-- `--provider claude` uses Anthropic's API (Claude Opus by default; change it
-  with `--llm-model`). Better results, but conversation transcripts are sent to
-  Anthropic. Sign in with `ANTHROPIC_API_KEY` or `ant auth login`.
-- `--provider ollama` uses a model running on your computer through
+- **Claude** uses Anthropic's API (Claude Opus by default; `--llm-model`
+  changes it). Better results, but conversation transcripts are sent to
+  Anthropic and usage is billed to your Anthropic account. Paste an API key in
+  Settings, or leave it empty to use `ANTHROPIC_API_KEY` or a sign-in from
+  Anthropic's command-line tool (`ant auth login`). The key is checked with
+  Anthropic before it is saved.
+- **Ollama** uses a model running on your computer through
   [Ollama](https://ollama.com) (`llama3.1` by default). Private, weaker.
 
-Set `LIMITFUL_LLM=claude` (or `ollama`) to make the choice stick; `watch`
-then summarises automatically. Conversations of fewer than 25 words are left
-without a summary. `digest --redo` rewrites everything, discarding the state
-of existing reminders.
+The choice and the key are saved in `~/.config/limitful/config.json`, readable
+only by you and kept out of the data folder so it is not backed up with your
+recordings. The `LIMITFUL_LLM` environment variable overrides the saved choice.
+Once a choice is saved, `watch` summarises automatically.
 
-Not yet verified against either service: the logic is tested with stand-ins.
+Conversations of fewer than 25 words are left without a summary.
+`digest --redo` rewrites your own summaries, discarding the state of their
+reminders; imported conversations are left alone.
+
+The Claude path has been run for real; the Ollama path is tested with a
+stand-in server only.
 
 ### Importing your Limitless history
 
@@ -127,7 +137,7 @@ transcript, the audio, and your reminders. Limitless's transcripts are kept as
 they are; nothing is re-transcribed. Running it again on the same file adds
 nothing.
 
-You can also import from the Lifelog page: click Import and choose the zip.
+You can also import from the Lifelog: open Settings and choose the zip.
 
 Limitless numbers speakers separately in every conversation, so imported lines
 show "Speaker 1", "Speaker 2". Click one to name that speaker in that
@@ -175,6 +185,7 @@ that your computer holds the only copy, so back up the data folder.
 - `transcribe.py`: speech-to-text engines (local Whisper by default).
 - `speakers.py`: voice fingerprints for speaker labels.
 - `digest.py`: titles, summaries and reminders from a language model.
+- `config.py`: saved settings, including the API key.
 - `importer.py`: import of a Limitless data export.
 - `watch.py`: the background loop.
 - `web.py` and `web/index.html`: the Lifelog web app.

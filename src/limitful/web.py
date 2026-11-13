@@ -20,6 +20,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from . import config
+from . import digest as digest_mod
+
 _INDEX = Path(__file__).parent / "web" / "index.html"
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
@@ -105,6 +108,66 @@ class Library:
             "recordings": result.audio_files, "hours": round(result.audio_hours, 1),
             "reminders": result.reminders, "skipped": result.skipped_existing,
         }
+
+    def settings(self) -> dict:
+        """What the Settings page shows. The key itself never leaves the server."""
+        key = config.api_key()
+        return {
+            "provider": config.load().get("provider") or None,
+            "has_key": bool(key),
+            "key_hint": f"ends in {key[-4:]}" if key and len(key) >= 12 else ("saved" if key else None),
+            "claude_model": digest_mod.CLAUDE_MODEL,
+            "ollama_model": digest_mod.OLLAMA_MODEL,
+        }
+
+    def save_settings(self, body: dict) -> dict:
+        provider = body.get("provider", config.load().get("provider"))
+        if provider in ("", "none"):
+            provider = None
+        key = body.get("api_key")
+        if key is not None and not isinstance(key, str):
+            raise ValueError("the key must be text")
+        if provider is not None and provider not in config.PROVIDERS:
+            raise ValueError("choose Claude, Ollama or no summaries")
+        if provider == "claude":
+            # Check before saving, so a mistyped key is caught here and not hours later.
+            candidate = key.strip() if key else (config.api_key() if key is None else None)
+            try:
+                digest_mod.check_claude(candidate or None)
+            except digest_mod.DigestError as err:
+                raise ValueError(f"{err}. Nothing was saved.") from None
+        if key is None:
+            config.update(provider=provider)
+        else:
+            config.update(provider=provider, api_key=key)
+        return self.settings()
+
+    def start_digest(self) -> None:
+        """Summarise new conversations in the background."""
+        provider = config.provider()
+        if not provider:
+            raise ValueError("choose what writes summaries first")
+        with self._lock:
+            if self.job["running"]:
+                raise RuntimeError("something is already running; wait for it to finish")
+            self.job.update(running=True, what="Summarising conversations", done=0, total=0, error=None)
+        threading.Thread(target=self._digest_job, args=(provider,), daemon=True).start()
+
+    def _digest_job(self, provider: str) -> None:
+        from .store import Store
+
+        try:
+            summarizer = digest_mod.make_summarizer(provider, None, config.api_key())
+            store = Store(self.data_dir)
+            try:
+                store.digest_pending(
+                    summarizer, lambda done, total: self.job.update(done=done, total=total))
+            finally:
+                store.close()
+        except Exception as err:  # shown in the page; whatever was summarised is kept
+            self.job["error"] = f"Summaries stopped: {err}"
+        finally:
+            self.job.update(running=False, what="")
 
     def _link_job(self) -> None:
         """Recognise the voices in imported conversations. Slow, so it runs in the background."""
@@ -235,6 +298,8 @@ def make_handler(library: Library):
                     return self._json(library.reminders())
                 if path == "/api/status":
                     return self._json(library.job)
+                if path == "/api/settings":
+                    return self._json(library.settings())
                 if path == "/api/search":
                     query = parse_qs(url.query).get("q", [""])[0].strip()
                     return self._json(library.search(query) if query else [])
@@ -259,6 +324,20 @@ def make_handler(library: Library):
             path = urlparse(self.path).path
             if path == "/api/import":
                 return self._import()
+            if path in ("/api/settings", "/api/digest"):
+                try:
+                    length = min(int(self.headers.get("Content-Length") or 0), 8192)
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    if not isinstance(body, dict):
+                        raise ValueError("send a JSON object")
+                    if path == "/api/settings":
+                        return self._json(library.save_settings(body))
+                    library.start_digest()
+                    return self._json({"started": True})
+                except RuntimeError as err:
+                    return self._text(HTTPStatus.CONFLICT, str(err))
+                except ValueError as err:
+                    return self._text(HTTPStatus.BAD_REQUEST, str(err))
             match = (re.match(r"^/api/(speakers|reminders)/(\d+)$", path)
                      or re.match(r"^/api/(lines)/(\d+)/speaker$", path))
             if not match:

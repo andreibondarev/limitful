@@ -221,3 +221,71 @@ def test_server_upgrades_an_old_database_and_serves_an_empty_folder(tmp_path):
             assert json.loads(res.read()) == []
         server.shutdown()
         server.server_close()
+
+
+def test_settings_save_a_key_without_ever_returning_it(site, monkeypatch, tmp_path):
+    import os
+    import stat
+
+    from limitful import config, digest
+
+    checked = []
+    monkeypatch.setattr(digest, "check_claude", lambda key=None, model=None: checked.append(key))
+    assert json.loads(site("/api/settings")[2])["provider"] is None
+
+    status, _h, body = site("/api/settings", JSON, b'{"provider": "claude", "api_key": " sk-ant-api03-SECRETSECRET1234 "}')
+    assert status == 200 and b"SECRETSECRET" not in body
+    got = json.loads(body)
+    assert (got["provider"], got["has_key"], got["key_hint"]) == ("claude", True, "ends in 1234")
+    assert checked == ["sk-ant-api03-SECRETSECRET1234"]
+    assert b"SECRETSECRET" not in site("/api/settings")[2]
+    assert config.api_key() == "sk-ant-api03-SECRETSECRET1234"
+    assert stat.S_IMODE(os.stat(config.config_path()).st_mode) == 0o600
+    assert not list(tmp_path.glob("**/pendant.db-key*")) and "SECRET" not in (tmp_path / "pendant.db").read_bytes().decode("latin1")
+
+    # Changing the provider alone keeps the key; an empty key removes it.
+    assert json.loads(site("/api/settings", JSON, b'{"provider": "ollama"}')[2])["has_key"] is True
+    after = json.loads(site("/api/settings", JSON, b'{"provider": "", "api_key": ""}')[2])
+    assert (after["provider"], after["has_key"]) == (None, False)
+
+
+def test_settings_reject_a_key_anthropic_refuses(site, monkeypatch):
+    from limitful import config, digest
+
+    def refuse(key=None, model=None):
+        raise digest.DigestError("Anthropic did not accept that key")
+
+    monkeypatch.setattr(digest, "check_claude", refuse)
+    status, _h, body = site("/api/settings", JSON, b'{"provider": "claude", "api_key": "sk-ant-wrong-000000"}')
+    assert status == 400 and b"Nothing was saved" in body
+    assert config.load() == {}
+    assert site("/api/settings", JSON, b'{"provider": "gpt"}')[0] == 400
+    assert site("/api/settings", {"Content-Type": "text/plain"}, b'{}')[0] == 415
+    assert site("/api/settings", dict(JSON, Host="evil.example"), b'{}')[0] == 403
+
+
+def test_summarise_from_the_page(site, monkeypatch):
+    import time
+
+    from limitful import config, digest
+
+    assert site("/api/digest", JSON, b"{}")[0] == 400  # nothing chosen yet
+
+    class Canned:
+        name = "canned"
+
+        def summarize(self, transcript):
+            return {"title": "A new title", "summary": ["Point."], "reminders": []}
+
+    monkeypatch.setattr(digest, "make_summarizer", lambda provider, model=None, api_key=None: Canned())
+    monkeypatch.setattr("limitful.store.MIN_DIGEST_WORDS", 1)
+    config.update(provider="ollama")
+    assert site("/api/digest", JSON, b"{}")[0] == 200
+    for _ in range(100):
+        job = json.loads(site("/api/status")[2])
+        if not job["running"]:
+            break
+        time.sleep(0.05)
+    assert job["error"] is None
+    titles = [t["title"] for t in json.loads(site("/api/conversations/2026-11-13")[2])]
+    assert "A new title" in titles and "Shopping and a call" in titles
