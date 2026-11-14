@@ -628,3 +628,20 @@ def test_days_carry_what_the_calendar_shows(site, tmp_path):
     store.close()
     (only,) = json.loads(site("/api/days")[2])
     assert (only["talks"], only["headline"]) == (1, "Shopping, then a call")
+
+
+def test_search_hits_come_with_their_surroundings(site, tmp_path):
+    store = Store(tmp_path)
+    base = T0 + 7_200_000
+    for n, text in enumerate(["We could go on Friday.", "Friday works, the ferry leaves at nine.", "Then nine it is."]):
+        store.db.execute("INSERT INTO utterances (segment, start_ms, end_ms, text) VALUES ('', ?, ?, ?)",
+                         (base + n * 4000, base + n * 4000 + 3000, text))
+    store.db.execute("INSERT INTO utterances (segment, start_ms, end_ms, text) VALUES ('', ?, ?, 'A ferry, hours later.')",
+                     (base + 3_600_000, base + 3_601_000))
+    store.db.execute("INSERT INTO conversations (start_ms, end_ms, status, title, summary) VALUES (?, ?, 'done', 'Trip plans', '[]')",
+                     (base, base + 12000))
+    store.db.commit()
+    store.close()
+    later, hit = json.loads(site("/api/search?q=ferry")[2])   # newest first
+    assert (hit["before"], hit["after"], hit["talk"]) == ("We could go on Friday.", "Then nine it is.", "Trip plans")
+    assert (later["before"], later["after"], later["talk"]) == (None, None, None)  # nothing near it, no conversation

@@ -277,7 +277,7 @@ await run("window.scrollTo({ top: 0, behavior: 'smooth' })");
 await click("document.getElementById('search')");
 await caption("Search everything that was said");
 await type("tracking number", 65);
-await until("document.getElementById('title').textContent === 'Search' && document.querySelectorAll('main .line').length > 0");
+await until("document.getElementById('title').textContent === 'Search' && document.querySelectorAll('main .hit, main .line').length > 0");
 await sleep(2300);
 await caption(null);
 await press("Escape", "Escape", 27);

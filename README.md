@@ -130,7 +130,8 @@ words with no conversation around them fold into one quiet row, and on a wide
 screen the day's recap, open reminders and named people sit beside the list.
 Light or dark is chosen under Settings, Appearance, and otherwise follows
 your computer. The date in the header opens a calendar, with each day shaded by how much
-was said and its recap shown as you point at it. Search covers every day. The page only answers on
+was said and its recap shown as you point at it. Search covers every day, and shows each hit with
+the words marked, the line before and after, and the conversation it is from. The page only answers on
 your own machine. Recordings are Ogg Opus, which Chrome and Firefox play;
 older versions of Safari do not.
 

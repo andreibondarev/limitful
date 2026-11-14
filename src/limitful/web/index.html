@@ -586,6 +586,18 @@
   }
   .halt:hover:not(:disabled) { background: var(--accent); color: var(--paper); }
   .halt:disabled { opacity: 0.5; cursor: default; }
+  .tally { margin: 0 0 0.4rem; color: var(--muted); font-size: 0.9rem; }
+  .hit {
+    display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr); align-items: baseline;
+    width: 100%; padding: 0.7rem 0; border: 0; border-top: 1px solid var(--rule); background: none; text-align: left; cursor: pointer;
+  }
+  .hit time { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+  .hit small { display: block; margin-bottom: 0.2rem; color: var(--muted); font-size: 0.82rem; }
+  .hit p { margin: 0; max-width: 68ch; font-family: var(--voice); line-height: 1.5; }
+  .hit .said { font-size: 1.18rem; }
+  .hit .around { color: var(--muted); font-size: 0.98rem; }
+  .hit:hover .said { color: var(--accent); }
+  .hit mark { background: var(--mark); color: var(--mark-ink); border-radius: 3px; padding: 0 0.15em; }
   .near {
     margin: 2.2rem 0 0; padding-top: 1rem; border-top: 1px solid var(--rule);
     color: var(--muted); font-size: 0.9rem;
@@ -1943,7 +1955,35 @@ async function runSearch(query) {
     }
     return nodes;
   };
-  main.replaceChildren(...(results.length ? listed(results)
+  // Exact matches: the words marked, with the line before and after and the conversation it is from.
+  const words = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig");
+  const marked = (text) => text.split(words).map((part, n) => n % 2 ? el("mark", { textContent: part }) : part);
+  const clip = (text) => text.length > 140 ? `${text.slice(0, 140)}…` : text;
+  const hits = (found) => {
+    const nodes = [];
+    let last = null;
+    for (const u of found) {
+      if (u.day !== last) {
+        last = u.day;
+        const a = el("a", { href: `#${u.day}`, textContent: longDay.format(new Date(dayStart(u.day))) });
+        a.addEventListener("click", (e) => { e.preventDefault(); openDay(u.day); });
+        nodes.push(el("h2", {}, a));
+      }
+      const where = [u.speaker?.name, u.talk ? `in “${u.talk}”` : null].filter(Boolean).join(", ");
+      const b = el("button", { className: "hit", title: "Open this moment" },
+        el("time", { textContent: clock.format(new Date(u.start)) }),
+        el("div", {},
+          ...(where ? [el("small", { textContent: where })] : []),
+          ...(u.before ? [el("p", { className: "around", textContent: clip(u.before) })] : []),
+          el("p", { className: "said" }, ...marked(u.text)),
+          ...(u.after ? [el("p", { className: "around", textContent: clip(u.after) })] : [])));
+      b.addEventListener("click", () => openDay(u.day, u.id));
+      nodes.push(b);
+    }
+    return nodes;
+  };
+  const tally = results.length ? [el("p", { className: "tally", textContent: `${results.length} line${results.length === 1 ? "" : "s"} with “${query}”, newest first.` })] : [];
+  main.replaceChildren(...(results.length ? [...tally, ...hits(results)]
     : [el("p", { className: "empty", textContent: `Nothing found for “${query}”.` })]));
   /* Lines that say it in other words, if the index has been built (Settings). They go
      under the exact matches, labelled, so those are never pushed down or mixed up. */

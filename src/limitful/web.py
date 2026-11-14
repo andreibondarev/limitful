@@ -34,6 +34,7 @@ _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 _SEARCH_LIMIT = 200
 _MEANING_LIMIT = 8  # moments offered as "close in meaning" under the exact matches
+_CONTEXT_MS = 60_000  # a neighbouring line this close counts as context for a search hit
 _MAX_UPLOAD = 50 * 1024**3
 # Imported lines can sit a second or two after their audio; start playback early.
 _IMPORT_LEAD_MS = 1500
@@ -553,9 +554,25 @@ class Library:
                 _SELECT + "WHERE u.text LIKE ? ESCAPE '\\' ORDER BY u.start_ms DESC LIMIT ?",
                 (f"%{escaped}%", _SEARCH_LIMIT),
             ).fetchall()
+            out = []
+            for r in rows:
+                hit = dict(_utterance(r), day=_day_of(r[1]))
+                # What was said just before and after, and where, so a hit can be judged without opening it.
+                before = db.execute(
+                    "SELECT text FROM utterances WHERE start_ms < ? AND start_ms >= ? ORDER BY start_ms DESC, id DESC LIMIT 1",
+                    (r[1], r[1] - _CONTEXT_MS)).fetchone()
+                after = db.execute(
+                    "SELECT text FROM utterances WHERE start_ms > ? AND start_ms <= ? ORDER BY start_ms, id LIMIT 1",
+                    (r[1], r[1] + _CONTEXT_MS)).fetchone()
+                talk = db.execute(
+                    "SELECT title FROM conversations WHERE status = 'done' AND start_ms <= ? AND end_ms >= ? LIMIT 1",
+                    (r[1], r[1])).fetchone()
+                hit.update(before=before[0] if before else None, after=after[0] if after else None,
+                           talk=talk[0] if talk else None)
+                out.append(hit)
         finally:
             db.close()
-        return [dict(_utterance(r), day=_day_of(r[1])) for r in rows]
+        return out
 
     def search_meaning(self, query: str) -> dict:
         """Lines close in meaning to `query`, best first, once the index has been built.
