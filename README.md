@@ -30,6 +30,15 @@ history you export before then stays usable.
 - **Pendant controls**: battery and storage, light brightness, pause, pair and
   unpair.
 
+<p align="center"><img src="assets/screenshots/day.png" width="820" alt="A day in the Lifelog: a recap of the day, then its conversations"></p>
+
+| Ask, with links to the lines behind the answer | Reminders, found in what was said |
+|---|---|
+| <img src="assets/screenshots/ask.png" alt="A question answered with citations"> | <img src="assets/screenshots/reminders.png" alt="Suggested reminders beside a to-do list"> |
+
+The conversations in these pictures are made up; see
+[Try it without a pendant](#try-it-without-a-pendant).
+
 **Status: early, but working.** The whole path, from pendant to transcript to
 Lifelog, runs daily against one real pendant on macOS. It has not been tested
 on Linux or Windows. What has not been verified is listed under
@@ -44,6 +53,18 @@ git clone https://github.com/andreibondarev/limitful.git
 cd limitful
 uv sync
 ```
+
+### Try it without a pendant
+
+```sh
+uv run limitful demo
+uv run limitful serve --data-dir ~/Limitful-demo
+```
+
+`demo` writes a folder of made-up conversations (a bike shop, over three
+days) with summaries, reminders, a day's recap and a saved question. The
+lines have no audio, so they can be read, searched and asked about but not
+played. It will not write into a folder that already has conversations.
 
 ## Use
 
@@ -382,6 +403,7 @@ that your computer holds the only copy, so back up the data folder.
 - `upkeep.py`: long jobs the Lifelog can start and stop (re-timing, indexing).
 - `config.py`: saved settings, including the API key.
 - `importer.py`: import of a Limitless data export.
+- `demo.py`: the made-up data folder.
 - `watch.py`: the background loop.
 - `web.py` and `web/index.html`: the Lifelog web app.
 

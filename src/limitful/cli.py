@@ -321,6 +321,19 @@ async def _cmd_speakers(args) -> int:
         store.close()
 
 
+async def _cmd_demo(args) -> int:
+    from . import demo
+
+    try:
+        made = demo.build(args.data_dir)
+    except ValueError as err:
+        raise PendantError(str(err)) from None
+    print(f"Wrote {made['conversations']} made-up conversations ({made['lines']} lines over "
+          f"{made['days']} days) to {args.data_dir}.")
+    print(f"Open them with: limitful serve --data-dir {args.data_dir}")
+    return 0
+
+
 async def _cmd_import(args) -> int:
     from .importer import import_limitless
 
@@ -657,6 +670,11 @@ def main(argv: list[str] | None = None) -> int:
                    help="also write a recap for every finished day that lacks one, imported history "
                         "included (sends those days' titles and summaries to the provider)")
     p.set_defaults(func=_cmd_digest)
+
+    p = sub.add_parser("demo", help="make a folder of made-up conversations to try the Lifelog with")
+    p.add_argument("--data-dir", type=Path, default=Path.home() / "Limitful-demo",
+                   help="an empty folder to write them to (default: ~/Limitful-demo)")
+    p.set_defaults(func=_cmd_demo)
 
     p = sub.add_parser("import", help="import a data export (.zip) from the Limitless service")
     p.add_argument("file", type=Path, help="the export zip")
