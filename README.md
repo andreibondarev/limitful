@@ -375,6 +375,34 @@ The experimental voice labelling is still there for anyone who wants to try
 it: `limitful transcribe --speakers`, `limitful watch --speakers`, and
 `limitful speakers --link-imported` for imported conversations.
 
+### Transcription on the Apple GPU: tried, not the default
+
+Local Whisper runs on the CPU. The library underneath (CTranslate2 4.9) has an
+experimental Apple GPU mode, `--device mps`, which was measured on an M-series
+laptop to see whether it should be the default. It should not, yet:
+
+- **It fails at random.** Of six runs of the same test, three failed on every
+  recording they were given (46 attempts in all), each time with an error
+  from the library (`IndexError: vector`, or with full-precision numbers
+  `Invalid token ID 18446744073709551615`). The other three ran the same
+  recordings 53 times with no failure. A run that started 22 seconds after a
+  failed one worked. Nothing that was varied (number precision, word timings,
+  a fixed language) made the difference.
+- **When it works it is quick and about as good.** On five recordings of real
+  speech (17 minutes) it ran at 9 to 13 times real time, against 3 times for
+  the CPU. Both were measured while the laptop was busy with other work, so
+  read the ratio and not the absolute numbers. Its text matched Limitless's
+  transcript of the same recordings as well as the CPU's did (a similarity of
+  0.61 against 0.59, where 1 is identical), and empty files and recordings
+  with no speech gave no lines on either. How well its word timings agree with
+  the CPU's was not measured: the run meant to compare them was one that
+  failed.
+
+So the default stays on the CPU, and `--device mps` stays available on
+`transcribe`, `watch` and `retime` for anyone who wants to try it; if it
+fails, run the command again. The cause was not found. The laptop's GPU was
+shared with other programs during the test, which may matter.
+
 ### Running in the background
 
 ```sh
