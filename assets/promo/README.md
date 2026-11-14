@@ -1,6 +1,6 @@
 # The promo video
 
-`limitful-promo.mp4` is a 73-second silent walk through the app, with captions:
+`limitful-promo.mp4` is a 75-second silent walk through the app, with captions:
 the setup guide, a day in the Lifelog, search, reminders, Settings and Ask.
 `poster.jpg` is the still the main README links from.
 
