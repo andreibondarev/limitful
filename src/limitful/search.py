@@ -42,7 +42,7 @@ _BATCH = 64
 
 # A line is indexed together with its neighbours: "Yeah." or "Under five minutes."
 # means nothing alone, and on real transcripts this found more than single lines did
-# (see README, "Search by meaning").
+# (see docs/experiments.md, "Search by meaning").
 NEIGHBOURS = 2            # lines taken on each side
 NEIGHBOUR_GAP_MS = 60_000  # ...as long as they are within a minute, so part of the same exchange
 

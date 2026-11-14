@@ -30,7 +30,7 @@ Not designed or scheduled. Each needs deciding what it should do first.
 
 - **Automatic speaker labels, as a default.** Every local method tried, and
   Deepgram, scored at or below always guessing the main speaker. The numbers
-  are in the README. The experimental commands remain.
+  are in [docs/experiments.md](docs/experiments.md). The experimental commands remain.
 - **Transcription on the Apple GPU by default.** Three to four times faster when
   it works, but half the test runs failed outright.
 - **A true pause or power-off command.** The pendant's USB shell has no

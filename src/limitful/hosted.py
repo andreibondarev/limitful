@@ -1,7 +1,7 @@
 """Hosted speech-to-text with speaker labels, as an opt-in alternative to local Whisper.
 
 Local transcription gets the words right but cannot tell speakers apart on
-pendant audio (see the README's "Speaker labels"). A hosted service can. The
+pendant audio (see docs/experiments.md, "Speaker labels"). A hosted service can. The
 price is that the audio leaves this machine and is billed to the user's
 account, so nothing here runs unless the user picks it in Settings.
 
@@ -14,7 +14,7 @@ Deepgram is the first service: one request with the audio as its body, no
 upload step and no polling. The request follows Deepgram's published
 reference (POST /v1/listen, `Authorization: Token <key>`, `diarize_model`,
 `utterances`). It has been run against the real service; its speaker labels
-scored no better than always guessing the main speaker (see the README).
+scored no better than always guessing the main speaker (see docs/experiments.md).
 """
 
 from __future__ import annotations

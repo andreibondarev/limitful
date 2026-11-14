@@ -387,7 +387,7 @@ class Library:
                     result = asyncio.run(watch_mod.run_cycle(
                         store, ack=True,
                         get_transcriber=self._transcriber,
-                        get_embedder=None, summarizer=summarizer,  # voice labels are opt-in: see README
+                        get_embedder=None, summarizer=summarizer,  # voice labels are opt-in: see docs/experiments.md
                         on_stage=lambda stage: self.job.update(what=stage)))
                 finally:
                     store.close()
