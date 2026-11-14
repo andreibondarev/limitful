@@ -5,7 +5,14 @@ description = "Open-source client for the Limitless Pendant: sync recordings ove
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
-dependencies = ["bleak>=0.22", "faster-whisper>=1.1", "sherpa-onnx>=1.10", "numpy", "anthropic>=1.0"]
+dependencies = [
+    "bleak>=0.22",
+    "faster-whisper>=1.1",
+    "sherpa-onnx>=1.10",
+    "numpy",
+    "anthropic>=1.0",
+    "pyserial>=3.5",
+]
 
 [project.scripts]
 limitful = "limitful.cli:main"

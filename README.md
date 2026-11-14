@@ -222,6 +222,11 @@ The Lifelog's Settings page has a Pendant section:
 From the command line, `uv run limitful status` shows the same readings and
 `--brightness 40` sets the light.
 
+With the pendant plugged in by USB cable, the section also shows its firmware
+version, battery voltage and temperature, and the light slider shows the
+pendant's real brightness. These are read over the pendant's USB shell, using
+three read-only commands and nothing else.
+
 - **Pause** stops the app keeping audio. The pendant itself cannot be told to
   stop recording (no such command is known, and its live-stream mode keeps
   writing to storage, which was measured). So a pause is kept by the app: the
@@ -355,6 +360,7 @@ that your computer holds the only copy, so back up the data folder.
 
 - `protocol.py`: the wire format (protobuf-style messages over one BLE service).
 - `client.py`: connect, set the clock, read storage status, download pages.
+- `usb.py`: read-only readings over the pendant's USB shell.
 - `store.py`: the SQLite store: raw pages, recordings, lines, conversations,
   reminders and chats.
 - `ogg.py`: a small Ogg Opus writer.

@@ -403,6 +403,11 @@
     margin: 0 0 0.4rem; padding: 1.2rem 1.4rem; border: 1px solid var(--rule); border-radius: 16px;
     background: color-mix(in srgb, var(--accent) 5%, transparent);
   }
+  .wired { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 1.4rem; margin: 0.8rem 0 0; padding-top: 0.8rem; border-top: 1px solid var(--rule); font-size: 0.9rem; color: var(--muted); }
+  .wired .icon { align-self: center; color: var(--accent); margin: 0 -0.9rem 0 0; }
+  .wired > span:first-of-type { color: var(--accent); font-weight: 600; }
+  .wired small { margin-right: 0.4rem; }
+  .wired b { color: var(--ink); font-weight: 600; }
   .readings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.1rem; }
   .reading { display: flex; align-items: center; gap: 0.6rem; color: var(--accent); }
   .reading b { display: block; color: var(--ink); font-family: var(--voice); font-size: 1.45rem; font-weight: 400; line-height: 1.1; white-space: nowrap; }
@@ -557,6 +562,7 @@ const ICONS = {
   people: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z M3.5 19a5.5 5.5 0 0 1 11 0 M16 11a2.5 2.5 0 1 0 0-5 M17.5 14.2A4.8 4.8 0 0 1 20.5 19",
   day: "M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z M4 10h16 M8 4v4 M16 4v4",
   check: "M5 12.5l4.5 4.5L19 7.5",
+  plug: "M9 3v5 M15 3v5 M6.5 8h11v3.5a5.5 5.5 0 0 1-11 0z M12 17v4",
   x: "M6.5 6.5l11 11 M17.5 6.5l-11 11",
   find: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z M16.2 16.2 20.5 20.5",
   clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z M12 7.5V12l3 2",
@@ -1541,8 +1547,9 @@ async function showSettings() {
     check.disabled = true;
     about.classList.remove("failed");
     about.textContent = "Looking for the pendant…";
-    try { describe(await post("/api/pendant", { action: "check" })); }
+    try { pendantNow = await post("/api/pendant", { action: "check" }); describe(pendantNow); }
     catch (err) { about.textContent = err.message; about.classList.add("failed"); }
+    post("/api/pendant", { action: "usb" }).then(showWired).catch(() => {});
     check.disabled = false;
   });
   sync.addEventListener("click", async () => {
@@ -1558,6 +1565,22 @@ async function showSettings() {
     catch (err) { about.textContent = err.message; about.classList.add("failed"); }
     light.disabled = false;
   });
+  // Over a USB cable the pendant answers questions Bluetooth cannot: firmware, real brightness.
+  const wired = el("p", { className: "wired", hidden: true });
+  const lightNote = el("p", { className: "small" });
+  const fact = (label, value) => el("span", {}, el("small", { textContent: label }), el("b", { textContent: value }));
+  const showWired = (p) => {
+    const u = p.usb;
+    wired.hidden = !u;
+    if (!u) return;
+    if (u.error) { wired.replaceChildren(icon("plug", 16), el("span", { textContent: `Plugged in, but USB did not answer: ${u.error}.` })); return; }
+    wired.replaceChildren(icon("plug", 16), el("span", { textContent: "Plugged in" }));
+    if (u.firmware) wired.append(fact("firmware", u.firmware));
+    if (u.millivolts != null) wired.append(fact("battery", `${(u.millivolts / 1000).toFixed(2)} V`));
+    if (u.celsius != null) wired.append(fact("temperature", `${u.celsius} °C`));
+    if (u.battery != null && !(pendantNow.checked && !pendantNow.error)) { power.value.textContent = `${u.battery}%`; cell.setAttribute("width", Math.max(1, 14 * u.battery / 100)); cell.setAttribute("fill", "var(--accent)"); }
+    if (u.brightness != null) { light.value = u.brightness; showLight(); lightNote.textContent = "Read from the pendant over USB just now."; }
+  };
   let pendantNow = { checked: null };
   try { pendantNow = await get("/api/pendant"); } catch { /* shown as not checked */ }
   light.value = pendantNow.brightness ?? 100;
@@ -1587,6 +1610,10 @@ async function showSettings() {
   const indexing = el("div", { className: "row" }, ...(upkeep.index.left ? [starter("index", "find", upkeep.index.indexed ? "Index the rest" : "Set up search by meaning")] : []));
   const retiming = el("div", { className: "row" }, ...(upkeep.retime.recordings ? [starter("retime", "clock", "Fix the timing")] : []));
 
+  lightNote.textContent = pendantNow.brightness == null
+    ? "Over Bluetooth the pendant does not report its brightness, so this shows 100% until you set it here. Plug it in with a USB cable to read the real value."
+    : "Over Bluetooth the pendant does not report its brightness; this is the last value known. Plug it in with a USB cable to read the real value.";
+  post("/api/pendant", { action: "usb" }).then(showWired).catch(() => {});  // quick, and silent when not plugged in
   const pick = el("button", { className: "pill busy-off" }, ...withIcon("import", "Choose an export zip", 16));
   pick.addEventListener("click", () => $("file").click());
   main.replaceChildren(el("div", { className: "setup" },
@@ -1597,12 +1624,11 @@ async function showSettings() {
       el("div", {},
         el("div", { className: "readings" }, power.node, waiting.node, room.node),
         el("div", { className: "row" }, sync, check, pause),
-        about)),
+        about,
+        wired)),
     hold,
     el("div", { className: "row light" }, el("label", { htmlFor: "light", textContent: "Light" }), icon("dim", 18), light, icon("bright", 20), lightValue),
-    el("p", { className: "small", textContent: pendantNow.brightness == null
-      ? "The pendant does not report its brightness, so this shows 100% until you set it here."
-      : "The pendant does not report its brightness; this is the last value set from here." }),
+    lightNote,
     el("p", { className: "small", textContent: "Pause stops the app keeping audio; the pendant itself goes on recording. To stop it recording at all, hold its button for two seconds to switch it off." }),
     el("details", { className: "more" },
       el("summary", { textContent: "Pairing" }),

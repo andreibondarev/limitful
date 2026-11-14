@@ -129,6 +129,18 @@ class Library:
         return dict(self._pendant, brightness=config.load().get("led_brightness"),
                     paused_since=self._with_store(lambda store: store.paused_since()))
 
+    def read_usb(self) -> dict:
+        """Read the pendant over its USB cable, if it is plugged in. Read-only and quick."""
+        from . import usb
+
+        try:
+            wired = usb.read()
+        except usb.UsbError as err:
+            return dict(self.pendant(), usb={"error": str(err)})
+        if wired and "brightness" in wired:
+            config.update(led_brightness=wired["brightness"])  # the true value, not our last guess
+        return dict(self.pendant(), usb=wired)
+
     def set_paused(self, paused: bool) -> dict:
         self._with_store(lambda store: store.pause() if paused else store.resume())
         return self.pendant()
@@ -579,6 +591,8 @@ def make_handler(library: Library):
                     action = body.get("action") if isinstance(body, dict) else None
                     if action == "check":
                         return self._json(library.check_pendant())
+                    if action == "usb":
+                        return self._json(library.read_usb())
                     if action == "brightness":
                         return self._json(library.set_brightness(body.get("value")))
                     if action == "sync":

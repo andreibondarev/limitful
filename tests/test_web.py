@@ -459,3 +459,21 @@ def test_hosted_lines_show_numbered_speakers_without_the_import_lead(site, tmp_p
     assert found and '"Speaker 2"' in json.dumps(reply)
     # Its audio offset is its own start (1.2 s in), not moved earlier as for imported lines.
     assert '"offset": 1200' in json.dumps(reply)
+
+
+def test_usb_readings_reach_the_page_and_correct_the_light(site, monkeypatch):
+    from limitful import config, usb
+
+    monkeypatch.setattr(usb, "read", lambda: None)
+    assert json.loads(site("/api/pendant", JSON, b'{"action": "usb"}')[2])["usb"] is None
+
+    monkeypatch.setattr(usb, "read", lambda: {"firmware": "1.1.20", "brightness": 40, "celsius": 31})
+    got = json.loads(site("/api/pendant", JSON, b'{"action": "usb"}')[2])
+    assert got["usb"]["firmware"] == "1.1.20" and got["brightness"] == 40
+    assert config.load()["led_brightness"] == 40
+
+    def broken():
+        raise usb.UsbError("could not open /dev/x: Resource busy")
+    monkeypatch.setattr(usb, "read", broken)
+    assert json.loads(site("/api/pendant", JSON, b'{"action": "usb"}')[2])["usb"] == {
+        "error": "could not open /dev/x: Resource busy"}
