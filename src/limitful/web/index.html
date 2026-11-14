@@ -81,6 +81,9 @@
   #search::placeholder { color: var(--muted); }
 
   /* The day as a strip: one mark for every stretch of speech. */
+  /* Off the day view there is no day to chart or step through. */
+  header.plain #strip, header.plain #hours, header.plain .step { display: none; }
+  header.plain { padding-bottom: 1rem; }
   #strip {
     position: relative; height: 1.75rem; margin-top: 0.9rem;
     border-block: 1px solid var(--rule);
@@ -587,6 +590,7 @@ async function countReminders() {
 
 async function showReminders() {
   main.classList.remove("wide");
+  document.querySelector("header").classList.add("plain");
   reminding = true;
   configuring = false;
   asking = false;
@@ -840,6 +844,7 @@ function reveal(id, mark) {
 
 async function openDay(key, revealId, revealTalk, startPlaying) {
   main.classList.remove("wide");
+  document.querySelector("header").classList.remove("plain");
   searching = false;
   reminding = false;
   configuring = false;
@@ -870,6 +875,7 @@ function step(direction) {
 
 async function runSearch(query) {
   main.classList.remove("wide");
+  document.querySelector("header").classList.add("plain");
   searching = true;
   reminding = false;
   configuring = false;
@@ -1095,6 +1101,7 @@ $("file").addEventListener("change", async (e) => {
 /* Settings: what writes summaries, the Anthropic key, and importing an export. */
 async function showSettings() {
   main.classList.remove("wide");
+  document.querySelector("header").classList.add("plain");
   configuring = true;
   reminding = false;
   searching = false;
@@ -1366,6 +1373,7 @@ function showAsk() {
   $("title").textContent = "Ask";
   strip.replaceChildren();
   main.classList.add("wide");
+  document.querySelector("header").classList.add("plain");
 
   const thread = el("div", { className: "thread" });
   const side = el("aside", { className: "side", ariaLabel: "Your chats" });
