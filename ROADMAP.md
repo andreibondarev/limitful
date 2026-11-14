@@ -9,8 +9,6 @@ says what already works and what has not been verified.
 - Let Ask search reminders.
 - An MCP server, so other assistants can query the Lifelog.
 - Open firmware. Research only so far.
-- Pair without erasing, from the setup guide: with the pendant on USB, send
-  `ble unpair` and then pair, in place of the factory reset.
 - Import the chats in a Limitless export before the service ends on
   December 1, 2026.
 

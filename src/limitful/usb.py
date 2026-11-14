@@ -2,7 +2,9 @@
 
 Plugged in, the pendant shows up as a serial port carrying its firmware log and
 a developer shell. That shell can erase the device, so this module only ever
-types the three read-only commands below. Nothing here changes the pendant.
+types the three read-only commands below, plus `ble unpair` when asked to make
+the pendant forget the computers it was paired with. Unpairing keeps the
+pendant's recordings; it is what lets a new computer pair without a factory reset.
 """
 
 from __future__ import annotations
@@ -22,6 +24,8 @@ READS = {
         r"(?P<millivolts>-?\d+) mV\s+(?P<milliamps>-?\d+) mA\s+(?P<celsius>-?\d+) C\s+"
         r"(?P<battery>\d+)%\s+(?P<mah>\d+) mAh"),
 }
+# The one line that changes the pendant, and the log line that confirms it worked.
+FORGET, FORGOTTEN = "ble unpair", "Unpaired BLE devices"
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _lock = threading.Lock()
 
@@ -60,13 +64,10 @@ def _ask(link, command: str, wanted: re.Pattern, timeout: float) -> dict:
     return {}
 
 
-def read(device: str | None = None, timeout: float = 1.5, opener=_open) -> dict | None:
-    """Firmware version, light brightness and battery detail, or None if not plugged in."""
-    device = device or find_port()
-    if device is None:
-        return None
+def _session(device: str | None, opener, talk):
+    """Open the pendant's shell, let its log settle, run `talk(link)`, close."""
     if not _lock.acquire(timeout=5):
-        raise UsbError("already reading the pendant over USB")
+        raise UsbError("already talking to the pendant over USB")
     try:
         try:
             link = opener(device)
@@ -78,16 +79,53 @@ def read(device: str | None = None, timeout: float = 1.5, opener=_open) -> dict 
             while time.monotonic() < deadline and time.monotonic() - quiet_since < 0.3:
                 if link.read(4096):
                     quiet_since = time.monotonic()
-            got: dict = {}
-            for command, wanted in READS.items():
-                got.update(_ask(link, command, wanted, timeout))
+            return talk(link)
         except OSError as err:
             raise UsbError(f"lost the pendant on {device}: {err}") from None
         finally:
             link.close()
     finally:
         _lock.release()
+
+
+def read(device: str | None = None, timeout: float = 1.5, opener=_open) -> dict | None:
+    """Firmware version, light brightness and battery detail, or None if not plugged in."""
+    device = device or find_port()
+    if device is None:
+        return None
+
+    def talk(link):
+        got: dict = {}
+        for command, wanted in READS.items():
+            got.update(_ask(link, command, wanted, timeout))
+        return got
+
+    got = _session(device, opener, talk)
     if not got:
         raise UsbError("the pendant did not answer over USB")
     numbers = ("brightness", "millivolts", "milliamps", "celsius", "battery", "mah")
     return {key: int(value) if key in numbers else value for key, value in got.items() if value is not None}
+
+
+def forget(device: str | None = None, timeout: float = 4.0, opener=_open) -> bool:
+    """Make the pendant forget every computer and phone it was paired with.
+
+    Its recordings are kept. Returns False if no pendant is plugged in, and
+    raises UsbError if the pendant does not confirm.
+    """
+    device = device or find_port()
+    if device is None:
+        return False
+
+    def talk(link):
+        link.write(FORGET.encode() + b"\r")
+        heard, deadline = "", time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            heard += _ANSI.sub("", link.read(4096).decode("utf-8", "replace"))
+            if FORGOTTEN in heard:
+                return True
+        return False
+
+    if not _session(device, opener, talk):
+        raise UsbError("the pendant did not confirm that it has forgotten its old computer")
+    return True

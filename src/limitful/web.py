@@ -223,6 +223,19 @@ class Library:
             config.update(led_brightness=wired["brightness"])  # the true value, not our last guess
         return dict(self.pendant(), usb=wired)
 
+    def forget_over_usb(self) -> dict:
+        """Tell a plugged-in pendant to forget its old computers, so it can pair here unreset."""
+        from . import usb
+
+        try:
+            if not usb.forget():
+                raise ValueError("No pendant is plugged in. Connect it to this computer with its "
+                                 "USB cable, and use a cable that carries data, not only power.")
+        except usb.UsbError as err:
+            raise ValueError(f"Could not reach the pendant over USB: {err}") from None
+        self._pendant = {"checked": None, "error": None}
+        return dict(self.pendant(), forgotten=True)
+
     def set_paused(self, paused: bool) -> dict:
         self._with_store(lambda store: store.pause() if paused else store.resume())
         return self.pendant()
@@ -782,6 +795,8 @@ def make_handler(library: Library):
                         return self._json(library.check_pendant())
                     if action == "usb":
                         return self._json(library.read_usb())
+                    if action == "forget":
+                        return self._json(library.forget_over_usb())
                     if action == "brightness":
                         return self._json(library.set_brightness(body.get("value")))
                     if action == "sync":

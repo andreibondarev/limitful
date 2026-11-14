@@ -49,6 +49,21 @@ def test_only_read_only_commands_can_be_typed():
                    for word in ("set", "erase", "reset", "clear", "write", "push", "unpair", "wipe"))
 
 
+def test_forget_types_one_line_and_waits_for_the_pendant_to_confirm(monkeypatch):
+    port = FakePort({"ble unpair": "[10:33:54.8] <inf> bluetooth: Unpairing BLE\r\n"
+                                   "[10:33:55.0] <inf> bluetooth: Unpaired BLE devices\r\n"})
+    assert usb.forget("/dev/fake", timeout=0.3, opener=lambda device: port) is True
+    assert port.typed == ["ble unpair"] and port.closed
+
+    silent = FakePort({})
+    with pytest.raises(usb.UsbError, match="did not confirm"):
+        usb.forget("/dev/fake", timeout=0.2, opener=lambda device: silent)
+    assert silent.typed == ["ble unpair"] and silent.closed
+
+    monkeypatch.setattr(usb, "find_port", lambda: None)
+    assert usb.forget() is False
+
+
 def test_partial_and_missing_answers():
     part = usb.read("/dev/fake", timeout=0.2, opener=lambda d: FakePort({"dev ver": "APP-VERSION: 2.0.0\r\n"}))
     assert part == {"firmware": "2.0.0"}

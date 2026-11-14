@@ -301,7 +301,8 @@ From the command line, `uv run limitful status` shows the same readings and
 With the pendant plugged in by USB cable, the section also shows its firmware
 version, battery voltage and temperature, and the light slider shows the
 pendant's real brightness. These are read over the pendant's USB shell, using
-three read-only commands and nothing else.
+three read-only commands. The only other thing Limitful ever types there is
+`ble unpair`, and only when you click Forget the old computer (see Pairing).
 
 - **Pause** stops the app keeping audio. The pendant itself cannot be told to
   stop recording (no such command is known, and its live-stream mode keeps
@@ -328,17 +329,21 @@ be told to forget, and then it pairs like new and keeps its audio. This was
 done on a real pendant (firmware 1.1.20), and the 1,400 pages stored on it
 survived:
 
-1. Plug the pendant in and type `ble unpair` into its USB shell (see Hardware
-   notes; 115200 baud). The pendant forgets every computer and phone.
+1. Plug the pendant in with its USB cable. In the setup guide choose
+   **Keep its recordings** at the pairing step, or open Settings, Pendant,
+   Pairing and click **Pair without erasing**. Click **Forget the old
+   computer**: Limitful types `ble unpair` into the pendant's USB shell and
+   waits for it to confirm. The pendant forgets every computer and phone.
 2. On a computer that was paired with it before, remove Pendant under
    Bluetooth in System Settings, then turn Bluetooth off and on. Without this
    the computer keeps trying its old key and cannot connect at all. A computer
    that has never seen the pendant should not need this step; that case was
    not tried.
-3. Run `uv run limitful pair` and accept the connection request. No button
-   press on the pendant is needed.
+3. Click **Pair** and accept the connection request. No button press on the
+   pendant is needed.
 
-Limitful does not send `ble unpair` for you yet.
+The steps were done by hand on the real pendant. The buttons that now do them
+have only been run against a simulated one.
 
 ### Speaker labels
 
@@ -562,7 +567,7 @@ that your computer holds the only copy, so back up the data folder.
 
 - `protocol.py`: the wire format (protobuf-style messages over one BLE service).
 - `client.py`: connect, set the clock, read storage status, download pages.
-- `usb.py`: read-only readings over the pendant's USB shell.
+- `usb.py`: readings over the pendant's USB shell, and the one `ble unpair` command.
 - `store.py`: the SQLite store: raw pages, recordings, lines, conversations,
   reminders and chats.
 - `ogg.py`: a small Ogg Opus writer.
@@ -634,7 +639,7 @@ shell prompt (`uart:~$`). Listening to it, without typing anything, showed:
 - Bluetooth also offers the Nordic UART Service.
 
 The shell is a developer console. `help` lists its commands and `<command> -h`
-lists subcommands. Only read-only commands have been run. What they showed:
+lists subcommands. Only read-only commands and `ble unpair` have been run. What they showed:
 
 - `config list`: settings include `led_brightness`, `vad_threshold_ms` (5000),
   `allow_recording_on_usb`, `sync_mode`, microphone and beamforming debug

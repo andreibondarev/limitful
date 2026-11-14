@@ -411,6 +411,8 @@
   .welcome .pill.plain { border: 0; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
   .welcome .status { margin: 1.1rem 0 0; line-height: 1.5; min-height: 1.5em; }
   .welcome .status:empty { display: none; }
+  .welcome .plug { display: inline-block; padding: 0.05rem 0.55rem; border-radius: 999px; background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+  .welcome .plug.yes { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
   .welcome .trouble { padding: 0.7rem 0.9rem; border-left: 3px solid #b3261e; background: color-mix(in srgb, #b3261e 8%, transparent); line-height: 1.5; }
   .welcome .trouble p { margin: 0; }
   .welcome .trouble .advice { margin-top: 0.5rem; color: var(--muted); font-size: 0.93rem; }
@@ -942,13 +944,14 @@ async function showWelcome(step = "start") {
   try { state = await get("/api/welcome"); } catch { /* assume a fresh start */ }
   if (!welcoming) return;
 
+  const way = (pic, title, about, go) => {
+    const b = el("button", { className: "way" }, icon(pic, 26), el("span", {}, el("b", { textContent: title }), el("small", { textContent: about })));
+    b.addEventListener("click", go);
+    return b;
+  };
+
   const steps = {
     start() {
-      const way = (pic, title, about, go) => {
-        const b = el("button", { className: "way" }, icon(pic, 26), el("span", {}, el("b", { textContent: title }), el("small", { textContent: about })));
-        b.addEventListener("click", go);
-        return b;
-      };
       const note = el("p", { className: "small" });
       page("", "Keep your pendant working",
         el("p", { className: "lede", textContent: "Limitful takes recordings off your Limitless Pendant, turns them into text on this computer, and keeps them here to read, search and ask about. No Limitless account is involved. Where would you like to start?" }),
@@ -967,7 +970,7 @@ async function showWelcome(step = "start") {
       const item = (lead, rest) => el("li", {}, el("b", { textContent: lead }), " ", rest);
       page("before", "Before you connect",
         el("ol", { className: "prep" },
-          item("Let the Limitless app sync one last time.", "Pairing with this computer resets the pendant, and that erases any audio it has not handed over yet. Skip this if you no longer use the app."),
+          item("Let the Limitless app sync one last time.", "Pairing the usual way resets the pendant, and that erases any audio it has not handed over yet. Skip this if you no longer use the app, or if you have the pendant's USB cable: with it you can pair and keep the audio."),
           item("Ask Limitless for your data export.", "The service ends on December 1, 2026 and its copy of your history goes with it. You can import the export here whenever it arrives."),
           item("Turn off Bluetooth on your phone.", "The pendant talks to one device at a time, and the phone usually gets there first. Quitting the Limitless app also works.")),
         el("p", { className: "small", textContent: "Your computer may ask whether this program can use Bluetooth. Allow it." }),
@@ -1002,6 +1005,71 @@ async function showWelcome(step = "start") {
     },
 
     pair() {
+      page("connect", "Pair your pendant",
+        el("p", { className: "lede", textContent: "The pendant only accepts a new computer once it has forgotten the old one. There are two ways to get there." }),
+        way("plug", "Keep its recordings", "Plug the pendant in with its USB cable and it is told to forget its old computer. Nothing on it is erased.", () => steps.keep()),
+        way("pendant", "Reset the pendant", "No cable needed. A button press puts it in pairing mode, which erases any audio it has not synced yet.", () => steps.reset()),
+        el("div", { className: "row" }, button("Back", () => steps.before())));
+    },
+
+    keep() {
+      const plugged = el("span", { className: "plug", textContent: "Looking for it…" });
+      const status = el("p", { className: "status", role: "status" });
+      const forget = button("Forget the old computer", async () => {
+        forget.disabled = true;
+        status.replaceChildren("Telling the pendant to forget…");
+        try { await post("/api/pendant", { action: "forget" }); }
+        catch (err) { status.replaceChildren(trouble(err.message)); forget.disabled = false; return; }
+        watching = false;
+        status.textContent = "The pendant has forgotten its old computer and kept its recordings. Do step 3 if it applies, then pair.";
+        forget.replaceWith(start);
+        start.focus();
+      }, "main");
+      forget.disabled = true;
+      const start = button("Pair", async () => {
+        start.disabled = true;
+        status.replaceChildren("Waiting for the pendant. Accept the connection request when your computer shows it.");
+        try { await post("/api/pendant", { action: "pair" }); }
+        catch (err) { status.replaceChildren(trouble(err.message)); start.disabled = false; return; }
+        const job = await follow(() => {});
+        if (job.error) {
+          status.replaceChildren(trouble(job.error, "If this computer was paired with the pendant before, remove Pendant under Bluetooth in System Settings, turn Bluetooth off and on, and try again."));
+          start.textContent = "Try again";
+          start.disabled = false;
+          return;
+        }
+        status.textContent = "Paired. The pendant accepted this computer and still has its recordings.";
+        start.replaceWith(button("Continue", () => steps.sync(), "main"));
+      }, "main");
+      page("connect", "Pair and keep the recordings",
+        el("ol", { className: "prep" },
+          el("li", {}, "Plug the pendant into this computer with its USB cable. ", plugged),
+          el("li", { textContent: "Click Forget the old computer. The pendant drops every computer and phone it was paired with, and keeps its audio." }),
+          el("li", { textContent: "If this computer was paired with the pendant before, remove Pendant under Bluetooth in System Settings, then turn Bluetooth off and on. Otherwise the computer keeps trying its old key." }),
+          el("li", { textContent: "Click Pair and accept the connection request. There is no button to press on the pendant." })),
+        el("p", { className: "small", textContent: "The Limitless app will stop seeing the pendant until it is paired there again." }),
+        status,
+        el("div", { className: "row" }, forget, button("Reset it instead", () => steps.reset()), button("Back", () => steps.pair())));
+      // Watch for the cable until the pendant shows up.
+      let watching = true;
+      const look = async () => {
+        if (!watching || !welcoming || !plugged.isConnected) return;
+        let seen = false;
+        try { const p = await post("/api/pendant", { action: "usb" }); seen = Boolean(p.usb); } catch { /* look again */ }
+        if (!watching || !plugged.isConnected) return;
+        if (seen) {
+          plugged.textContent = "Plugged in";
+          plugged.className = "plug yes";
+          forget.disabled = false;
+          return;
+        }
+        plugged.textContent = "Not plugged in yet";
+        setTimeout(look, 2500);
+      };
+      look();
+    },
+
+    reset() {
       const { node, glow, halo } = pendantDrawing(150);
       const light = (colour, pulsing) => {
         glow.setAttribute("fill", colour);
@@ -1042,7 +1110,7 @@ async function showWelcome(step = "start") {
             el("li", { textContent: "A blue light means it is ready. Accept the connection request your computer shows." }))),
         el("p", { className: "hold", textContent: "This resets the pendant. Any audio it has not synced yet is erased." }),
         status,
-        el("div", { className: "row" }, start, button("Back", () => steps.before())));
+        el("div", { className: "row" }, start, button("Back", () => steps.pair())));
     },
 
     sync() {
@@ -2555,7 +2623,9 @@ async function showSettings() {
         el("li", { textContent: "On the pendant, press the button once and release, then straight away press and hold. A purple light appears; keep holding until it goes out." }),
         el("li", { textContent: "A blue light means it is ready. Accept the connection request your computer shows." })),
       el("p", { className: "small", textContent: "Unpair makes the pendant forget this computer, so it can be paired with another. Its recordings are kept. Your computer may also remember the pendant: if pairing again fails, remove it under Bluetooth in System Settings." }),
-      el("div", { className: "row" }, pair, unpair))),
+      el("div", { className: "row" }, pair, unpair),
+      el("p", { className: "small" }, "With the pendant's USB cable you can pair without the reset, and keep the audio on it. ",
+        (() => { const b = el("button", { className: "pill", textContent: "Pair without erasing" }); b.addEventListener("click", () => showWelcome("keep")); return b; })()))),
     transcription: el("section", { className: "setup" },
     el("h2", {}, ...withIcon("wave", "Transcription", 22)),
     el("p", { textContent: "What turns new recordings from the pendant into text. Conversations imported from Limitless keep the transcript they came with." }),

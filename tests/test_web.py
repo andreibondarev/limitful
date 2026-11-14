@@ -461,6 +461,23 @@ def test_hosted_lines_show_numbered_speakers_without_the_import_lead(site, tmp_p
     assert '"offset": 1200' in json.dumps(reply)
 
 
+def test_forget_over_usb(site, monkeypatch):
+    from limitful import usb
+
+    monkeypatch.setattr(usb, "forget", lambda: True)
+    assert json.loads(site("/api/pendant", JSON, b'{"action": "forget"}')[2])["forgotten"] is True
+
+    monkeypatch.setattr(usb, "forget", lambda: False)
+    status, _, body = site("/api/pendant", JSON, b'{"action": "forget"}')
+    assert status == 400 and b"No pendant is plugged in" in body
+
+    def silent():
+        raise usb.UsbError("the pendant did not confirm that it has forgotten its old computer")
+    monkeypatch.setattr(usb, "forget", silent)
+    status, _, body = site("/api/pendant", JSON, b'{"action": "forget"}')
+    assert status == 400 and b"did not confirm" in body
+
+
 def test_usb_readings_reach_the_page_and_correct_the_light(site, monkeypatch):
     from limitful import config, usb
 
