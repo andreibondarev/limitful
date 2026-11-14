@@ -368,7 +368,27 @@ shell prompt (`uart:~$`). Listening to it, without typing anything, showed:
   colour ("Recording while charging, LED alternating colors").
 - Bluetooth also offers the Nordic UART Service.
 
-No command has been typed into the shell yet, so what it accepts is unknown.
+The shell is a developer console. `help` lists its commands and `<command> -h`
+lists subcommands. Only read-only commands have been run. What they showed:
+
+- `config list`: settings include `led_brightness`, `vad_threshold_ms` (5000),
+  `allow_recording_on_usb`, `sync_mode`, microphone and beamforming debug
+  options, and an unset server upload (`server_name`, `port_num`,
+  `ingest_token`, `upload_method: STREAM`, `upload_period_sec: 300`). There is
+  no setting that switches recording off.
+- `device list`: a battery gauge (bq27427), a motion sensor (lsm6dsm), NAND
+  flash, and no Wi-Fi device. The firmware has a Wi-Fi module, but this
+  pendant shows no radio for it.
+- `storage status`, `battery info`, `dev ver` and `time synced` print the
+  readings their names suggest, matching what Bluetooth reports.
+
+Commands that exist but have not been run: `button push [short|long|double-short]`
+(simulates the button, so a long push may switch the pendant off),
+`dev shipping_mode`, `dev reset`, `config set`, `ble unpair`, `ble set_name`,
+`date set`, `imu enable/disable`, `settings write/delete` and
+`mcuboot request_upgrade`. Several others erase storage or flash (`flash
+erase`, `ftl clear`, `storage clear`, `storage full-wipe`, `config reset`,
+`mcuboot erase`); do not run them unless you mean to.
 
 ## Not yet verified
 
@@ -387,8 +407,9 @@ No command has been typed into the shell yet, so what it accepts is unknown.
 - Try Deepgram against the real service and measure its speaker labels.
 - Let Ask search reminders.
 - An MCP server, so other assistants can query the Lifelog.
-- A real pause or power-off command, if the pendant has one. The USB serial
-  port has a shell that has not been tried; the firmware update service is
+- A real pause or power-off command, if the pendant has one. The USB
+  shell has no recording setting; its simulated long button push is untried,
+  and would only help while plugged in. The firmware update service is
   unexplored.
 - Open firmware. Research only so far.
 
