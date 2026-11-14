@@ -175,6 +175,18 @@
   /* A thin rule in the speaker's colour runs down the left of what they said. */
   .line.tinted { background: linear-gradient(var(--who), var(--who)) no-repeat calc(var(--gutter) - 0.85rem) 0 / 2px 100%; }
   .line.found span { box-shadow: 0 0 0 2px var(--accent); }
+  /* In a conversation, a speaker's turn is one paragraph; each thing said in it can be played. */
+  .turn { display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr); align-items: baseline; padding: 0.3rem 0; }
+  .turn time { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+  .turn p { margin: 0; max-width: 68ch; font-family: var(--voice); font-size: 1.2rem; line-height: 1.6; }
+  .turn.tinted { background: linear-gradient(var(--who), var(--who)) no-repeat calc(var(--gutter) - 0.85rem) 0.45rem / 2px calc(100% - 0.9rem); }
+  .say { border-radius: 3px; cursor: pointer; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .say:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .say.mute { cursor: text; }
+  .say.mute:hover { background: none; }
+  .say.on { background: var(--mark); color: var(--mark-ink); box-shadow: 0 0 0 3px var(--mark); }
+  .say.found { box-shadow: 0 0 0 2px var(--accent); }
+  .say.on.found { box-shadow: 0 0 0 3px var(--mark), 0 0 0 5px var(--accent); }
   .who { margin: 0.75rem 0 0 var(--gutter); font-size: 0.85rem; min-height: 1.5rem; }
   .who button {
     border: 0; background: none; padding: 0; cursor: pointer;
@@ -250,6 +262,16 @@
   .card[open] > summary h2 { color: var(--accent); }
   .card .meta { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
   .card .body { padding: 0 0 1.4rem; }
+  /* An open conversation keeps its title in view while you read down it. */
+  .card[open] > summary { position: sticky; top: var(--head, 10rem); z-index: 1; background: var(--paper); box-shadow: 0 1px 0 var(--rule); }
+  .card .brief {
+    margin: 0.2rem 0 0.7rem var(--gutter); padding: 0.8rem 1rem; max-width: 68ch;
+    border-radius: 12px; background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  .card .brief > ul { margin: 0; padding-left: 1.1rem; line-height: 1.5; }
+  .card .brief > ul + .todo { margin-top: 0.8rem; }
+  .card .brief > .todo { max-width: none; }
+  .card .brief > .todo:first-child { margin-top: 0; }
   .card .body > ul {
     margin: 0 0 0.6rem var(--gutter); padding-left: 1.1rem; max-width: 68ch;
     color: var(--muted); font-size: 0.95rem; line-height: 1.5;
@@ -629,7 +651,7 @@
 
   @media (max-width: 560px) {
     :root { --gutter: 4.4rem; }
-    .line span { font-size: 1.08rem; }
+    .line span, .turn p { font-size: 1.08rem; }
   }
 </style>
 </head>
@@ -1723,11 +1745,26 @@ function card(g, longest = 0) {
   return box;
 }
 
+/* One thing somebody said, set inline so a speaker's turn reads as a paragraph. Click to play. */
+function saying(u) {
+  const node = el("span", { className: "say", id: `u${u.id}`, textContent: u.text, title: clockSec.format(new Date(u.start)) });
+  if (!u.audio) { node.classList.add("mute"); return node; }
+  node.tabIndex = 0;
+  node.setAttribute("role", "button");
+  node.addEventListener("click", () => play(u));
+  node.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); play(u); } });
+  return node;
+}
+
+const TURN_PAUSE_MS = 3000, TURN_CHARS = 480;  // a pause, or this much text, starts a new paragraph
+
 function cardBody(g) {
   const nodes = [];
-  if (!g.sections.length && g.summary.length) nodes.push(el("ul", {}, ...g.summary.map((t) => el("li", { textContent: t }))));
+  // What the conversation came to, before the words themselves.
+  const brief = el("div", { className: "brief" });
+  if (!g.sections.length && g.summary.length) brief.append(el("ul", {}, ...g.summary.map((t) => el("li", { textContent: t }))));
   const open = g.reminders.filter((r) => r.status === "suggested" || r.status === "accepted");
-  nodes.push(...open.map((r) => {
+  brief.append(...open.map((r) => {
     let jump = null;
     if (r.line && g.own.some((u) => u.id === r.line)) {
       jump = el("button", { className: "jump", textContent: "Play the line" });
@@ -1739,6 +1776,7 @@ function cardBody(g) {
     }
     return todoRow(r, () => { renderDay(); countReminders(); }, jump);
   }));
+  if (brief.childElementCount) nodes.push(brief);
 
   const copy = el("button", { className: "copy", textContent: "Copy as Markdown" });
   copy.addEventListener("click", async () => {
@@ -1752,6 +1790,7 @@ function cardBody(g) {
   const tint = tinter();
   const who = (x) => x.speaker ? (x.speaker.id ?? x.speaker.name) : 0;
   const headings = [...g.sections];
+  let turn = null, chars = 0, lastTimed = null;
   g.own.forEach((u, n) => {
     const before = g.own[n - 1];
     let fresh = !before;
@@ -1762,13 +1801,23 @@ function cardBody(g) {
     }
     const gap = before && u.start - before.end > QUIET_MS;
     if (gap) nodes.push(el("div", { className: "quiet", textContent: quietFor(u.start - before.end) }));
-    // Say who is speaking whenever it changes, and at the top of each section.
+    const changed = fresh || gap || who(before) !== who(u);
     const colour = tint(u.speaker);
-    if (labelled && (fresh || gap || who(before) !== who(u))) nodes.push(whoRow(u.speaker, colour));
-    const sameMinute = !fresh && !gap && Math.floor(before.start / 60000) === Math.floor(u.start / 60000);
-    const row = lineButton(u, null, sameMinute);
-    if (colour) { row.classList.add("tinted"); row.style.setProperty("--who", colour); }
-    nodes.push(row);
+    // Say who is speaking whenever it changes, and at the top of each section.
+    if (labelled && changed) nodes.push(whoRow(u.speaker, colour));
+    // A turn runs on as one paragraph until the speaker changes, pauses, or has said a good deal.
+    if (changed || !turn || u.start - before.end > TURN_PAUSE_MS || chars > TURN_CHARS) {
+      const minute = Math.floor(u.start / 60000);
+      const text = el("p", {});
+      turn = el("div", { className: "turn" },
+        el("time", { textContent: minute === lastTimed ? "" : clock.format(new Date(u.start)) }), text);
+      lastTimed = minute;
+      if (colour) { turn.classList.add("tinted"); turn.style.setProperty("--who", colour); }
+      nodes.push(turn);
+      chars = 0;
+    }
+    turn.lastChild.append(saying(u), " ");
+    chars += u.text.length;
   });
   return nodes;
 }

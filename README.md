@@ -122,7 +122,8 @@ uv run limitful serve
 Opens the Lifelog at http://localhost:4747. Each day is a list of
 conversations with their time, title and length, under a strip showing when
 speech happened; click the strip to jump to that moment. Open a conversation
-to read it under its section headings, click any line to hear it (playback
+to read it under its section headings, each speaker's turn set as a
+paragraph; click any sentence to hear it (playback
 carries on through the conversation, with a timeline to jump around in), or
 copy it as Markdown. Each speaker in a conversation has a colour, stray
 words with no conversation around them fold into one quiet row, and on a wide

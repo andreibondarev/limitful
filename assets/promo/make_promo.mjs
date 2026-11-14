@@ -319,7 +319,7 @@ await caption("Answers link to the lines they are based on");
 await sleep(2300);
 await caption(null);
 await click("document.querySelector('.answer a.cite')");
-await until("!document.getElementById('player').hidden && document.querySelector('.line.found, .line.on')");
+await until("!document.getElementById('player').hidden && document.querySelector('.say.found, .say.on, .line.found, .line.on')");
 await caption("…and every link plays the moment it was said", "lift");
 await sleep(3300);
 if (await run("audio.paused")) console.warn("warning: playback had stopped by the end of the last scene; record again");
