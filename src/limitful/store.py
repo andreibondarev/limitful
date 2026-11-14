@@ -1046,14 +1046,19 @@ class Store:
             })
         return out
 
-    def reminders(self) -> list[dict]:
-        """Reminders still worth showing: suggested and accepted, newest first."""
+    def reminders(self, include_done: bool = False) -> list[dict]:
+        """Reminders still worth showing: suggested and accepted, newest first.
+
+        With include_done, finished ones come too, so they can be shown ticked off
+        and brought back. Dismissed ones never do.
+        """
+        statuses = "('suggested', 'accepted', 'done')" if include_done else "('suggested', 'accepted')"
         rows = self.db.execute(
             "SELECT r.id, r.text, r.status, r.created_ms, c.title, c.id, c.start_ms, "
             "u.id, u.text, u.start_ms FROM reminders r "
             "JOIN conversations c ON c.id = r.conversation_id "
             "LEFT JOIN utterances u ON u.id = r.utterance_id "
-            "WHERE r.status IN ('suggested', 'accepted') ORDER BY c.start_ms DESC, r.id"
+            f"WHERE r.status IN {statuses} ORDER BY c.start_ms DESC, r.id"
         ).fetchall()
         out = []
         for rid, text, status, when, title, cid, c_start, line_id, line_text, line_start in rows:

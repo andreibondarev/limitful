@@ -157,8 +157,12 @@ def test_conversations_and_reminders(site):
     status, _h, body = site("/api/reminders/1", JSON, b'{"status": "accepted"}')
     assert (status, json.loads(body)) == (200, {"id": 1, "status": "accepted"})
     assert json.loads(site("/api/reminders")[2])[0]["status"] == "accepted"
-    assert site("/api/reminders/1", JSON, b'{"status": "dismissed"}')[0] == 200
+    # Finished reminders leave the working list but can still be listed, to tick back.
+    assert site("/api/reminders/1", JSON, b'{"status": "done"}')[0] == 200
     assert json.loads(site("/api/reminders")[2]) == []
+    assert [r["status"] for r in json.loads(site("/api/reminders?done=1")[2])] == ["done"]
+    assert site("/api/reminders/1", JSON, b'{"status": "dismissed"}')[0] == 200
+    assert json.loads(site("/api/reminders?done=1")[2]) == []
 
 
 def test_reminder_updates_reject_bad_requests(site):

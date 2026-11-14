@@ -199,6 +199,47 @@
   .todo .where a { color: var(--accent); text-underline-offset: 3px; }
   .todo .where q { display: block; margin-top: 0.2rem; font-family: var(--voice); font-size: 0.95rem; font-style: italic; }
   .todo .jump { border-style: dashed; }
+  .remind { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 3.5rem; align-items: start; }
+  .remind h2 { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 0.3rem; font-size: 1.6rem; }
+  .remind h2 small { font-family: var(--chrome); font-size: 0.85rem; color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 0.05rem 0.55rem; }
+  .remind h2 .icon { color: var(--accent); }
+  .remind .about { margin: 0 0 0.4rem; color: var(--muted); line-height: 1.5; max-width: 34rem; }
+  .remind h3 { margin: 1.6rem 0 0.5rem; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+  .remind .none { color: var(--muted); margin: 1rem 0; line-height: 1.5; }
+  .idea, .task { display: grid; gap: 0.9rem; align-items: start; padding: 0.85rem 0; border-top: 1px solid var(--rule); }
+  .idea { grid-template-columns: minmax(0, 1fr) auto; }
+  .task { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .idea p, .task p { margin: 0; font-family: var(--voice); font-size: 1.15rem; line-height: 1.4; }
+  .from { margin-top: 0.3rem; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
+  .from .icon { margin-right: 0.35rem; vertical-align: -0.15em; }
+  .from a { color: var(--accent); text-underline-offset: 3px; }
+  .from q { display: block; margin-top: 0.15rem; font-family: var(--voice); font-style: italic; font-size: 0.95rem; }
+  .acts { display: flex; gap: 0.4rem; }
+  .round {
+    width: 2.2rem; height: 2.2rem; flex: none; display: grid; place-items: center; cursor: pointer;
+    border: 1px solid var(--rule); border-radius: 50%; background: transparent; color: var(--muted);
+  }
+  .round .icon { margin: 0; }
+  .round:hover { border-color: #b3261e; color: #b3261e; }
+  .round.yes { border-color: var(--accent); color: var(--accent); }
+  .round.yes:hover { background: var(--accent); color: var(--paper); border-color: var(--accent); }
+  .round.tick { width: 1.5rem; height: 1.5rem; margin-top: 0.2rem; border: 1.5px solid var(--accent); color: transparent; }
+  .round.tick:hover { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .round.tick.ticked { background: var(--accent); color: var(--paper); }
+  .round.tick .icon { width: 14px; height: 14px; }
+  .round.quiet { border-color: transparent; opacity: 0; }
+  .task:hover .round.quiet, .round.quiet:focus-visible { opacity: 1; }
+  .mine { position: sticky; top: 6rem; padding: 1.2rem 1.4rem 0.6rem; border: 1px solid var(--rule); border-radius: 16px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  .mine .task:first-of-type { border-top: 0; }
+  .task.was p { color: var(--muted); text-decoration: line-through; font-size: 1rem; }
+  .finished { margin-top: 0.6rem; border-top: 1px solid var(--rule); padding-top: 0.6rem; }
+  .finished summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+  .finished .task { border-top: 0; padding: 0.4rem 0; }
+  .oops { grid-column: 1 / -1; color: #b3261e; }
+  @media (max-width: 900px) {
+    .remind { grid-template-columns: 1fr; gap: 2rem; }
+    .mine { position: static; order: -1; }
+  }
   .todo.accepted { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
   #status {
     margin: 0.7rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.9rem;
@@ -505,6 +546,8 @@ const ICONS = {
   chats: "M4 6h16 M4 12h16 M4 18h10",
   people: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z M3.5 19a5.5 5.5 0 0 1 11 0 M16 11a2.5 2.5 0 1 0 0-5 M17.5 14.2A4.8 4.8 0 0 1 20.5 19",
   day: "M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z M4 10h16 M8 4v4 M16 4v4",
+  check: "M5 12.5l4.5 4.5L19 7.5",
+  x: "M6.5 6.5l11 11 M17.5 6.5l-11 11",
   pause: "M9 5v14 M15 5v14",
   play: "M8 5v14l11-7Z",
   link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
@@ -519,7 +562,7 @@ function svgEl(tag, attrs = {}) {
 function icon(name, size = 18) {
   const svg = svgEl("svg", { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor",
     "stroke-width": 1.7, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", class: "icon" });
-  svg.append(svgEl("path", { d: ICONS[name] }));
+  if (ICONS[name]) svg.append(svgEl("path", { d: ICONS[name] }));
   return svg;
 }
 /* The Limitful asterisk, as the answering voice in Ask. */
@@ -604,6 +647,7 @@ async function countReminders() {
   } catch { /* leave the label as it is */ }
 }
 
+/* Reminders: suggestions to sort through on the left, your own list on the right. */
 async function showReminders() {
   main.classList.remove("wide");
   document.querySelector("header").classList.add("plain");
@@ -617,19 +661,71 @@ async function showReminders() {
   $("title").textContent = "Reminders";
   strip.replaceChildren();
   let all;
-  try { all = await get("/api/reminders"); }
+  try { all = await get("/api/reminders?done=1"); }
   catch (err) {
     main.replaceChildren(el("p", { className: "empty", textContent: `Could not load reminders. ${err.message}` }));
     return;
   }
-  const group = (heading, status) => {
-    const rows = all.filter((r) => r.status === status);
-    return rows.length ? [el("h2", { textContent: heading }), ...rows.map((r) => todoRow(r, showReminders, whereLink(r)))] : [];
+  const set = async (r, status, row) => {
+    try { await post(`/api/reminders/${r.id}`, { status }); await showReminders(); }
+    catch (err) { row.append(el("small", { className: "oops", textContent: `Could not save. ${err.message}` })); }
   };
-  const nodes = [...group("To review", "suggested"), ...group("Accepted", "accepted")];
-  main.replaceChildren(...(nodes.length ? nodes : [el("div", { className: "empty" },
-    el("p", { textContent: "No reminders to review." }),
-    el("p", {}, "They are suggested when conversations are summarised. Run ", el("code", { textContent: "limitful digest" }), "."))]));
+  const round = (name, label, onClick, extra = "") => {
+    const b = el("button", { className: `round ${extra}`, ariaLabel: label, title: label }, icon(name, 18));
+    b.addEventListener("click", onClick);
+    return b;
+  };
+  const source = (r) => {
+    const go = el("a", { href: `#${r.day}`, textContent: r.from });
+    go.addEventListener("click", (e) => { e.preventDefault(); openDay(r.day, r.line?.id, r.conversation, true); });
+    const box = el("div", { className: "from" }, icon("ask", 14), go);
+    if (r.line) box.append(el("q", { textContent: r.line.text.length > 150 ? `${r.line.text.slice(0, 150)}…` : r.line.text }));
+    return box;
+  };
+
+  // --- suggestions, grouped by the day they came up
+  const suggested = all.filter((r) => r.status === "suggested");
+  const inbox = el("section", { className: "inbox" },
+    el("h2", {}, star(22), el("span", { textContent: "Suggested" }), el("small", { textContent: String(suggested.length) })),
+    el("p", { className: "about", textContent: "Things someone said they would do, found in your conversations. Keep the ones that matter; the link plays the moment it came up." }));
+  let lastDay = null;
+  for (const r of suggested) {
+    const when = new Date(r.line ? r.line.start : r.start);
+    const key = dayKey(when);
+    if (key !== lastDay) { lastDay = key; inbox.append(el("h3", { textContent: longDay.format(when) })); }
+    const row = el("article", { className: "idea" });
+    row.append(
+      el("div", {}, el("p", { textContent: r.text }), source(r)),
+      el("div", { className: "acts" },
+        round("check", "Keep this reminder", () => set(r, "accepted", row), "yes"),
+        round("x", "Dismiss this suggestion", () => set(r, "dismissed", row))));
+    inbox.append(row);
+  }
+  if (!suggested.length) inbox.append(el("p", { className: "none", textContent: "Nothing to sort through. New suggestions appear as conversations are summarised." }));
+
+  // --- your list: what you kept, then what you have finished
+  const kept = all.filter((r) => r.status === "accepted"), done = all.filter((r) => r.status === "done");
+  const list = el("section", { className: "mine" },
+    el("h2", {}, icon("reminders", 22), el("span", { textContent: "To do" }), el("small", { textContent: String(kept.length) })));
+  for (const r of kept) {
+    const row = el("article", { className: "task" });
+    row.append(
+      round("", "Mark as done", () => set(r, "done", row), "tick"),
+      el("div", {}, el("p", { textContent: r.text }), source(r)),
+      round("x", "Remove from your list", () => set(r, "dismissed", row), "quiet"));
+    list.append(row);
+  }
+  if (!kept.length) list.append(el("p", { className: "none", textContent: "Keep a suggestion and it lands here." }));
+  if (done.length) {
+    const finished = el("details", { className: "finished" }, el("summary", { textContent: `Done (${done.length})` }));
+    for (const r of done) {
+      const row = el("article", { className: "task was" });
+      row.append(round("check", "Not done after all", () => set(r, "accepted", row), "tick ticked"), el("div", {}, el("p", { textContent: r.text })));
+      finished.append(row);
+    }
+    list.append(finished);
+  }
+  main.replaceChildren(el("div", { className: "remind" }, inbox, list));
   countReminders();
 }
 

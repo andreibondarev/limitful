@@ -435,8 +435,8 @@ class Library:
         hi = int((start + timedelta(days=1)).timestamp() * 1000)
         return self._with_store(lambda store: store.conversations(lo, hi))
 
-    def reminders(self) -> list[dict]:
-        return self._with_store(lambda store: store.reminders())
+    def reminders(self, include_done: bool = False) -> list[dict]:
+        return self._with_store(lambda store: store.reminders(include_done))
 
     def set_reminder_status(self, reminder_id: int, status: str) -> None:
         self._with_store(lambda store: store.set_reminder_status(reminder_id, status))
@@ -482,7 +482,8 @@ def make_handler(library: Library):
                         return self._text(HTTPStatus.BAD_REQUEST, "Day must be YYYY-MM-DD.")
                     return self._json(library.conversations(day))
                 if path == "/api/reminders":
-                    return self._json(library.reminders())
+                    done = parse_qs(url.query).get("done", ["0"])[0] == "1"
+                    return self._json(library.reminders(include_done=done))
                 if path == "/api/status":
                     return self._json(library.job)
                 if path == "/api/settings":
