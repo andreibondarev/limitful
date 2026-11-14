@@ -30,7 +30,9 @@ history you export before then stays usable.
 - **Pendant controls**: battery and storage, light brightness, pause, pair and
   unpair.
 
-<p align="center"><img src="assets/screenshots/day.png" width="820" alt="A day in the Lifelog: a recap of the day, then its conversations"></p>
+<p align="center"><a href="assets/promo/limitful-promo.mp4"><img src="assets/promo/poster.jpg" width="820" alt="Watch the 73-second video: a day in the Lifelog, with a recap of the day and its conversations"></a></p>
+
+<p align="center"><a href="assets/promo/limitful-promo.mp4">Watch the 73-second video</a> (silent, with captions; <a href="assets/promo/README.md">how it is made</a>)</p>
 
 | Ask, with links to the lines behind the answer | Reminders, found in what was said |
 |---|---|
@@ -621,7 +623,6 @@ erase`, `ftl clear`, `storage clear`, `storage full-wipe`, `config reset`,
 - Import the chats in a Limitless export.
 - Let Ask search reminders.
 - An MCP server, so other assistants can query the Lifelog.
-- A short promo video of the app, recorded from the demo data.
 - A real pause or power-off command, if the pendant has one. The USB
   shell has no recording setting; its simulated long button push is untried,
   and would only help while plugged in. The firmware update service is

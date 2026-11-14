@@ -1,0 +1,34 @@
+# The promo video
+
+`limitful-promo.mp4` is a 73-second silent walk through the app, with captions:
+the setup guide, a day in the Lifelog, search, reminders, Settings and Ask.
+`poster.jpg` is the still the main README links from.
+
+Everything in it is made up. The conversations are the ones `limitful demo`
+writes, and `pretend_server.py` stands in for the pendant, the speech model
+download and Ask, so making the video touches no real pendant, sends nothing to
+a hosted model and never opens your own data folder. The line that "plays" at
+the end has a silent recording behind it.
+
+## Making it again
+
+When the app's look changes, record it again:
+
+```sh
+node assets/promo/make_promo.mjs
+```
+
+It needs node 22 or newer, `uv`, `ffmpeg` and Google Chrome, takes about two
+minutes, and overwrites the video and the poster. It starts the pretend server
+on port 4811 and a headless Chrome, drives the page with real clicks and
+typing, films it, and assembles the frames with ffmpeg.
+
+Settings, from the environment: `PROMO_WORK` (folder for frames and the
+scratch data; a temporary folder by default), `PROMO_PORT`,
+`PROMO_CHROME_PORT`, `CHROME` (path to the browser), `PROMO_SPEED` (playback
+speed against filming speed, 1.12 by default) and `PROMO_CRF` (ffmpeg quality,
+25 by default; lower is better and bigger).
+
+The scenes are the lines after `scene("…")` in `make_promo.mjs`: each is a
+caption, some clicks and a pause. If a button is renamed in the app, the script
+stops and names what it was waiting for.
