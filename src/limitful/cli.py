@@ -376,7 +376,7 @@ async def _cmd_transcribe(args) -> int:
         print(f"Transcribed {audio_s / 60:.1f} min of audio in {took:.0f} s: {added} line(s).")
         if not added:
             print("No speech was detected in the new audio.")
-        if not args.no_speakers:
+        if args.speakers:
             _label_speakers(store)
         for path in files:
             print(f"  {path}")
@@ -416,7 +416,7 @@ async def _cmd_watch(args) -> int:
     try:
         await watch(store, interval=args.interval, ack=not args.keep,
                     get_transcriber=None if args.no_transcribe else get_transcriber,
-                    get_embedder=None if args.no_transcribe or args.no_speakers else get_embedder,
+                    get_embedder=get_embedder if args.speakers and not args.no_transcribe else None,
                     summarizer=summarizer)
     finally:
         store.close()
@@ -511,7 +511,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
     p.add_argument("--redo", action="store_true",
                    help="transcribe everything again, replacing existing transcripts")
-    p.add_argument("--no-speakers", action="store_true", help="skip speaker labels")
+    p.add_argument("--speakers", action="store_true",
+                   help="experimental: guess speakers by voice (unreliable on real recordings)")
     p.set_defaults(func=_cmd_transcribe)
 
     p = sub.add_parser("speakers", help="label lines by speaker; list, name or merge speakers")
@@ -556,7 +557,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--keep", action="store_true",
                    help="do not free synced audio on the pendant")
     p.add_argument("--no-transcribe", action="store_true", help="download audio only")
-    p.add_argument("--no-speakers", action="store_true", help="skip speaker labels")
+    p.add_argument("--speakers", action="store_true",
+                   help="experimental: guess speakers by voice (unreliable on real recordings)")
     llm_args(p)
     p.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL})")
     p.add_argument("--language", help="language code such as en (default: detect per file)")

@@ -210,7 +210,6 @@ class Library:
 
     def _sync_job(self) -> None:
         from . import watch as watch_mod
-        from .speakers import TitanetEmbedder
         from .store import Store
         from .transcribe import WhisperTranscriber
 
@@ -225,7 +224,7 @@ class Library:
                 try:
                     result = asyncio.run(watch_mod.run_cycle(
                         store, ack=True, get_transcriber=WhisperTranscriber,
-                        get_embedder=TitanetEmbedder, summarizer=summarizer,
+                        get_embedder=None, summarizer=summarizer,  # voice labels are opt-in: see README
                         on_stage=lambda stage: self.job.update(what=stage)))
                 finally:
                     store.close()

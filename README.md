@@ -99,133 +99,37 @@ Unpair has only been tested against a simulated pendant.
 
 ### Speaker labels
 
-Lines are grouped by voice into "Speaker 1", "Speaker 2" and so on, using a
-small local model (TitaNet, about 40 MB, downloaded on first use). This runs
-automatically after transcription. Click a name in the Lifelog to rename that
-person everywhere; giving two speakers the same name merges them. "Only this
-conversation" corrects who a speaker is in one conversation without touching
-the rest. From the command line:
+Automatic speaker labels are **off by default**, because nothing tested so far
+works on real pendant recordings.
 
-```sh
-uv run limitful speakers                   # label new lines and list speakers
-uv run limitful speakers --rename 2 Andrei
-uv run limitful speakers --reset           # forget names and group again
-```
+What was measured, on ten imported conversations, as the share of speaking
+time given to the same speaker Limitless gave it to (always guessing the main
+speaker scores 63%):
 
-Limits: labels start once about ten lines have been transcribed, lines shorter
-than 1.5 s are not labelled, a line is given to one speaker even if two people
-spoke in it, and similar voices can be confused. The matching was tuned on a
-small test with synthetic voices in one room. A check on real recordings
-suggests the fingerprints pick up the room as much as the voice, so treat
-these labels as a rough guide.
+| Method | Score |
+|---|---|
+| Separation model (pyannote segmentation with five different voice models), told the number of speakers | 62% |
+| The same, deciding the number of speakers itself | 28% to 49% |
+| Grouping transcript lines by voice fingerprint | 30% to 49% |
+| Claude reading the words alone | 58% |
 
-### Summaries and reminders
+The same separation pipeline splits a clean two-speaker test recording
+correctly, so the difficulty is the audio: one microphone, worn, with people
+at different distances. Limitless's labels are also not a clean reference: in
+43% of conversations, lines it gives to one speaker sound no more alike than
+lines it gives to different speakers.
 
-```sh
-uv run limitful digest --provider claude    # or: --provider ollama
-```
+What does work:
 
-`digest` groups each day's lines into conversations (a five-minute silence ends
-one), then asks a language model for a title, a short summary and any
-reminders. They appear above each conversation in the Lifelog and in the
-Markdown transcripts. Reminders are suggestions: accept or dismiss them in the
-Lifelog, where the Reminders button lists everything waiting.
+- Imported conversations keep Limitless's per-conversation "Speaker 1",
+  "Speaker 2". Click one to name that speaker in that conversation.
+- Click a named speaker to rename that person everywhere; giving two speakers
+  the same name merges them. "Only this conversation" changes one conversation.
+- `uv run limitful speakers` lists speakers; `--rename 2 Andrei` names one.
 
-Each reminder links back to the conversation it came from and, where it can be
-identified, the line: the Reminders list quotes that line, and clicking the
-link jumps to it and starts playing from there. The
-model cites the line for reminders it writes. For reminders imported from
-Limitless, which only record the conversation, the line is found by matching
-the wording, so it is a best guess and some have none.
-
-You choose what does the reading, and nothing is sent anywhere until you do.
-The easiest way is the Lifelog's Settings page, which also has a "Summarise new
-conversations now" button:
-
-- **Claude** uses Anthropic's API (Claude Opus by default; `--llm-model`
-  changes it). Better results, but conversation transcripts are sent to
-  Anthropic and usage is billed to your Anthropic account. Paste an API key in
-  Settings, or leave it empty to use `ANTHROPIC_API_KEY` or a sign-in from
-  Anthropic's command-line tool (`ant auth login`). The key is checked with
-  Anthropic before it is saved.
-- **Ollama** uses a model running on your computer through
-  [Ollama](https://ollama.com) (`llama3.1` by default). Private, weaker.
-
-The choice and the key are saved in `~/.config/limitful/config.json`, readable
-only by you and kept out of the data folder so it is not backed up with your
-recordings. The `LIMITFUL_LLM` environment variable overrides the saved choice.
-Once a choice is saved, `watch` summarises automatically.
-
-Conversations of fewer than 25 words are left without a summary.
-`digest --redo` rewrites your own summaries, discarding the state of their
-reminders; imported conversations are left alone.
-
-The Claude path has been run for real; the Ollama path is tested with a
-stand-in server only.
-
-### Importing your Limitless history
-
-Request a data export from Limitless (with "Include audio files" ticked) before
-the service ends, then:
-
-```sh
-uv run limitful import ~/Downloads/data-export_2026-11-13_19-19-43.zip
-```
-
-This brings in every conversation with its title, section headings and
-transcript, the audio, and your reminders. Limitless's transcripts are kept as
-they are; nothing is re-transcribed. Running it again on the same file adds
-nothing.
-
-You can also import from the Lifelog: open Settings and choose the zip.
-
-Limitless numbers speakers separately in every conversation, so imported lines
-show "Speaker 1", "Speaker 2". Click one to name that speaker in that
-conversation.
-
-Matching imported speakers across conversations by voice exists but is
-experimental and off by default (`uv run limitful speakers --link-imported`,
-undone with `--unlink-imported`). On real pendant recordings the voice
-fingerprints were dominated by the room and background noise: 42% of pairs of
-speakers known to be different people scored as the same person. Do not rely
-on it.
-
-Limitless's timestamps are rounded to the second and run about a second late
-(measured: median 0.9 s, up to nearly 5 s), so imported lines trail their audio.
-To fix that:
-
-```sh
-uv run limitful retime            # add --device mps on Apple Silicon to go faster
-```
-
-This listens to each imported recording with local Whisper, finds where each
-line's words are actually said, and moves the line there. Limitless's text and
-speakers are kept; only the times change, and the original times are saved.
-It takes roughly a fifth of the audio's length, works newest first, and can be
-stopped and run again. In testing about a quarter to two fifths of lines were
-found by their words; lines too short or too different to find move with the
-nearest line that was. `limitful retime --undo` puts everything back.
-
-Chats and account settings are not imported.
-
-### Ask
-
-The Lifelog's Ask page answers questions about what was said: "what did I agree
-to with Joseph?", "what did they say a session costs?". Claude looks through
-your transcripts with three tools (search lines, list conversations, read a
-conversation), then answers. You see what it is looking up, and the answer
-appears as it is written. Each fact carries a small link showing when it was
-said; clicking it opens that line and plays it, so you can check the answer
-against the recording. Follow-up questions keep the thread's context, and
-threads are saved in your data folder: reopen or delete them under "Earlier
-chats".
-
-From the command line: `uv run limitful ask "what did I agree to this week?"`.
-
-Ask needs Claude chosen in Settings. Your questions and the transcript lines
-Claude reads are sent to Anthropic. Search is by literal words, not meaning,
-so Claude tries several phrasings; it can still miss things said in unexpected
-words.
+The experimental voice labelling is still there for anyone who wants to try
+it: `limitful transcribe --speakers`, `limitful watch --speakers`, and
+`limitful speakers --link-imported` for imported conversations.
 
 ### Running in the background
 
