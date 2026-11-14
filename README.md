@@ -2,22 +2,45 @@
 
 # Limitful
 
-An open-source desktop client for the Limitless Pendant. It pulls recordings off
-the pendant over Bluetooth and saves them as audio files on your computer, with
-no Limitless account or server involved.
+An open-source replacement for the Limitless app, for people who want to keep
+using their Limitless Pendant. It pulls recordings off the pendant over
+Bluetooth, transcribes them on your computer, and gives you a Lifelog to read,
+search, listen to and ask questions of. No Limitless account or server is
+involved.
 
-Limitless ends its service on December 1, 2026. This project exists so the
-hardware keeps working after that.
+Limitless ends its service on December 1, 2026 and deletes the data it holds.
+This project exists so the hardware keeps working after that, and so the
+history you export before then stays usable.
 
-**Status: early, but working.** Pairing, status and read-only sync have been run
-against a real pendant on macOS, and so has freeing space on the pendant
-(`--ack`). Only tested on macOS so far.
+## What it does
+
+- **Syncs the pendant** over Bluetooth, from the command line, in the
+  background, or with a button in the app.
+- **Transcribes on your machine** with Whisper. Audio stays on your computer
+  unless you choose a hosted service.
+- **Lifelog web app**: each day as a list of conversations, with playback from
+  any line, a timeline of the day, and search across everything.
+- **Summaries and reminders**: a title and summary for each conversation, and
+  suggested reminders linked to the line they came from. Uses Claude or a local
+  Ollama model, and is off until you choose one.
+- **Ask**: questions about what was said, answered with links to the lines
+  that support the answer.
+- **Imports your Limitless export**: transcripts, audio and reminders.
+- **Pendant controls**: battery and storage, light brightness, pause, pair and
+  unpair.
+
+**Status: early, but working.** The whole path, from pendant to transcript to
+Lifelog, runs daily against one real pendant on macOS. It has not been tested
+on Linux or Windows. What has not been verified is listed under
+[Not yet verified](#not-yet-verified).
 
 ## Install
 
 Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
 
 ```sh
+git clone https://github.com/andreibondarev/limitful.git
+cd limitful
 uv sync
 ```
 
@@ -61,11 +84,75 @@ uv run limitful serve
 
 Opens the Lifelog at http://localhost:4747. Each day is a list of
 conversations with their time, title and length, under a strip showing when
-speech happened. Open a conversation to read it under its section headings,
-click any line to hear it (playback carries on through the conversation), or
+speech happened; click the strip to jump to that moment. Open a conversation
+to read it under its section headings, click any line to hear it (playback
+carries on through the conversation, with a timeline to jump around in), or
 copy it as Markdown. Search covers every day. The page only answers on
 your own machine. Recordings are Ogg Opus, which Chrome and Firefox play;
 older versions of Safari do not.
+
+### Summaries and reminders
+
+Recordings are grouped into conversations (five minutes of silence ends one).
+A language model can then give each a title and a short summary, and suggest
+reminders for things someone said they would do. This is off until you choose
+what writes them, under Settings, Summaries:
+
+- **Claude**: paste an Anthropic API key. The text of each conversation is
+  sent to Anthropic; audio is not.
+- **Ollama**: a model running on your own machine (`llama3.1` by default), so
+  nothing leaves it.
+
+New conversations are summarised after each sync. `uv run limitful digest`
+does it by hand, and `--redo` writes them all again.
+
+The Reminders page shows suggestions grouped by day, each with a link that
+plays the moment it came up. Keep one and it moves to your to-do list; tick it
+off when it is done.
+
+### Ask
+
+The Ask page answers questions such as "what did the dentist say about the
+crown?" by searching and reading your transcripts. Answers cite the lines they
+rest on, and each citation opens that line. Chats are saved. From the command
+line: `uv run limitful ask "..."`.
+
+Ask needs Claude, with the key saved in Settings. The lines it reads to answer
+a question are sent to Anthropic.
+
+### Bringing your Limitless history
+
+Request a data export from Limitless before December 1, 2026, then import the
+zip from Settings, Import, or with:
+
+```sh
+uv run limitful import data-export.zip
+```
+
+Transcripts, section headings, audio and reminders are imported, and
+importing the same export twice adds nothing. Speakers keep Limitless's
+"Speaker 1", "Speaker 2" within each conversation. Chats in the export are not
+imported yet.
+
+Lines in a Limitless transcript often sit a few seconds away from where they
+are heard. `uv run limitful retime` listens to the imported audio with Whisper
+and moves each line to where its words are; `--minutes 60` does it in
+stages and `--undo` puts everything back. It takes roughly a fifth of the
+audio's length on a laptop CPU.
+
+### What leaves your computer
+
+Nothing, by default. Syncing, transcription, search and playback are local.
+Three things send data out, and each is off until you turn it on in Settings:
+
+| If you choose | What is sent | To |
+|---|---|---|
+| Claude for summaries | The text of each conversation | Anthropic |
+| Ask | The lines it looks up to answer | Anthropic |
+| Deepgram for transcription | The audio of new recordings | Deepgram |
+
+API keys are kept in `~/.config/limitful/config.json`, readable only by you,
+outside the data folder, and are never sent back to the page.
 
 ### The pendant, from the app
 
@@ -215,9 +302,12 @@ that your computer holds the only copy, so back up the data folder.
 
 - `protocol.py`: the wire format (protobuf-style messages over one BLE service).
 - `client.py`: connect, set the clock, read storage status, download pages.
-- `store.py`: SQLite store of raw pages, and export to audio files.
+- `store.py`: the SQLite store: raw pages, recordings, lines, conversations,
+  reminders and chats.
 - `ogg.py`: a small Ogg Opus writer.
 - `transcribe.py`: speech-to-text engines (local Whisper by default).
+- `hosted.py`: hosted transcription with speaker labels (Deepgram).
+- `scoring.py`: scoring a service's speaker labels against Limitless's.
 - `speakers.py`: voice fingerprints for speaker labels.
 - `digest.py`: titles, summaries and reminders from a language model.
 - `ask.py`: question answering over the transcripts, with citations.
@@ -260,14 +350,26 @@ Observed on one pendant; treat as provisional.
   roughly 1.4 s; the pendant reports 95,232 pages, so about 38 hours.
 - The pendant stops recording during silence, so audio arrives as short bursts.
 
+## Not yet verified
+
+- **Linux and Windows.** Everything has been run on macOS only.
+- **Deepgram.** Hosted transcription has not been run against the real
+  service (see Speaker labels).
+- **Ollama.** Summaries from a local model are written but have not been run
+  against a real Ollama.
+- **Unpair.** Tested against a simulated pendant only.
+- **Other pendants.** All hardware observations come from one device.
+
 ## Roadmap
 
-1. Run `watch` as a login service.
-2. Try hosted transcription against the real service and measure its speaker
-   labels with `score-speakers`.
-3. An MCP server, so other assistants can query the transcripts; search by meaning.
-4. Link imported speakers to named speakers; import chats.
-5. MCP server, Obsidian sync, mobile app.
+- Run `watch` and the app at login, so syncing needs no terminal.
+- Import the chats in a Limitless export.
+- Try Deepgram against the real service and measure its speaker labels.
+- Let Ask search reminders.
+- An MCP server, so other assistants can query the Lifelog.
+- A real pause or power-off command, if the pendant has one. The USB serial
+  port and the firmware update service are unexplored.
+- Open firmware. Research only so far.
 
 ## Development
 
