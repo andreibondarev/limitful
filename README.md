@@ -14,16 +14,18 @@ history you export before then stays usable.
 
 ## What it does
 
-- **Syncs the pendant** over Bluetooth, from the command line, in the
-  background, or with a button in the app.
+- **Sets itself up**: a guide on first run pairs the pendant, does the first
+  sync and offers the choices that send anything off your computer.
+- **Syncs the pendant** over Bluetooth, from the command line, with a button
+  in the app, or by itself from login (macOS).
 - **Transcribes on your machine** with Whisper. Audio stays on your computer
   unless you choose a hosted service.
 - **Lifelog web app**: each day as a list of conversations, with playback from
-  any line, a timeline of the day, and search across everything, by exact
-  words or (once set up) by meaning.
-- **Summaries and reminders**: a title and summary for each conversation, and
-  suggested reminders linked to the line they came from. Uses Claude or a local
-  Ollama model, and is off until you choose one.
+  any sentence, a timeline of the day, a calendar of every day, and search
+  across everything, by exact words or (once set up) by meaning.
+- **Summaries and reminders**: a title and summary for each conversation, a
+  recap of each day, and suggested reminders linked to the line they came
+  from. Uses Claude or a local Ollama model, and is off until you choose one.
 - **Ask**: questions about what was said, answered with links to the lines
   that support the answer.
 - **Imports your Limitless export**: transcripts, audio and reminders.
@@ -119,21 +121,37 @@ On macOS the first run asks for Bluetooth permission for your terminal app.
 uv run limitful serve
 ```
 
-Opens the Lifelog at http://localhost:4747. Each day is a list of
-conversations with their time, title and length, under a strip showing when
-speech happened; click the strip to jump to that moment. Open a conversation
-to read it under its section headings, each speaker's turn set as a
-paragraph; click any sentence to hear it (playback
-carries on through the conversation, with a timeline to jump around in), or
-copy it as Markdown. Each speaker in a conversation has a colour, stray
-words with no conversation around them fold into one quiet row, and on a wide
-screen the day's recap, open reminders and named people sit beside the list.
-Light or dark is chosen under Settings, Appearance, and otherwise follows
-your computer. The date in the header opens a calendar, with each day shaded by how much
-was said and its recap shown as you point at it. Search covers every day, and shows each hit with
-the words marked, the line before and after, and the conversation it is from. The page only answers on
-your own machine. Recordings are Ogg Opus, which Chrome and Firefox play;
-older versions of Safari do not.
+Opens the Lifelog at http://localhost:4747. The page only answers on your
+own machine.
+
+**A day.** Each day is a list of its conversations, with time, title and a bar
+for how long each ran, under headings for morning, afternoon and evening.
+Stray words with no conversation around them fold into one quiet row. On a
+wide screen the day's recap, its open reminders and the named people heard
+that day sit beside the list.
+
+**The strip.** Above the list, a strip shows when speech happened, with a pin
+where each open reminder came up. Pointing at a conversation lights up its
+stretch of the strip, and pointing at the strip names the conversation there.
+Click the strip to jump to that moment; click a pin to go to the line.
+
+**A conversation.** Open one to read it: a summary and its reminders first,
+then the transcript under its section headings, each speaker's turn set as a
+paragraph in that speaker's colour. Click any sentence to hear it; playback
+carries on through the conversation, with a timeline to jump around in. The
+title stays in view as you scroll, and the whole thing can be copied as
+Markdown.
+
+**Getting around.** The date in the header opens a calendar, each day shaded
+by how much was said, with its recap shown as you point at it. Search covers
+every day and shows each hit with the words marked, the line before and
+after, and the conversation it is from.
+
+**Appearance.** Light or dark follows your computer, or choose one under
+Settings, Appearance. The layout adapts to a phone-sized window.
+
+Recordings are Ogg Opus, which Chrome and Firefox play; older versions of
+Safari do not.
 
 ### Summaries and reminders
 

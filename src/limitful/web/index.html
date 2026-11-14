@@ -150,6 +150,15 @@
     background: var(--accent);
   }
   #strip .talk.loose { background: var(--muted); opacity: 0.55; }
+  #strip .pin {
+    position: absolute; top: -3px; width: 9px; height: 9px; margin-left: -4.5px; padding: 0; z-index: 2; cursor: pointer;
+    border: 1.5px solid var(--paper); border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--mark);
+  }
+  #strip .pin:hover, #strip .pin:focus-visible { background: var(--accent); }
+  .card.hot > summary h2 { color: var(--accent); }
+  .card.hot > summary .len { background: var(--mark); }
+  .part { margin: 1.5rem 0 0.35rem var(--gutter); font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+  .tools + .part { margin-top: 0.4rem; }
   #strip.over .bar { opacity: 0.28; }
   #strip.over .bar.hot { opacity: 1; }
   #strip .talk.hot { background: var(--mark); opacity: 1; }
@@ -1595,10 +1604,19 @@ function renderDay() {
   const longest = Math.max(1, ...groups.map((g) => g.end - g.start));
   const rows = [];
   let run = [], strays = 0;
-  const flush = () => { if (run.length) { rows.push(scraps(run)); strays += run.length; run = []; } };
+  // A long day gets landmarks: a quiet heading where the morning, afternoon or evening begins.
+  const partOf = (ms) => { const h = new Date(ms).getHours(); return h < 5 ? "Night" : h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening"; };
+  const parts = new Set(groups.map((g) => partOf(g.start))).size > 1;
+  let part = null;
+  const landmark = (ms) => {
+    if (parts && partOf(ms) !== part) { part = partOf(ms); rows.push(el("h3", { className: "part", textContent: part })); }
+  };
+  const flush = () => { if (run.length) { landmark(run[0].start); rows.push(scraps(run)); strays += run.length; run = []; } };
   for (const g of groups) {
-    if (fold && stray(g)) run.push(g);
-    else { flush(); rows.push(card(g, longest)); }
+    if (fold && stray(g)) {
+      if (run.length && partOf(g.start) !== partOf(run[0].start)) flush();  // a fold does not straddle two parts
+      run.push(g);
+    } else { flush(); landmark(g.start); rows.push(card(g, longest)); }
   }
   flush();
   const real = groups.length - strays;
@@ -1687,6 +1705,22 @@ function drawStrip() {
     line.style.width = `${((Math.max(g.end, g.start + 60000) - g.start) / (to - from)) * 100}%`;
     nodes.push(line);
   }
+  // A pin where each open reminder came up.
+  for (const g of groups) {
+    for (const r of g.reminders) {
+      if (r.status !== "suggested" && r.status !== "accepted") continue;
+      const said = r.line ? g.own.find((u) => u.id === r.line) : null;
+      const pin = el("button", { className: "pin", title: r.text, ariaLabel: `Reminder: ${r.text}` });
+      pin.style.left = along(said ? said.start : g.start);
+      pin.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (said) reveal(said.id, true); else { g.setOpen(true); $(`g${g.key}`).scrollIntoView({ block: "start" }); }
+      });
+      pin.addEventListener("mousemove", (e) => e.stopPropagation());
+      pin.addEventListener("mouseenter", () => { lightUp(g); if ($("tip")) $("tip").hidden = true; });
+      nodes.push(pin);
+    }
+  }
   nodes.push(el("u", { id: "head", hidden: true }), el("div", { id: "tip", hidden: true }));
   strip.replaceChildren(...nodes);
 
@@ -1698,6 +1732,20 @@ function drawStrip() {
   }));
 }
 
+/* Light one conversation up, on the strip and in the list, and dim the rest of the strip.
+   Pointing at either one shows where it is on the other. */
+function lightUp(g) {
+  strip.classList.toggle("over", Boolean(g));
+  document.querySelectorAll(".hot").forEach((n) => n.classList.remove("hot"));
+  if (!g) return;
+  strip.querySelectorAll(".bar").forEach((bar) => {
+    const t = Number(bar.dataset.at);
+    if (t + BUCKET_MS > g.start && t <= g.end) bar.classList.add("hot");
+  });
+  strip.querySelector(`.talk[data-key="${g.key}"]`)?.classList.add("hot");
+  $(`g${g.key}`)?.classList.add("hot");
+}
+
 /* Hovering the strip names the conversation under the pointer and lights up its bars. */
 function groupAt(ms) { return groups.find((g) => ms >= g.start && ms <= Math.max(g.end, g.start + 60000)); }
 strip.addEventListener("mousemove", (e) => {
@@ -1707,15 +1755,7 @@ strip.addEventListener("mousemove", (e) => {
   const x = Math.min(Math.max(0, e.clientX - box.left), box.width);
   const at = span.from + (x / box.width) * (span.to - span.from);
   const g = groupAt(at);
-  strip.classList.toggle("over", Boolean(g));
-  strip.querySelectorAll(".hot").forEach((n) => n.classList.remove("hot"));
-  if (g) {
-    strip.querySelectorAll(".bar").forEach((bar) => {
-      const t = Number(bar.dataset.at);
-      if (t + BUCKET_MS > g.start && t <= g.end) bar.classList.add("hot");
-    });
-    strip.querySelector(`.talk[data-key="${g.key}"]`)?.classList.add("hot");
-  }
+  lightUp(g);
   const first = g ? g.own[0].text : "";
   const name = g ? (g.title || (first.length > 60 ? `${first.slice(0, 60)}…` : first)) : "quiet";
   tip.replaceChildren(el("b", { textContent: clock.format(new Date(g ? g.start : at)) }), name);
@@ -1723,8 +1763,7 @@ strip.addEventListener("mousemove", (e) => {
   tip.style.left = `${Math.min(Math.max(x, 90), box.width - 90)}px`;
 });
 strip.addEventListener("mouseleave", () => {
-  strip.classList.remove("over");
-  strip.querySelectorAll(".hot").forEach((n) => n.classList.remove("hot"));
+  lightUp(null);
   if ($("tip")) $("tip").hidden = true;
 });
 
@@ -1782,6 +1821,10 @@ function card(g, longest = 0) {
   });
   g.setOpen = (open) => { if (open) { openCards.add(g.key); fill(); } else openCards.delete(g.key); box.open = open; };
   if (openCards.has(g.key)) g.setOpen(true);
+  box.addEventListener("mouseenter", () => lightUp(g));
+  box.addEventListener("mouseleave", () => lightUp(null));
+  box.firstChild.addEventListener("focus", () => lightUp(g));
+  box.firstChild.addEventListener("blur", () => lightUp(null));
   return box;
 }
 
