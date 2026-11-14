@@ -41,7 +41,10 @@ _NOT_PAIRED = (
 )
 _DROPPED = (
     "the pendant kept dropping the connection. Check it is nearby, charged and "
-    "not connected to a phone, then run the command again."
+    "not connected to a phone, then run the command again. If the pendant was "
+    "unpaired or reset since this computer last used it, the computer is still "
+    "holding its old pairing: remove Pendant under Bluetooth in System Settings, "
+    "turn Bluetooth off and on, then pair again."
 )
 PAIRING_RETRY_S = 2
 _SETTLE_S = 1.0  # the pendant needs a moment after connect and after subscribing

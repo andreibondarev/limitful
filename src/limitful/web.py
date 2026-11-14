@@ -88,7 +88,12 @@ def pendant_advice(message: str | None) -> str | None:
         return "This computer has no Bluetooth that Limitful can use."
     if "not paired" in text:
         return "This computer has not been paired with the pendant yet, or the pendant was reset since."
-    if "not in range" in text or "dropping the connection" in text or "is busy" in text:
+    if "dropping the connection" in text:
+        return ("Either something else is connected to the pendant, or this computer is holding an old "
+                "pairing the pendant has since forgotten. For the first, turn off Bluetooth on your phone. "
+                "For the second, remove Pendant under Bluetooth in System Settings, turn Bluetooth off and "
+                "on, then pair again.")
+    if "not in range" in text or "is busy" in text:
         return ("The pendant only answers when nothing else is connected to it. Turn off Bluetooth on "
                 "your phone (or quit the Limitless app), check the pendant is switched on and within a "
                 "few metres, and try again. Holding its button for two seconds switches it on or off.")

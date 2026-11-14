@@ -292,7 +292,28 @@ three read-only commands and nothing else.
 On the command line: `limitful pause`, `limitful resume`, `limitful pair` and
 `limitful unpair`.
 
-Unpair has only been tested against a simulated pendant.
+The Bluetooth unpair command has only been tested against a simulated
+pendant. Unpairing over USB has been done on a real one: see below.
+
+#### Moving a pendant to another computer without erasing it
+
+Pairing mode is a factory reset, but it is only needed because the pendant
+refuses new computers while it remembers an old one. With a USB cable it can
+be told to forget, and then it pairs like new and keeps its audio. This was
+done on a real pendant (firmware 1.1.20), and the 1,400 pages stored on it
+survived:
+
+1. Plug the pendant in and type `ble unpair` into its USB shell (see Hardware
+   notes; 115200 baud). The pendant forgets every computer and phone.
+2. On a computer that was paired with it before, remove Pendant under
+   Bluetooth in System Settings, then turn Bluetooth off and on. Without this
+   the computer keeps trying its old key and cannot connect at all. A computer
+   that has never seen the pendant should not need this step; that case was
+   not tried.
+3. Run `uv run limitful pair` and accept the connection request. No button
+   press on the pendant is needed.
+
+Limitful does not send `ble unpair` for you yet.
 
 ### Speaker labels
 
@@ -614,7 +635,10 @@ erase`, `ftl clear`, `storage clear`, `storage full-wipe`, `config reset`,
 - **Linux and Windows.** Everything has been run on macOS only.
 - **Ollama.** Summaries from a local model are written but have not been run
   against a real Ollama.
-- **Unpair.** Tested against a simulated pendant only.
+- **Unpair over Bluetooth.** Tested against a simulated pendant only. Unpair
+  over USB works on a real one.
+- **The setup guide's pairing step.** Driven against a simulated pendant; the
+  factory-reset pairing it describes was last done by hand, from the terminal.
 - **Other pendants.** All hardware observations come from one device.
 
 ## Roadmap

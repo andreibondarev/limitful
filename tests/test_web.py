@@ -555,6 +555,7 @@ def test_pendant_failures_come_with_plain_advice(site, monkeypatch):
     assert "Bluetooth on your phone" in pendant_advice(
         "Sync stopped: the pendant is not in range, is switched off, or is connected to another device")
     assert "not been paired" in pendant_advice("the pendant refused the connection because this computer is not paired with it")
+    assert "old pairing" in pendant_advice("the pendant kept dropping the connection. Check it is nearby")
     assert pendant_advice("") is None and pendant_advice(None) is None and pendant_advice("disk full") is None
 
     async def away(*args, **kwargs):
