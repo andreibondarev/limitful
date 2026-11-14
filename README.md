@@ -128,7 +128,8 @@ carries on through the conversation, with a timeline to jump around in), or
 copy it as Markdown. Each speaker in a conversation has a colour, stray
 words with no conversation around them fold into one quiet row, and on a wide
 screen the day's recap, open reminders and named people sit beside the list.
-The date in the header opens a calendar, with each day shaded by how much
+Light or dark is chosen under Settings, Appearance, and otherwise follows
+your computer. The date in the header opens a calendar, with each day shaded by how much
 was said and its recap shown as you point at it. Search covers every day. The page only answers on
 your own machine. Recordings are Ogg Opus, which Chrome and Firefox play;
 older versions of Safari do not.
@@ -648,15 +649,7 @@ erase`, `ftl clear`, `storage clear`, `storage full-wipe`, `config reset`,
 
 ## Roadmap
 
-- Start at login on Linux and Windows (macOS is done).
-- Import the chats in a Limitless export.
-- Let Ask search reminders.
-- An MCP server, so other assistants can query the Lifelog.
-- A real pause or power-off command, if the pendant has one. The USB
-  shell has no recording setting; its simulated long button push is untried,
-  and would only help while plugged in. The firmware update service is
-  unexplored.
-- Open firmware. Research only so far.
+What is planned, and ideas not yet planned, are in [ROADMAP.md](ROADMAP.md).
 
 ## Development
 

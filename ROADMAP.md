@@ -1,0 +1,38 @@
+# Roadmap
+
+What is planned for Limitful, and ideas that are not planned yet. The README
+says what already works and what has not been verified.
+
+## Planned
+
+- Start at login on Linux and Windows (macOS is done).
+- Let Ask search reminders.
+- An MCP server, so other assistants can query the Lifelog.
+- Open firmware. Research only so far.
+- Pair without erasing, from the setup guide: with the pendant on USB, send
+  `ble unpair` and then pair, in place of the factory reset.
+- Import the chats in a Limitless export before the service ends on
+  December 1, 2026.
+
+## Ideas
+
+Not designed or scheduled. Each needs deciding what it should do first.
+
+- **Analytics.** Insights drawn from conversations: where the time goes, who
+  it is spent with, what keeps coming up, how that changes over weeks.
+- **Pruning and cleaning.** Delete conversations that are meaningless
+  recordings (stray noise, the television, a phrase repeated as a test), and
+  edit audio to clean it up, for example cutting silence or a section that
+  should not be kept.
+- **Sharing.** Send a conversation's audio or transcript to someone else,
+  whole or as a selected stretch.
+
+## Dropped, with reasons
+
+- **Automatic speaker labels.** Every local method tried, and Deepgram, scored
+  at or below always guessing the main speaker. The numbers are in the README.
+- **Transcription on the Apple GPU by default.** About three times faster when
+  it works, but half the test runs failed outright.
+- **A true pause or power-off command.** The pendant's USB shell has no
+  recording switch, and anything it can do only works while plugged in. The
+  app-side pause stands in for it.

@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lifelog</title>
+<script>
+  // Before anything is drawn, so a chosen theme never flashes the other one.
+  try { const t = localStorage.getItem("limitful-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch { /* follow the computer */ }
+</script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 128 128%22><rect x=%224%22 y=%224%22 width=%22120%22 height=%22120%22 rx=%2228%22 fill=%22%230b6b58%22/><g transform=%22translate(64.0 64.0)%22 fill=%22%23f4c63a%22><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(0)%22/><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(60)%22/><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(120)%22/><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(180)%22/><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(240)%22/><path d=%22M -2.73 0 L -6.72 -35.28 A 6.72 6.72 0 0 1 6.72 -35.28 L 2.73 0 Z%22 transform=%22rotate(300)%22/><circle r=%224.41%22/></g></svg>">
 <style>
   :root {
@@ -25,8 +29,9 @@
     --who-0: #1f7a6d; --who-1: #3b6fb6; --who-2: #7a5bb5; --who-3: #b0508f;
     --who-4: #c2553a; --who-5: #a8771a; --who-6: #6f7d2a; --who-7: #5a6b7b;
   }
+  /* Dark follows the computer, unless a theme was chosen under Settings. */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --paper: #0f1613;
       --ink: #e4ece7;
       --muted: #8fa097;
@@ -36,6 +41,17 @@
       --who-4: #ef8f76; --who-5: #dcae55; --who-6: #a9b860; --who-7: #9fb0c0;
     }
   }
+  :root[data-theme="dark"] {
+    --paper: #0f1613;
+    --ink: #e4ece7;
+    --muted: #8fa097;
+    --rule: #26322c;
+    --accent: #63d2b6;
+    --who-0: #5fc3b3; --who-1: #7fa9e6; --who-2: #b29be6; --who-3: #e08fc4;
+    --who-4: #ef8f76; --who-5: #dcae55; --who-6: #a9b860; --who-7: #9fb0c0;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] { color-scheme: light; }
   * { box-sizing: border-box; }
   html { scroll-padding-top: 11rem; }
   body {
@@ -332,8 +348,9 @@
   .round.tick:hover { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
   .round.tick.ticked { background: var(--accent); color: var(--paper); }
   .round.tick .icon { width: 14px; height: 14px; }
-  .round.quiet { border-color: transparent; opacity: 0; }
-  .task:hover .round.quiet, .round.quiet:focus-visible { opacity: 1; }
+  .round.faint { border-color: transparent; opacity: 0; }
+  .task:hover .round.faint, .round.faint:focus-visible { opacity: 1; }
+  @media (hover: none) { .round.faint { opacity: 0.6; } }
   .mine { position: sticky; top: 6rem; padding: 1.2rem 1.4rem 0.6rem; border: 1px solid var(--rule); border-radius: 16px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
   .mine .task:first-of-type { border-top: 0; }
   .task.was p { color: var(--muted); text-decoration: line-through; font-size: 1rem; }
@@ -652,6 +669,17 @@
   @media (max-width: 560px) {
     :root { --gutter: 4.4rem; }
     .line span, .turn p { font-size: 1.08rem; }
+  }
+  /* On a phone the header scrolls away with the page: it is too tall to pin. */
+  @media (max-width: 620px) {
+    header { position: static; }
+    html { scroll-padding-top: 5rem; }
+    .bar h1 { flex: 1 1 calc(100% - 4rem); }
+    .card[open] > summary { top: 0; }
+    .turn time, .line time, .card > summary time { font-size: 0.72rem; }
+    .turn.tinted { background-position-x: calc(var(--gutter) - 0.45rem); }
+    .line.tinted { background-position-x: calc(var(--gutter) - 0.45rem); }
+    #calendar { position: fixed; top: 4.5rem; left: 1rem; right: 1rem; width: auto; }
   }
 </style>
 </head>
@@ -1261,7 +1289,7 @@ async function showReminders() {
     row.append(
       round("", "Mark as done", () => set(r, "done", row), "tick"),
       el("div", {}, el("p", { textContent: r.text }), source(r)),
-      round("x", "Remove from your list", () => set(r, "dismissed", row), "quiet"));
+      round("x", "Remove from your list", () => set(r, "dismissed", row), "faint"));
     list.append(row);
   }
   if (!kept.length) list.append(el("p", { className: "none", textContent: "Keep a suggestion and it lands here." }));
@@ -2404,6 +2432,21 @@ async function showSettings() {
   post("/api/pendant", { action: "usb" }).then(showWired).catch(() => {});  // quick, and silent when not plugged in
   const pick = el("button", { className: "pill busy-off" }, ...withIcon("import", "Choose an export zip", 16));
   pick.addEventListener("click", () => $("file").click());
+  const theme = () => { try { return localStorage.getItem("limitful-theme") || ""; } catch { return ""; } };
+  const themeChoice = (value, name, about) => el("label", { className: "choice" },
+    el("input", { type: "radio", name: "theme", value, checked: theme() === value }),
+    el("b", { textContent: name }), el("span", { textContent: about }));
+  const themes = el("fieldset", {},
+    el("legend", { hidden: true, textContent: "Theme" }),
+    themeChoice("", "Match this computer", "Follows your system's light or dark setting."),
+    themeChoice("light", "Light", "Pale green paper, dark ink."),
+    themeChoice("dark", "Dark", "Dark paper, light ink. Easier in a dim room."));
+  themes.addEventListener("change", () => {
+    const picked = themes.querySelector("input:checked").value;
+    try { if (picked) localStorage.setItem("limitful-theme", picked); else localStorage.removeItem("limitful-theme"); } catch { /* applies until the page closes */ }
+    if (picked) document.documentElement.dataset.theme = picked; else delete document.documentElement.dataset.theme;
+    restate();
+  });
   // One section at a time, picked from a menu that also says where each one stands.
   const panes = {
     pendant: el("section", { className: "setup" },
@@ -2446,6 +2489,10 @@ async function showSettings() {
     el("h2", {}, ...withIcon("find", "Search by meaning", 22)),
     el("p", { textContent: `Lets Ask and the search box find lines by what they mean, not only by their exact words, so "money" can find "budget". It runs on this computer. ${indexState}` }),
     indexing),
+    appearance: el("section", { className: "setup" },
+      el("h2", {}, ...withIcon("bright", "Appearance", 22)),
+      el("p", { textContent: "Light or dark. This is remembered in this browser only." }),
+      themes),
     import: el("section", { className: "setup" },
     el("h2", {}, ...withIcon("import", "Import from Limitless", 22)),
     el("p", { textContent: "Bring in a data export: conversations, transcripts, audio and reminders. Importing the same export twice adds nothing." }),
@@ -2459,6 +2506,7 @@ async function showSettings() {
     ["transcription", "wave", "Transcription", () => now.transcriber === "deepgram" ? "Deepgram" : "On this computer"],
     ["summaries", "summary", "Summaries", () => now.provider === "claude" ? "Claude" : now.provider === "ollama" ? "Ollama" : "Off"],
     ["search", "find", "Search by meaning", () => !upkeep.index.total ? "Nothing to index" : !upkeep.index.indexed ? "Not set up" : upkeep.index.left ? `${count(upkeep.index.left)} lines left` : "Up to date"],
+    ["appearance", "bright", "Appearance", () => ({ light: "Light", dark: "Dark" })[theme()] || "Matches this computer"],
     ["import", "import", "Import from Limitless", () => upkeep.retime.recordings ? `${count(upkeep.retime.recordings)} recordings to re-time` : "Bring in an export"],
   ];
   const tabs = el("nav", { className: "sections", ariaLabel: "Settings sections" });
