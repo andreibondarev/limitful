@@ -1,7 +1,7 @@
 [project]
 name = "limitful"
 version = "0.1.0"
-description = "Open-source client for the Limitless Pendant: sync recordings over Bluetooth, transcribe them locally and browse your day."
+description = "Open-source replacement for the Limitless Pendant software: sync recordings over Bluetooth, transcribe them locally, then browse, search, summarise and ask about your days."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
@@ -9,10 +9,17 @@ dependencies = [
     "bleak>=0.22",
     "faster-whisper>=1.1",
     "sherpa-onnx>=1.10",
-    "numpy",
-    "anthropic>=1.0",
+    "numpy>=1.26",
+    "anthropic>=2.8",
     "pyserial>=3.5",
+    # Imported directly for search by meaning and the speech-model download.
+    "onnxruntime>=1.17",
+    "tokenizers>=0.15",
+    "huggingface-hub>=0.23",
 ]
+
+[project.urls]
+Repository = "https://github.com/andreibondarev/limitful"
 
 [project.scripts]
 limitful = "limitful.cli:main"

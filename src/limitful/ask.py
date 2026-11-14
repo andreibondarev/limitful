@@ -1,4 +1,4 @@
-"""Ask AI: answer questions about what was said, from the transcripts.
+"""Ask: answer questions about what was said, from the transcripts.
 
 Claude is given three tools over the local database (search lines, list
 conversations, read a conversation) and works out for itself what to look up.

@@ -1,3 +1,3 @@
-"""Open-source desktop sync client for the Limitless Pendant."""
+"""Open-source replacement for the Limitless Pendant software."""
 
 __version__ = "0.1.0"

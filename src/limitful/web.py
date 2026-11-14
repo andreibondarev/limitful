@@ -157,7 +157,7 @@ class Library:
     # --- first run -------------------------------------------------------------------
 
     def welcome(self) -> dict:
-        """What the first-run guide needs to know to pick where to start."""
+        """What the setup guide needs to know to pick where to start."""
         from . import demo, speech_model
 
         db = self._db()
@@ -189,7 +189,7 @@ class Library:
             return make_transcriber(engine)
         megabytes = 1024 * 1024
         total = speech_model.KNOWN_BYTES.get(DEFAULT_MODEL, 0) // megabytes
-        self.job.update(what="Downloading the speech model (first time only), in MB", done=0, total=total)
+        self.job.update(what="Downloading the speech model (first time only), megabytes", done=0, total=total)
         finished = threading.Event()
 
         def report():
@@ -255,7 +255,7 @@ class Library:
         """Wait, in the background, for the pendant to be put in pairing mode."""
         with self._lock:
             if self.job["running"]:
-                raise RuntimeError("something is already running; wait for it to finish")
+                raise RuntimeError("Something is already running. Wait for it to finish.")
             self.job.update(running=True, what="Waiting for the pendant in pairing mode",
                             done=0, total=0, error=None, note=None)
         threading.Thread(target=self._pair_job, daemon=True).start()
@@ -281,7 +281,7 @@ class Library:
 
     def _with_radio(self, action):
         if not self._radio.acquire(blocking=False):
-            raise RuntimeError("already talking to the pendant; try again in a moment")
+            raise RuntimeError("Already talking to the pendant. Try again in a moment.")
         try:
             return action()
         finally:
@@ -301,7 +301,7 @@ class Library:
 
     def set_brightness(self, percent) -> dict:
         if not isinstance(percent, int) or isinstance(percent, bool) or not 0 <= percent <= 100:
-            raise ValueError("brightness is a whole number from 0 to 100")
+            raise ValueError("Brightness is a whole number from 0 to 100.")
 
         def apply():
             try:
@@ -320,7 +320,7 @@ class Library:
         """
         with self._lock:
             if self.job["running"]:
-                raise RuntimeError("something is already running; wait for it to finish")
+                raise RuntimeError("Something is already running. Wait for it to finish.")
             self.job.update(running=True, what="Syncing the pendant", done=0, total=0, error=None, note=None)
         threading.Thread(target=self._sync_job, args=(quiet,), daemon=True).start()
 
@@ -419,7 +419,7 @@ class Library:
         return {
             "provider": config.load().get("provider") or None,
             "has_key": bool(key),
-            "key_hint": f"ends in {key[-4:]}" if key and len(key) >= 12 else ("saved" if key else None),
+            "key_hint": self._hint(key),
             "claude_model": digest_mod.CLAUDE_MODEL,
             "ollama_model": digest_mod.OLLAMA_MODEL,
             "transcriber": config.load().get("transcriber") or "local",
@@ -486,10 +486,10 @@ class Library:
         """Summarise new conversations in the background."""
         provider = config.provider()
         if not provider:
-            raise ValueError("choose what writes summaries first")
+            raise ValueError("Choose what writes summaries first, under Settings.")
         with self._lock:
             if self.job["running"]:
-                raise RuntimeError("something is already running; wait for it to finish")
+                raise RuntimeError("Something is already running. Wait for it to finish.")
             self.job.update(running=True, what="Summarising conversations", done=0, total=0, error=None, note=None)
         threading.Thread(target=self._digest_job, args=(provider,), daemon=True).start()
 
@@ -673,14 +673,14 @@ class Library:
     def write_recap(self, day: str) -> dict:
         provider = config.provider()
         if not provider:
-            raise ValueError("choose what writes summaries first, under Settings")
+            raise ValueError("Choose what writes summaries first, under Settings.")
         summarizer = digest_mod.make_summarizer(provider, None, config.api_key())
         try:
             written = self._with_store(lambda store: store.recap_day(day, summarizer))
         except (digest_mod.DigestError, digest_mod.DigestDeclined) as err:
             raise ValueError(f"Could not write the recap: {err}") from None
         if written is None:
-            raise ValueError("this day has too few summarised conversations to recap")
+            raise ValueError("This day has too few summarised conversations to recap.")
         return {"recap": written, "can_write": True}
 
     def reminders(self, include_done: bool = False) -> list[dict]:

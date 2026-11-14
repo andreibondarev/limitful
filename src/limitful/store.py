@@ -66,8 +66,8 @@ CREATE INDEX IF NOT EXISTS utterances_start ON utterances (start_ms);
 CREATE TABLE IF NOT EXISTS speakers (
     id        INTEGER PRIMARY KEY,
     name      TEXT    NOT NULL,
-    voice_sum BLOB    NOT NULL,         -- sum of this speaker's fingerprints
-    lines     INTEGER NOT NULL
+    voice_sum BLOB    NOT NULL,         -- no longer read; kept so older databases still open
+    lines     INTEGER NOT NULL          -- likewise
 );
 CREATE TABLE IF NOT EXISTS imports (
     key TEXT PRIMARY KEY               -- one row per imported file, so imports can be re-run

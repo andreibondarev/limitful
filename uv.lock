@@ -548,9 +548,12 @@ dependencies = [
     { name = "anthropic" },
     { name = "bleak" },
     { name = "faster-whisper" },
+    { name = "huggingface-hub" },
     { name = "numpy" },
+    { name = "onnxruntime" },
     { name = "pyserial" },
     { name = "sherpa-onnx" },
+    { name = "tokenizers" },
 ]
 
 [package.dev-dependencies]
@@ -560,12 +563,15 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=1.0" },
+    { name = "anthropic", specifier = ">=2.8" },
     { name = "bleak", specifier = ">=0.22" },
     { name = "faster-whisper", specifier = ">=1.1" },
-    { name = "numpy" },
+    { name = "huggingface-hub", specifier = ">=0.23" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "onnxruntime", specifier = ">=1.17" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "sherpa-onnx", specifier = ">=1.10" },
+    { name = "tokenizers", specifier = ">=0.15" },
 ]
 
 [package.metadata.requires-dev]

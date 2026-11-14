@@ -68,6 +68,8 @@
   button, input { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
   .welcome h2:focus { outline: none; }
+  /* Read out, not shown. */
+  .unseen { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
   header {
     position: sticky; top: 0; z-index: 2;
@@ -354,7 +356,7 @@
   .round.faint { border-color: transparent; opacity: 0; }
   .task:hover .round.faint, .round.faint:focus-visible { opacity: 1; }
   @media (hover: none) { .round.faint { opacity: 0.6; } .side .remove { opacity: 1; } }
-  .mine { position: sticky; top: 6rem; padding: 1.2rem 1.4rem 0.6rem; border: 1px solid var(--rule); border-radius: 16px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+  .mine { position: sticky; top: calc(var(--head, 5rem) + 1rem); padding: 1.2rem 1.4rem 0.6rem; border: 1px solid var(--rule); border-radius: 16px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
   .mine .task:first-of-type { border-top: 0; }
   .task.was p { color: var(--muted); text-decoration: line-through; font-size: 1rem; }
   .finished { margin-top: 0.6rem; border-top: 1px solid var(--rule); padding-top: 0.6rem; }
@@ -544,7 +546,7 @@
   #settings[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .setup { max-width: 38rem; }
   .settings { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 3.5rem; align-items: start; }
-  .sections { position: sticky; top: 6rem; display: grid; gap: 0.2rem; }
+  .sections { position: sticky; top: calc(var(--head, 5rem) + 1rem); display: grid; gap: 0.2rem; }
   .sections button {
     display: flex; align-items: center; gap: 0.75rem; width: 100%; padding: 0.6rem 0.8rem; text-align: left; cursor: pointer;
     font: inherit; color: var(--ink); background: transparent; border: 0; border-radius: 10px;
@@ -565,7 +567,7 @@
     .sections button { width: auto; flex: none; border: 1px solid var(--rule); border-radius: 999px; padding: 0.4rem 0.85rem; }
     .sections button small { display: none; }
   }
-  .setup h2 { margin: 0 0 0.3rem; font-size: 1.45rem; }
+  .setup h2 { display: flex; align-items: center; gap: 0.55rem; margin: 0 0 0.3rem; font-size: 1.45rem; }
   .setup h2:not(:first-child) { margin-top: 2.4rem; }
   .setup > p { margin: 0 0 1rem; color: var(--muted); line-height: 1.5; }
   .setup fieldset { border: 0; margin: 0 0 1rem; padding: 0; }
@@ -609,7 +611,6 @@
   }
   .icon { flex: none; vertical-align: -0.18em; }
   button .icon { margin-right: 0.4rem; vertical-align: -0.2em; }
-  .setup h2 { display: flex; align-items: center; gap: 0.55rem; }
   .setup h2 .icon { color: var(--accent); }
   .device {
     display: grid; grid-template-columns: auto 1fr; gap: 1.6rem; align-items: center;
@@ -634,9 +635,8 @@
   }
   .setup .row.light { margin-top: 1.1rem; gap: 0.6rem; color: var(--muted); }
   .setup .row.light label { color: var(--ink); margin-right: 0.3rem; }
-  .setup .row.light output { color: var(--ink); }
   .setup .row.light input { flex: 0 1 16rem; accent-color: var(--accent); }
-  .setup .row.light output { min-width: 3rem; font-variant-numeric: tabular-nums; }
+  .setup .row.light output { min-width: 3rem; color: var(--ink); font-variant-numeric: tabular-nums; }
   .setup .small, .settings > div > .small { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
   #remind[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .quiet {
@@ -738,6 +738,8 @@
 const $ = (id) => document.getElementById(id);
 const main = $("main"), strip = $("strip"), audio = $("audio");
 const QUIET_MS = 120000;
+// The Limitless service ends on this day; advice about its app and exports stops applying then.
+const LIMITLESS_ENDED = Date.now() >= new Date(2026, 11, 1).getTime();
 const clock = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" });
 const clockSec = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 const longDay = new Intl.DateTimeFormat([], { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -889,7 +891,7 @@ function pendantDrawing(width = 108) {
   return { node, glow, halo };
 }
 
-async function showWelcome(step = "start") {
+async function showWelcome(step = "start", fromSettings = false) {
   leaveWelcome();
   welcoming = true;
   searching = reminding = configuring = asking = false;
@@ -909,7 +911,7 @@ async function showWelcome(step = "start") {
   const page = (stage, title, ...children) => {
     const at = ROUTE.indexOf(stage);
     const head = at < 0 ? [] : [
-      el("div", { className: "progress", role: "img", ariaLabel: `Step ${at + 1} of ${ROUTE.length}` },
+      el("div", { className: "progress", ariaHidden: "true" },
         ...ROUTE.map((_, n) => el("i", { className: n <= at ? "done" : "" }))),
       el("p", { className: "where", textContent: `Step ${at + 1} of ${ROUTE.length}` })];
     main.replaceChildren(el("div", { className: "welcome" }, ...head, el("h2", { textContent: title }), ...children));
@@ -951,6 +953,8 @@ async function showWelcome(step = "start") {
     return b;
   };
 
+  const backToSettings = () => { settingsPane = "pendant"; showSettings(); };
+
   const steps = {
     start() {
       const note = el("p", { className: "small" });
@@ -971,8 +975,8 @@ async function showWelcome(step = "start") {
       const item = (lead, rest) => el("li", {}, el("b", { textContent: lead }), " ", rest);
       page("before", "Before you connect",
         el("ol", { className: "prep" },
-          item("Let the Limitless app sync one last time.", "Pairing the usual way resets the pendant, and that erases any audio it has not handed over yet. Skip this if you no longer use the app, or if you have the pendant's USB cable: with it you can pair and keep the audio."),
-          item("Ask Limitless for your data export.", "The service ends on December 1, 2026 and its copy of your history goes with it. You can import the export here whenever it arrives."),
+          ...(LIMITLESS_ENDED ? [] : [item("Let the Limitless app sync one last time.", "Pairing the usual way resets the pendant, and that erases any audio it has not handed over yet. Skip this if you no longer use the app, or if you have the pendant's USB cable: with it you can pair and keep the audio.")]),
+          ...(LIMITLESS_ENDED ? [] : [item("Ask Limitless for your data export.", "The service ends on December 1, 2026 and its copy of your history goes with it. You can import the export here whenever it arrives.")]),
           item("Turn off Bluetooth on your phone.", "The pendant talks to one device at a time, and the phone usually gets there first. Quitting the Limitless app also works.")),
         el("p", { className: "small", textContent: "Your computer may ask whether this program can use Bluetooth. Allow it." }),
         el("div", { className: "row" }, button("I've done these", () => steps.connect(), "main"), button("Back", () => steps.start())));
@@ -1009,7 +1013,7 @@ async function showWelcome(step = "start") {
       page("connect", "Pair your pendant",
         el("p", { className: "lede", textContent: "The pendant only accepts a new computer once it has forgotten the old one. There are two ways to get there." }),
         way("plug", "Keep its recordings", "Plug the pendant in with its USB cable and it is told to forget its old computer. Nothing on it is erased.", () => steps.keep()),
-        way("pendant", "Reset the pendant", "No cable needed. A button press puts it in pairing mode, which erases any audio it has not synced yet.", () => steps.reset()),
+        way("pendant", "Reset the pendant", "No cable needed. A button press puts it in pairing mode, which erases any recordings it has not synced yet.", () => steps.reset()),
         el("div", { className: "row" }, button("Back", () => steps.before())));
     },
 
@@ -1040,17 +1044,17 @@ async function showWelcome(step = "start") {
           return;
         }
         status.textContent = "Paired. The pendant accepted this computer and still has its recordings.";
-        start.replaceWith(button("Continue", () => steps.sync(), "main"));
+        start.replaceWith(fromSettings ? button("Back to Settings", backToSettings, "main") : button("Continue", () => steps.sync(), "main"));
       }, "main");
-      page("connect", "Pair and keep the recordings",
+      page(fromSettings ? "" : "connect", "Pair and keep the recordings",
         el("ol", { className: "prep" },
           el("li", {}, "Plug the pendant into this computer with its USB cable. ", plugged),
-          el("li", { textContent: "Click Forget the old computer. The pendant drops every computer and phone it was paired with, and keeps its audio." }),
+          el("li", { textContent: "Click Forget the old computer. The pendant drops every computer and phone it was paired with, and keeps its recordings." }),
           el("li", { textContent: "If this computer was paired with the pendant before, remove Pendant under Bluetooth in System Settings, then turn Bluetooth off and on. Otherwise the computer keeps trying its old key." }),
           el("li", { textContent: "Click Pair and accept the connection request. There is no button to press on the pendant." })),
         el("p", { className: "small", textContent: "The Limitless app will stop seeing the pendant until it is paired there again." }),
         status,
-        el("div", { className: "row" }, forget, button("Reset it instead", () => steps.reset()), button("Back", () => steps.pair())));
+        el("div", { className: "row" }, forget, ...(fromSettings ? [button("Back to Settings", backToSettings)] : [button("Reset it instead", () => steps.reset()), button("Back", () => steps.pair())])));
       // Watch for the cable until the pendant shows up.
       let watching = true;
       const look = async () => {
@@ -1158,7 +1162,7 @@ async function showWelcome(step = "start") {
         el("input", { type: "radio", name: "wprovider", value, checked: (state.provider || "") === value }),
         el("b", { textContent: title }), el("span", { textContent: about }));
       const options = el("fieldset", {},
-        el("legend", { hidden: true, textContent: "What writes summaries" }),
+        el("legend", { className: "unseen", textContent: "What writes summaries" }),
         pick("", "Not now", "Conversations keep their opening words as a title. You can choose later under Settings."),
         pick("claude", "Claude", "Best results. The text of each conversation is sent to Anthropic and billed to your Anthropic account."),
         keyBox,
@@ -1193,7 +1197,7 @@ async function showWelcome(step = "start") {
         el("p", { className: "lede", textContent: `${have}${summarising ? " Summaries are being written in the background and appear as they finish." : ""}` }),
         autostartSwitch(),
         el("ul", { className: "prep" },
-          el("li", {}, el("b", { textContent: "To name people, " }), "click a speaker beside any line."),
+          el("li", {}, el("b", { textContent: "To name people, " }), "click a speaker's name in a conversation that has them (imported ones do)."),
           el("li", {}, el("b", { textContent: "To run this guide again, " }), "open Settings and choose Set up again.")),
         el("div", { className: "row" }, button("Open your Lifelog", () => finish(), "main")));
     },
@@ -1213,7 +1217,7 @@ async function showWelcome(step = "start") {
           if (!res.ok) throw new Error(await res.text());
           const r = await res.json();
           status.textContent = r.conversations
-            ? `Imported ${r.conversations.toLocaleString()} conversations, ${r.lines.toLocaleString()} lines and ${r.hours} hours of audio.`
+            ? imported(r)
             : "Nothing new in that export.";
           choose.replaceWith(button("Continue", () => steps.done(false), "main"));
         } catch (err) {
@@ -1222,7 +1226,7 @@ async function showWelcome(step = "start") {
         }
       });
       page("", "Import your Limitless history",
-        el("p", { className: "lede", textContent: "Request a data export from Limitless before the service ends on December 1, 2026. It arrives as a .zip file. Choose it here to bring in your conversations, transcripts, audio and reminders." }),
+        el("p", { className: "lede", textContent: (LIMITLESS_ENDED ? "A data export from Limitless is a .zip file." : "Request a data export from Limitless before the service ends on December 1, 2026. It arrives as a .zip file.") + " Choose it here to bring in your conversations, transcripts, audio and reminders." }),
         el("p", { className: "small", textContent: "The file stays on this computer. You can import more exports later under Settings, and connect a pendant from there too." }),
         status, file,
         el("div", { className: "row" }, choose, button("Back", () => steps.start())));
@@ -1286,7 +1290,7 @@ function todoRow(r, after, source) {
     });
     return b;
   };
-  if (r.status === "suggested") row.append(act("Accept", "accepted"), act("Dismiss", "dismissed"));
+  if (r.status === "suggested") row.append(act("Keep", "accepted"), act("Dismiss", "dismissed"));
   else if (r.status === "accepted") row.append(act("Done", "done"), act("Dismiss", "dismissed"));
   if (source) row.append(source);
   return row;
@@ -1302,6 +1306,7 @@ async function countReminders() {
 /* Reminders: suggestions to sort through on the left, your own list on the right. */
 async function showReminders() {
   leaveWelcome();
+  document.title = "Lifelog, reminders";
   document.querySelector("header").classList.add("plain");
   reminding = true;
   configuring = false;
@@ -1319,7 +1324,13 @@ async function showReminders() {
     return;
   }
   const set = async (r, status, row) => {
-    try { await post(`/api/reminders/${r.id}`, { status }); await showReminders(); }
+    const wasOpen = Boolean(main.querySelector("details.finished")?.open);
+    try {
+      await post(`/api/reminders/${r.id}`, { status });
+      await showReminders();
+      const finished = main.querySelector("details.finished");
+      if (finished && wasOpen) finished.open = true;
+    }
     catch (err) { row.append(el("small", { className: "oops", textContent: `Could not save. ${err.message}` })); }
   };
   const round = (name, label, onClick, extra = "") => {
@@ -1386,6 +1397,7 @@ async function showReminders() {
 const WHO_COLOURS = 8;
 const whoIndex = (speaker) => speaker.id !== null ? speaker.id % WHO_COLOURS
   : ((parseInt(speaker.name.replace(/\D/g, ""), 10) || 1) + 3) % WHO_COLOURS;
+let dayTint = () => null;  // set for each day drawn, so a person keeps one colour all through it
 function tinter() {
   const given = new Map(), taken = new Set();
   return (speaker) => {
@@ -1524,7 +1536,7 @@ function drawCalendar() {
     else detail.replaceChildren(el("p", { textContent: "Point at a day to see what it was about." }));
   };
 
-  const grid = el("div", { className: "month", role: "grid" });
+  const grid = el("div", { className: "month" });
   for (let n = 0; n < 7; n++) grid.append(el("span", { className: "dow", textContent: weekdayName.format(new Date(2023, 0, 1 + ((firstDay % 7) + n) % 7)) }));
   for (let n = 0; n < lead; n++) grid.append(el("span"));
   for (let n = 1; n <= count; n++) {
@@ -1543,7 +1555,10 @@ function drawCalendar() {
 
   const turn = (by, label, text) => {
     const b = el("button", { className: "step", textContent: text, ariaLabel: label });
-    b.addEventListener("click", (e) => { e.stopPropagation(); calendarMonth = new Date(year, month + by, 1); drawCalendar(); });
+    b.addEventListener("click", (e) => { e.stopPropagation(); calendarMonth = new Date(year, month + by, 1); drawCalendar();
+      // The calendar was drawn again, so the arrow just pressed is gone: hand focus to its replacement.
+      [...$("calendar").querySelectorAll(".step")].find((n) => n.getAttribute("aria-label") === label)?.focus();
+    });
     return b;
   };
   const months = days.map((d) => d.day.slice(0, 7));
@@ -1618,7 +1633,7 @@ function people() {
     const go = el("button", { title: `Open the first conversation with ${p.speaker.name}` },
       el("span", {}, el("i", { className: "dot" }), p.speaker.name),
       el("small", { textContent: p.ms < 60000 ? "under a minute" : `${lengthOf(p.ms)} speaking` }));
-    go.style.setProperty("--who", `var(--who-${whoIndex(p.speaker)})`);
+    go.style.setProperty("--who", dayTint(p.speaker));
     go.addEventListener("click", () => { p.first.setOpen(true); $(`g${p.first.key}`).scrollIntoView({ block: "start" }); });
     list.append(el("li", {}, go));
   }
@@ -1645,11 +1660,14 @@ function renderDay() {
     return;
   }
   groups = buildGroups();
+  dayTint = tinter();
+  const peopleList = people();  // first, so whoever spoke most gets first pick of colour
   drawStrip();
   const toggleAll = el("button", { id: "all", textContent: "Open all" });
   toggleAll.addEventListener("click", () => {
     const open = toggleAll.textContent === "Open all";
     groups.forEach((g) => g.setOpen(open));
+    document.querySelectorAll(".scraps").forEach((box) => { box.open = open; });
     toggleAll.textContent = open ? "Close all" : "Open all";
   });
   // A few stray words with no title are not a conversation: fold runs of them into one quiet row,
@@ -1676,12 +1694,8 @@ function renderDay() {
   flush();
   const real = groups.length - strays;
   const count = `${real} conversation${real === 1 ? "" : "s"}${strays ? `, ${strays} short moment${strays === 1 ? "" : "s"}` : ""}`;
-  toggleAll.addEventListener("click", () => {
-    const open = toggleAll.textContent === "Close all";  // the label has just flipped
-    document.querySelectorAll(".scraps").forEach((box) => { box.open = open; });
-  });
   const recap = el("section", { className: "recap", hidden: true });
-  const side = [recap, ...followUps(), ...people()];
+  const side = [recap, ...followUps(), ...peopleList];
   const grid = el("div", { className: "daygrid" },
     el("div", { className: "talks" }, el("div", { className: "tools" }, el("span", { textContent: count }), toggleAll), ...rows),
     el("aside", { className: "glance", ariaLabel: "This day at a glance" }, ...side));
@@ -1925,7 +1939,7 @@ function cardBody(g) {
   nodes.push(copy);
 
   const labelled = g.own.some((u) => u.speaker);
-  const tint = tinter();
+  const tint = dayTint;
   const who = (x) => x.speaker ? (x.speaker.id ?? x.speaker.name) : 0;
   const headings = [...g.sections];
   let turn = null, chars = 0, lastTimed = null;
@@ -2024,6 +2038,7 @@ function step(direction) {
 
 async function runSearch(query) {
   leaveWelcome();
+  document.title = "Lifelog, search";
   document.querySelector("header").classList.add("plain");
   searching = true;
   reminding = false;
@@ -2124,17 +2139,26 @@ function buildTrack(u) {
   }
   let base = 0;
   for (const p of pieces) { p.base = base; base += p.to - p.from; }
-  return { key: g ? g.key : `u${u.id}`, last: own[own.length - 1], pieces, total: base, at: 0 };
+  return { key: g ? g.key : `u${u.id}`, last: own[own.length - 1], pieces, total: base, at: 0, day };
 }
 
 /* Move the audio element to a time in a recording, loading the file if needed. */
+let cueWanted = null;  // where to go once the file has loaded; only the newest request counts
 function cue(path, time, start) {
-  const go = () => { audio.currentTime = time; if (start) audio.play(); };
+  cueWanted = { time, start };
+  const go = () => {
+    const want = cueWanted;
+    if (!want) return;
+    cueWanted = null;
+    audio.currentTime = want.time;
+    if (want.start) audio.play().catch(() => {});
+  };
   if (audio.dataset.src !== path) {
     audio.dataset.src = path;
     audio.src = path;
     audio.addEventListener("loadedmetadata", go, { once: true });
-  } else go();
+  } else if (audio.readyState >= 1) go();
+  // Otherwise the file is still loading, and the listener already waiting takes the newest request.
 }
 
 function play(u) {
@@ -2172,7 +2196,8 @@ function advance() {
     cue(p.audio, p.from, true);
     return;
   }
-  const next = lines.find((u) => u.audio && u.start > track.last.start);
+  // Only carry on into the next line while the day being played is still the one on screen.
+  const next = track.day === day ? lines.find((u) => u.audio && u.start > track.last.start) : null;
   if (next) play(next); else { playing = null; track = null; markPlaying(); }
 }
 
@@ -2235,7 +2260,7 @@ audio.addEventListener("error", () => {
   if (!playing) return;
   $("now").textContent = "This recording could not be played. Chrome and Firefox play these files; older Safari does not.";
 });
-$("toggle").addEventListener("click", () => audio.paused ? audio.play() : audio.pause());
+$("toggle").addEventListener("click", () => audio.paused ? audio.play().catch(() => {}) : audio.pause());
 seek.addEventListener("input", () => { scrubbing = true; $("at").textContent = stamp(seek.value); });
 seek.addEventListener("change", () => { scrubbing = false; jumpTo(Number(seek.value)); });
 $("back").addEventListener("click", () => jumpTo(position() - 10));
@@ -2250,6 +2275,9 @@ strip.addEventListener("click", (e) => {
   const nearest = g ? g.own[0] : lines.reduce((a, b) => Math.abs(b.start - at) < Math.abs(a.start - at) ? b : a);
   reveal(nearest.id, false);
 });
+
+const count = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+const imported = (r) => `Imported ${count(r.conversations, "conversation")}, ${count(r.lines, "line")} and ${count(r.hours, "hour")} of audio.`;
 
 /* A notice that something is done, which clears itself. */
 function sayDone(text) {
@@ -2312,9 +2340,9 @@ $("file").addEventListener("change", async (e) => {
     if (!res.ok) throw new Error(await res.text());
     const r = await res.json();
     const added = r.conversations
-      ? `Imported ${r.conversations} conversations, ${r.lines} lines and ${r.hours} hours of audio.`
+      ? imported(r)
       : "Nothing new in that export.";
-    say(r.skipped ? `${added} ${r.skipped} conversations were already here.` : added);
+    say(r.skipped ? `${added} ${count(r.skipped, "conversation")} ${r.skipped === 1 ? "was" : "were"} already here.` : added);
     try { days = await get("/api/days"); } catch { /* keep what we had */ }
     countReminders();
     if (r.conversations && days.length) openDay(days[days.length - 1].day);
@@ -2329,6 +2357,7 @@ $("file").addEventListener("change", async (e) => {
 let settingsPane = "pendant";  // the section last open, kept across saves
 async function showSettings() {
   leaveWelcome();
+  document.title = "Lifelog, settings";
   document.querySelector("header").classList.add("plain");
   configuring = true;
   reminding = false;
@@ -2364,9 +2393,9 @@ async function showSettings() {
   const run = el("button", { className: now.provider ? "pill busy-off" : "pill", disabled: !now.provider }, ...withIcon("summary", "Summarise new conversations now", 16));
   const picked = () => document.querySelector('input[name="provider"]:checked')?.value ?? "";
   const options = el("fieldset", {},
-    el("legend", { hidden: true, textContent: "What writes summaries" }),
+    el("legend", { className: "unseen", textContent: "What writes summaries" }),
     choice("", "Off", "Conversations recorded from the pendant keep their opening words as a title."),
-    choice("claude", "Claude", `Best results, using ${now.claude_model}. The transcript of each conversation is sent to Anthropic, and usage is billed to your Anthropic account.`),
+    choice("claude", "Claude", `Best results, using ${now.claude_model}. The text of each conversation is sent to Anthropic, and usage is billed to your Anthropic account.`),
     keyBox,
     choice("ollama", "Ollama", `Runs on this computer with the ${now.ollama_model} model, so nothing leaves it. Weaker, and Ollama must be running.`));
   const showKey = () => { keyBox.hidden = picked() !== "claude"; };
@@ -2403,7 +2432,7 @@ async function showSettings() {
   const dgForget = el("button", { className: "pill", textContent: "Remove saved key", hidden: !now.has_deepgram_key });
   const heardPicked = () => document.querySelector('input[name="transcriber"]:checked')?.value ?? "local";
   const heard = el("fieldset", {},
-    el("legend", { hidden: true, textContent: "What turns audio into text" }),
+    el("legend", { className: "unseen", textContent: "What turns audio into text" }),
     heardBy("local", "On this computer", "Whisper, running here. No audio leaves this computer. It cannot tell speakers apart."),
     heardBy("deepgram", "Deepgram", `Adds Speaker 1, Speaker 2 to each conversation, using ${now.deepgram_model}. The audio of every new recording is sent to Deepgram, a company in the United States, and usage is billed to your Deepgram account. Measured on five conversations, its speaker labels were no better than guessing.`),
     dgBox);
@@ -2470,7 +2499,7 @@ async function showSettings() {
   let pausedSince = null;
   const showHold = (since) => {
     pausedSince = since ?? null;
-    pause.replaceChildren(...withIcon(pausedSince ? "play" : "pause", pausedSince ? "Resume keeping audio" : "Pause", 16));
+    pause.replaceChildren(...withIcon(pausedSince ? "play" : "pause", pausedSince ? "Resume keeping audio" : "Pause keeping audio", 16));
     hold.hidden = !pausedSince;
     if (pausedSince) hold.textContent = `Paused since ${clock.format(new Date(pausedSince))}. The pendant is still recording, because it has no way to be told to stop. Audio from this period is deleted when it syncs, without being kept or transcribed.`;
     $("paused").hidden = !pausedSince;
@@ -2590,7 +2619,7 @@ async function showSettings() {
     el("input", { type: "radio", name: "theme", value, checked: theme() === value }),
     el("b", { textContent: name }), el("span", { textContent: about }));
   const themes = el("fieldset", {},
-    el("legend", { hidden: true, textContent: "Theme" }),
+    el("legend", { className: "unseen", textContent: "Theme" }),
     themeChoice("", "Match this computer", "Follows your system's light or dark setting."),
     themeChoice("light", "Light", "Pale green paper, dark ink."),
     themeChoice("dark", "Dark", "Dark paper, light ink. Easier in a dim room."));
@@ -2627,7 +2656,7 @@ async function showSettings() {
       el("p", { className: "small", textContent: "Unpair makes the pendant forget this computer, so it can be paired with another. Its recordings are kept. Your computer may also remember the pendant: if pairing again fails, remove it under Bluetooth in System Settings." }),
       el("div", { className: "row" }, pair, unpair),
       el("p", { className: "small" }, "With the pendant's USB cable you can pair without the reset, and keep the audio on it. ",
-        (() => { const b = el("button", { className: "pill", textContent: "Pair without erasing" }); b.addEventListener("click", () => showWelcome("keep")); return b; })()))),
+        (() => { const b = el("button", { className: "pill", textContent: "Pair without erasing" }); b.addEventListener("click", () => showWelcome("keep", true)); return b; })()))),
     transcription: el("section", { className: "setup" },
     el("h2", {}, ...withIcon("wave", "Transcription", 22)),
     el("p", { textContent: "What turns new recordings from the pendant into text. Conversations imported from Limitless keep the transcript they came with." }),
@@ -2682,7 +2711,7 @@ async function showSettings() {
   restate = () => { for (const [id, , , state] of menu) states[id].textContent = state(); };
   main.replaceChildren(el("div", { className: "settings" }, tabs, el("div", {}, ...Object.values(panes),
     el("p", { className: "about" }, el("b", { textContent: "*" }), " Limitful", el("br"), el("small", { textContent: "limits apply" })),
-    (() => { const b = el("button", { className: "pill", textContent: "Set up again" }); b.title = "Run the first-time guide: connect a pendant, import history, choose summaries"; b.addEventListener("click", () => showWelcome()); return el("p", { className: "small" }, b); })())));
+    (() => { const b = el("button", { className: "pill", textContent: "Set up again" }); b.title = "Run the setup guide: connect a pendant, import history, choose summaries"; b.addEventListener("click", () => showWelcome()); return el("p", { className: "small" }, b); })())));
   open(panes[settingsPane] ? settingsPane : "pendant");
   showKey();
   showDgKey();
@@ -2730,6 +2759,7 @@ function replyNodes(text, cited) {
 
 function showAsk() {
   leaveWelcome();
+  document.title = "Lifelog, ask";
   asking = true;
   searching = false; reminding = false; configuring = false;
   history.replaceState(null, "", "#ask");
@@ -2751,7 +2781,7 @@ function showAsk() {
     working.classList.toggle("failed", failed);
   };
   const field = el("textarea", { rows: 1, placeholder: "Ask about anything you've said or heard", ariaLabel: "Your question" });
-  const go = el("button", { type: "submit", ariaLabel: "Ask", title: "Ask" }, icon("send", 20));
+  const go = el("button", { type: "submit", ariaLabel: "Send question", title: "Send question" }, icon("send", 20));
   const form = el("form", { className: "composer" }, field, go);
   const grow = () => { field.style.height = "auto"; field.style.height = `${Math.min(field.scrollHeight, 192)}px`; };
 

@@ -42,7 +42,7 @@ def _begin(library: "Library", what: str, work: Callable[[], str]) -> None:
     """Claim the job slot and run `work` in the background. It returns the closing note."""
     with library._lock:
         if library.job["running"]:
-            raise RuntimeError("something is already running; wait for it to finish")
+            raise RuntimeError("Something is already running. Wait for it to finish.")
         library.job.update(running=True, what=what, done=0, total=0, error=None, note=None, stoppable=True)
     _stop_flag(library).clear()
 

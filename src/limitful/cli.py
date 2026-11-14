@@ -592,7 +592,7 @@ async def _cmd_serve(args) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="limitful",
-        description="Pull recordings off a Limitless Pendant over Bluetooth.",
+        description="Limitful: sync a Limitless Pendant over Bluetooth, transcribe it, and browse, search and summarise your days.",
     )
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -673,7 +673,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
     p.add_argument("--redo", action="store_true",
                    help="transcribe pendant recordings again, replacing their transcripts")
-    p.add_argument("--engine", choices=["local", "deepgram"],
+    p.add_argument("--engine", choices=list(config.TRANSCRIBERS),
                    help="local Whisper, or Deepgram for speaker labels (default: the choice saved in Settings)")
     p.add_argument("--speakers", action="store_true",
                    help="experimental: guess speakers by voice (unreliable on real recordings)")

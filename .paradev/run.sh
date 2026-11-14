@@ -18,7 +18,7 @@ port_in_use() {
 if [ -z "${PORT:-}" ]; then
   name="${SUPERSET_WORKSPACE_NAME:-$(basename "$PWD")}"
   hash="$(printf '%s' "$name" | cksum | cut -d' ' -f1)"
-  PORT=$((4000 + hash % 1000)) # 4000-4999, clear of the root checkout's default 3000
+  PORT=$((4000 + hash % 1000)) # 4000-4999; the app's own default, 4747, is in this range, so a busy port moves on
   tries=0
   while port_in_use "$PORT"; do
     PORT=$((PORT + 1))
@@ -35,5 +35,5 @@ echo "run: dev server on http://localhost:$PORT"
 # Record our PID so teardown.sh can stop the server; exec keeps the PID the same.
 echo $$ >"$PID_FILE"
 
-# The Lifelog web app: browse transcripts and play audio. Reads ~/Limitful.
+# The Lifelog web app. It serves the real data folder (~/Limitful, or $LIMITFUL_DATA).
 exec uv run limitful serve --port "$PORT"

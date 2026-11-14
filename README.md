@@ -588,6 +588,38 @@ uv run limitful sync --ack
 `--ack` tells the pendant to delete pages once they are safely on disk. After
 that your computer holds the only copy, so back up the data folder.
 
+### Options and environment variables
+
+`uv run limitful --help` lists the commands, and `uv run limitful <command>
+--help` lists every option. The ones not mentioned elsewhere in this file:
+
+| Option | On | What it does |
+|---|---|---|
+| `--address` | `status`, `sync` | Name the pendant, from `scan`, when more than one is near |
+| `--timeout` | `scan`, `status`, `sync`, `pair`, `unpair` | Wait longer for the pendant |
+| `--no-export` | `sync` | Download pages without writing audio files |
+| `--model`, `--language` | `transcribe`, `watch`, `retime` | Another Whisper model, or a fixed language such as `en` |
+| `--redo` | `transcribe` | Transcribe the pendant's recordings again |
+| `--reset`, `--unlink-imported` | `speakers` | Start speaker grouping over, or undo `--link-imported` |
+| `--provider`, `--llm-model` | `digest`, `watch`, `ask` | Use another summary writer or model for this run |
+| `--interval`, `--no-transcribe` | `watch` | Seconds between attempts; download only |
+| `--port` | `serve`, `autostart` | Port for the Lifelog |
+
+| Environment variable | What it sets |
+|---|---|
+| `LIMITFUL_DATA` | The data folder (default `~/Limitful`) |
+| `LIMITFUL_CONFIG` | The settings file (default `~/.config/limitful/config.json`) |
+| `LIMITFUL_CACHE` | Where the voice and search models are kept (default `~/.cache/limitful`) |
+| `LIMITFUL_LLM` | `claude` or `ollama`, overriding the Summaries choice in Settings |
+| `LIMITFUL_TRANSCRIBER` | `local` or `deepgram`, overriding the Transcription choice |
+| `PORT` | The Lifelog's port (default 4747) |
+| `ANTHROPIC_API_KEY` | Used for Claude when no key is saved in Settings |
+
+Settings shows the saved choices, not these overrides. The login item passes
+on only `LIMITFUL_CONFIG`, so at login the saved settings apply. A data folder
+named `~/PendantSync`, from before the project had a name, is used if it
+exists and `~/Limitful` does not.
+
 ## How it works
 
 - `cli.py` and `__main__.py`: the commands, and the entry point the login item uses.
@@ -641,8 +673,8 @@ Observed on one pendant; treat as provisional.
   (vendor 0x2fe3, product 0x0110) with a serial port.
 - Bluetooth services: battery, the Limitless data service, and Zephyr's device
   management (SMP) service, which is normally used for firmware updates.
-- Commands are refused with "Insufficient Encryption" until the host is paired.
-  The pendant only accepts a new host once it has forgotten the old one: by
+- Commands are refused with "Insufficient Encryption" until the computer is
+  paired. The pendant only accepts a new computer once it has forgotten the old one: by
   pairing mode (a factory reset) or by `ble unpair` over USB.
 - Audio is mono Opus in 20 ms frames. A flash page is about 4 KB and holds
   roughly 1.45 s; the pendant reports 95,232 pages, so about 38 hours.
@@ -678,7 +710,8 @@ What they showed:
 - `device list`: a battery gauge (bq27427), a motion sensor (lsm6dsm), NAND
   flash, and no Wi-Fi device. The firmware has a Wi-Fi module, but this
   pendant shows no radio for it.
-- `storage status`, `battery info`, `dev ver` and `time synced` print the
+- `storage status`, `battery info`, `dev ver`, `config get led_brightness`
+  and `time synced` print the
   readings their names suggest, matching what Bluetooth reports.
 
 Commands that exist but have not been run: `button push [short|long|double-short]`
