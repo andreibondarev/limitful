@@ -27,11 +27,13 @@ from . import client as client_mod
 from . import config
 from . import digest as digest_mod
 from . import hosted as hosted_mod
+from . import upkeep
 
 _INDEX = Path(__file__).parent / "web" / "index.html"
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 _SEARCH_LIMIT = 200
+_MEANING_LIMIT = 8  # moments offered as "close in meaning" under the exact matches
 _MAX_UPLOAD = 50 * 1024**3
 # Imported lines can sit a second or two after their audio; start playback early.
 _IMPORT_LEAD_MS = 1500
@@ -402,6 +404,46 @@ class Library:
             db.close()
         return [dict(_utterance(r), day=_day_of(r[1])) for r in rows]
 
+    def search_meaning(self, query: str) -> dict:
+        """Lines close in meaning to `query`, best first, once the index has been built.
+
+        Served apart from the exact-word search so those results never wait for,
+        or change because of, this one; the page lists these underneath.
+        """
+        from . import search as search_mod
+
+        index = search_mod.index_for(self.data_dir)
+        if not index.exists():
+            return {"ready": False, "lines": []}
+        db = self._db()
+        try:
+            start_of = dict(db.execute("SELECT id, start_ms FROM utterances"))
+            # No cut-off by score: measured on real transcripts, right answers (0.57 to
+            # 0.79) and unrelated lines (median 0.68) score alike, so a floor would
+            # hide as many good hits as bad. The page labels these as near, not exact.
+            hits = search_mod.spread(index.search(search_mod.make_embedder(), query, limit=200),
+                                     start_of, _MEANING_LIMIT, apart_ms=search_mod.NEIGHBOUR_GAP_MS)
+            # A hit is a line that matched together with its neighbours, and on its own
+            # it can be a bare "Yeah.", so each is shown as that moment: the same few lines.
+            lines, seen = [], set()  # a line two moments share is listed with the closer one
+            for moment, (uid, _score) in enumerate(hits):
+                at = start_of[uid]
+                reach = search_mod.NEIGHBOUR_GAP_MS
+                before = db.execute(
+                    _SELECT + "WHERE u.start_ms <= ? AND u.start_ms > ? AND u.id != ? "
+                    "ORDER BY u.start_ms DESC, u.id DESC LIMIT ?", (at, at - reach, uid, search_mod.NEIGHBOURS)).fetchall()
+                after = db.execute(
+                    _SELECT + "WHERE u.start_ms >= ? AND u.start_ms < ? AND u.id != ? "
+                    "ORDER BY u.start_ms, u.id LIMIT ?", (at, at + reach, uid, search_mod.NEIGHBOURS)).fetchall()
+                here = db.execute(_SELECT + "WHERE u.id = ?", (uid,)).fetchall()
+                for row in sorted([*before, *here, *after], key=lambda r: (r[1], r[0])):
+                    if row[0] not in seen:
+                        seen.add(row[0])
+                        lines.append(dict(_utterance(row), day=_day_of(row[1]), moment=moment))
+        finally:
+            db.close()
+        return {"ready": True, "lines": lines}
+
     def _with_store(self, action):
         from .store import Store
 
@@ -490,6 +532,8 @@ def make_handler(library: Library):
                     return self._json(library.settings())
                 if path == "/api/pendant":
                     return self._json(library.pendant())
+                if path == "/api/upkeep":
+                    return self._json(upkeep.status(library))
                 if path == "/api/chats":
                     return self._json(library.chats())
                 found = re.match(r"^/api/chats/(\d+)$", path)
@@ -498,6 +542,9 @@ def make_handler(library: Library):
                 if path == "/api/search":
                     query = parse_qs(url.query).get("q", [""])[0].strip()
                     return self._json(library.search(query) if query else [])
+                if path == "/api/search/meaning":
+                    query = parse_qs(url.query).get("q", [""])[0].strip()
+                    return self._json(library.search_meaning(query) if query else {"ready": True, "lines": []})
                 if path.startswith("/audio/"):
                     return self._audio(library.audio_path(path))
             except (sqlite3.Error, ValueError) as err:
@@ -545,6 +592,25 @@ def make_handler(library: Library):
                     if action == "unpair":
                         return self._json(library.unpair_pendant())
                     raise ValueError("unknown action")
+                except RuntimeError as err:
+                    return self._text(HTTPStatus.CONFLICT, str(err))
+                except ValueError as err:
+                    return self._text(HTTPStatus.BAD_REQUEST, str(err))
+            if path == "/api/upkeep":
+                # Re-timing and index building: {"action": "retime" | "index" | "stop"}.
+                try:
+                    length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    action = body.get("action") if isinstance(body, dict) else None
+                    if action == "retime":
+                        upkeep.start_retime(library)
+                    elif action == "index":
+                        upkeep.start_index(library)
+                    elif action == "stop":
+                        upkeep.stop(library)
+                    else:
+                        raise ValueError("unknown action")
+                    return self._json({"ok": True})
                 except RuntimeError as err:
                     return self._text(HTTPStatus.CONFLICT, str(err))
                 except ValueError as err:

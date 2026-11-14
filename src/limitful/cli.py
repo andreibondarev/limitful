@@ -159,6 +159,47 @@ async def _cmd_score_speakers(args) -> int:
     return 0
 
 
+async def _cmd_index(args) -> int:
+    from . import search
+
+    index = search.Index(args.data_dir)
+    if args.remove:
+        index.path.unlink(missing_ok=True)
+        print("Removed the search-by-meaning index. Transcripts are untouched.")
+        return 0
+    store = Store(args.data_dir)
+    try:
+        if args.find:
+            if not index.exists():
+                raise PendantError("there is no index yet: run `limitful index` first")
+            start_of = dict(store.db.execute("SELECT id, start_ms FROM utterances"))
+            hits = search.spread(index.search(search.make_embedder(), args.find, limit=200), start_of, 10)
+            for uid, score in hits:
+                (text,) = store.db.execute("SELECT text FROM utterances WHERE id = ?", (uid,)).fetchone()
+                when = datetime.fromtimestamp(start_of[uid] / 1000).strftime("%Y-%m-%d %H:%M")
+                print(f"{score:.2f}  {when}  {text}")
+            return 0
+        left = index.progress(store)["left"]
+        if not left:
+            print("Every line is already indexed.")
+            return 0
+        print(f"Indexing {left} line(s) for search by meaning (a 34 MB model downloads on first use). "
+              "Safe to stop and run again.")
+        embedder = await asyncio.to_thread(search.make_embedder)
+
+        def progress(done: int, total: int) -> None:
+            print(f"\r  {done}/{total} lines", end="", file=sys.stderr, flush=True)
+
+        started = time.monotonic()
+        added = await asyncio.to_thread(index.build, store, embedder, progress)
+        print(file=sys.stderr)
+        print(f"Indexed {added} line(s) in {time.monotonic() - started:.0f} s. "
+              "New lines are added as they are transcribed.")
+        return 0
+    finally:
+        store.close()
+
+
 async def _cmd_pause(args) -> int:
     store = Store(args.data_dir)
     try:
@@ -530,6 +571,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=5, help="how many imported conversations to send (default: 5)")
     p.add_argument("--language", help="language code such as en (default: let the service decide)")
     p.set_defaults(func=_cmd_score_speakers)
+
+    p = sub.add_parser("index", help="build the search-by-meaning index, or try a search with it")
+    data_args(p)
+    p.add_argument("--find", metavar="WORDS", help="show the lines closest in meaning to WORDS, then exit")
+    p.add_argument("--remove", action="store_true", help="delete the index (transcripts are untouched)")
+    p.set_defaults(func=_cmd_index)
 
     for name, text in (("pause", "stop keeping audio: what the pendant records from now is deleted at sync"),
                        ("resume", "keep audio again after a pause")):

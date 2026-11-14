@@ -462,6 +462,10 @@ class Store:
             days.add(datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d"))
             if on_progress:
                 on_progress(n, len(pending))
+        if added:
+            from . import search
+
+            search.update_if_built(self)  # keeps search by meaning complete, if it is in use
         return added, [self.write_transcript(day) for day in sorted(days)]
 
     # --- hosted transcription, a conversation at a time -----------------------------
@@ -1125,8 +1129,10 @@ class Store:
         """(path, start_ms, duration_ms) of imported recordings whose lines are not re-timed."""
         return self.db.execute(
             "SELECT s.path, s.start_ms, s.duration_ms FROM segments s "
-            "WHERE s.retimed IS NULL AND EXISTS "
-            "(SELECT 1 FROM utterances u WHERE u.segment = s.path AND u.source IS NOT NULL) "
+            # IN, not EXISTS: lines have no index by recording, and EXISTS read every
+            # line once per recording (20 s on 75 hours of imports; this takes 0.02 s).
+            "WHERE s.retimed IS NULL AND s.path IN "
+            "(SELECT segment FROM utterances WHERE source IS NOT NULL) "
             "ORDER BY s.start_ms DESC").fetchall()
 
     def retime_recording(self, path: str, words: list[tuple[float, str]]) -> tuple[int, int]:

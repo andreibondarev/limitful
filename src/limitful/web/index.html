@@ -384,6 +384,16 @@
   .setup .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
   .setup .note { margin: 0.7rem 0 0; font-size: 0.9rem; }
   .setup .note.failed { color: #b3261e; }
+  .halt {
+    margin-left: 0.5rem; padding: 0.1rem 0.6rem; cursor: pointer; font-size: 0.82rem;
+    border: 1px solid var(--accent); border-radius: 999px; background: transparent; color: var(--accent);
+  }
+  .halt:hover:not(:disabled) { background: var(--accent); color: var(--paper); }
+  .halt:disabled { opacity: 0.5; cursor: default; }
+  .near {
+    margin: 2.2rem 0 0; padding-top: 1rem; border-top: 1px solid var(--rule);
+    color: var(--muted); font-size: 0.9rem;
+  }
   .icon { flex: none; vertical-align: -0.18em; }
   button .icon { margin-right: 0.4rem; vertical-align: -0.2em; }
   .setup h2 { display: flex; align-items: center; gap: 0.55rem; }
@@ -548,6 +558,9 @@ const ICONS = {
   day: "M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z M4 10h16 M8 4v4 M16 4v4",
   check: "M5 12.5l4.5 4.5L19 7.5",
   x: "M6.5 6.5l11 11 M17.5 6.5l-11 11",
+  find: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z M16.2 16.2 20.5 20.5",
+  clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z M12 7.5V12l3 2",
+  stop: "M7 7h10v10H7Z",
   pause: "M9 5v14 M15 5v14",
   play: "M8 5v14l11-7Z",
   link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
@@ -1084,22 +1097,40 @@ async function runSearch(query) {
     return;
   }
   if ($("search").value.trim() !== query) return;  // a newer search is on its way
-  if (!results.length) {
-    main.replaceChildren(el("p", { className: "empty", textContent: `Nothing found for “${query}”.` }));
-    return;
-  }
-  const nodes = [];
-  let last = null;
-  for (const u of results) {
-    if (u.day !== last) {
-      last = u.day;
-      const a = el("a", { href: `#${u.day}`, textContent: longDay.format(new Date(dayStart(u.day))) });
-      a.addEventListener("click", (e) => { e.preventDefault(); openDay(u.day); });
-      nodes.push(el("h2", {}, a));
+  const listed = (lines) => {
+    const nodes = [];
+    let last = null, moment;
+    for (const u of lines) {
+      // A new day gets its date; a new moment (a few lines that belong together) too.
+      if (u.day !== last || u.moment !== moment) {
+        last = u.day;
+        moment = u.moment;
+        const a = el("a", { href: `#${u.day}`, textContent: longDay.format(new Date(dayStart(u.day))) });
+        a.addEventListener("click", (e) => { e.preventDefault(); openDay(u.day); });
+        nodes.push(el("h2", {}, a));
+      }
+      nodes.push(lineButton(u, u.day));
     }
-    nodes.push(lineButton(u, u.day));
+    return nodes;
+  };
+  main.replaceChildren(...(results.length ? listed(results)
+    : [el("p", { className: "empty", textContent: `Nothing found for “${query}”.` })]));
+  /* Lines that say it in other words, if the index has been built (Settings). They go
+     under the exact matches, labelled, so those are never pushed down or mixed up. */
+  let near;
+  try {
+    near = await get(`/api/search/meaning?q=${encodeURIComponent(query)}`);
+  } catch (err) {
+    return;  // the exact matches are already on the page
   }
-  main.replaceChildren(...nodes);
+  if (!searching || $("search").value.trim() !== query) return;
+  const exact = new Set(results.map((u) => u.id));
+  const shown = new Set(near.lines.filter((u) => exact.has(u.id)).map((u) => u.moment));
+  const extra = near.lines.filter((u) => !shown.has(u.moment));  // moments not already listed above
+  if (!extra.length) return;
+  main.append(
+    el("p", { className: "near", textContent: "Close in meaning, closest first. These moments may not contain your words." }),
+    ...listed(extra));
 }
 
 /* Playback. One audio element plays a "track": the recordings behind one conversation,
@@ -1262,6 +1293,15 @@ async function watchJob() {
   document.querySelectorAll(".busy-off").forEach((b) => { b.disabled = job.running; });
   if (job.running) {
     say(job.total ? `${job.what}: ${job.done} of ${job.total}. You can keep using the page.` : `${job.what}…`);
+    if (job.stoppable && !job.what.includes("stopping")) {
+      const halt = el("button", { className: "halt" }, ...withIcon("stop", "Stop", 14));
+      halt.addEventListener("click", async () => {
+        halt.disabled = true;
+        try { await post("/api/upkeep", { action: "stop" }); } catch { /* it finished first */ }
+        watchJob();
+      });
+      $("status").append(" ", halt);
+    }
     if (!watching) watching = setInterval(watchJob, 3000);
     return;
   }
@@ -1525,6 +1565,28 @@ async function showSettings() {
   describe(pendantNow);
   showHold(pendantNow.paused_since);
 
+  // --- upkeep: the search index and the timing of imported lines
+  let upkeep = { retime: { recordings: 0, hours: 0 }, index: { indexed: 0, total: 0, left: 0 } };
+  try { upkeep = await get("/api/upkeep"); } catch { /* shown as nothing to do */ }
+  const starter = (action, name, label) => {
+    const b = el("button", { className: "pill busy-off" }, ...withIcon(name, label, 16));
+    b.addEventListener("click", async () => {
+      try { await post("/api/upkeep", { action }); watchJob(); }
+      catch (err) { say(err.message, true); }
+    });
+    return b;
+  };
+  const count = (n) => n.toLocaleString();
+  const indexState = !upkeep.index.total ? "There are no lines to index yet."
+    : !upkeep.index.indexed ? `It is not set up yet: ${count(upkeep.index.total)} lines to index, about a minute for every few thousand. A 34 MB model downloads the first time. It can be stopped at any point and carries on where it left off.`
+    : upkeep.index.left ? `${count(upkeep.index.indexed)} of ${count(upkeep.index.total)} lines are indexed.`
+    : `All ${count(upkeep.index.total)} lines are indexed. New lines are added as they arrive.`;
+  const retimeState = upkeep.retime.recordings
+    ? `${count(upkeep.retime.recordings)} imported recordings (${upkeep.retime.hours} hours of audio) have not been re-timed. It works several times faster than the audio plays, can be stopped between recordings, and carries on where it left off.`
+    : "Every imported recording has been re-timed.";
+  const indexing = el("div", { className: "row" }, ...(upkeep.index.left ? [starter("index", "find", upkeep.index.indexed ? "Index the rest" : "Set up search by meaning")] : []));
+  const retiming = el("div", { className: "row" }, ...(upkeep.retime.recordings ? [starter("retime", "clock", "Fix the timing")] : []));
+
   const pick = el("button", { className: "pill busy-off" }, ...withIcon("import", "Choose an export zip", 16));
   pick.addEventListener("click", () => $("file").click());
   main.replaceChildren(el("div", { className: "setup" },
@@ -1561,6 +1623,12 @@ async function showSettings() {
     options,
     el("div", { className: "row" }, save, run, forget),
     note,
+    el("h2", {}, ...withIcon("find", "Search by meaning", 22)),
+    el("p", { textContent: `Lets Ask and the search box find lines by what they mean, not only by their exact words, so "money" can find "budget". It runs on this computer. ${indexState}` }),
+    indexing,
+    el("h2", {}, ...withIcon("clock", "Timing of imported lines", 22)),
+    el("p", { textContent: `Limitless's timestamps run about a second late, so imported lines trail their audio. This listens to each recording and moves every line to where its words are said, keeping Limitless's text. ${retimeState}` }),
+    retiming,
     el("h2", {}, ...withIcon("import", "Import from Limitless", 22)),
     el("p", { textContent: "Bring in a data export: conversations, transcripts, audio and reminders. Importing the same export twice adds nothing." }),
     el("div", { className: "row" }, pick),
