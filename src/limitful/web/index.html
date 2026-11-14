@@ -17,6 +17,9 @@
     --voice: "Charter", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
     --chrome: "Avenir Next", "Segoe UI", system-ui, sans-serif;
     --gutter: 4.75rem;
+    --pad: clamp(1rem, 4vw, 3rem);
+    /* On screens wider than the page, everything moves in by this much so it sits centred. */
+    --shift: max(0px, calc((100vw - 84rem) / 2 - var(--pad)));
     color-scheme: light dark;
   }
   @media (prefers-color-scheme: dark) {
@@ -45,7 +48,7 @@
     position: sticky; top: 0; z-index: 2;
     background: var(--paper);
     border-bottom: 1px solid var(--rule);
-    padding: 1.1rem clamp(1rem, 4vw, 3rem) 0.6rem;
+    padding: 1.1rem calc(var(--pad) + var(--shift)) 0.6rem;
   }
   .bar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
   h1 {
@@ -71,7 +74,10 @@
     border: 1px solid var(--rule); border-radius: 999px;
     background: transparent; padding: 0.4rem 0.85rem;
   }
-  #search { width: min(100%, 13rem); }
+  #search { flex: 1 1 6rem; max-width: 13rem; min-width: 0; }
+  /* Settings is an icon alone, so the row has room for the search box even while paused. */
+  #settings { padding-inline: 0.65rem; }
+  #settings .icon { margin: 0; }
   #search::placeholder { color: var(--muted); }
 
   /* The day as a strip: one mark for every stretch of speech. */
@@ -89,7 +95,8 @@
   #hours span { position: absolute; top: 0.15rem; }
   #hours span:not(:first-child) { transform: translateX(-50%); }
 
-  main { padding: 1.5rem clamp(1rem, 4vw, 3rem) 9rem; max-width: 60rem; }
+  /* Content runs the width of the header above it; lines of text keep their own measure. */
+  main { padding: 1.5rem var(--pad) 9rem; max-width: calc(100vw - 2 * var(--shift)); margin-left: var(--shift); }
   .line {
     display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr);
     align-items: baseline;
@@ -202,9 +209,9 @@
   .setup details.more .row { margin-top: 0.6rem; }
   .pill.danger:hover:not(:disabled) { border-color: #b3261e; color: #b3261e; }
   #ask[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  main.wide { max-width: 68rem; }
-  .chat { display: grid; grid-template-columns: minmax(0, 44rem) 15rem; gap: 3rem; align-items: start; }
-  .thread { min-width: 0; }
+  /* Chats down the left, the conversation centred in the space beside them. */
+  .chat { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 3rem; align-items: start; }
+  .thread { grid-column: 2; grid-row: 1; min-width: 0; width: 100%; max-width: 46rem; margin: 0 auto; }
   .hero { text-align: center; padding: 2.2rem 0 0.4rem; }
   .hero .star { display: block; margin: 0 auto 1rem; }
   .hero h2 { margin: 0 0 0.5rem; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; }
@@ -270,7 +277,7 @@
   .composer button:hover:not(:disabled) { background: var(--accent); }
   .composer button:disabled { opacity: 0.4; cursor: default; }
   .chat .fine { margin: 0.55rem 0 0; color: var(--muted); font-size: 0.78rem; text-align: center; }
-  .side { position: sticky; top: 9.5rem; padding-left: 1.4rem; border-left: 1px solid var(--rule); }
+  .side { grid-column: 1; grid-row: 1; position: sticky; top: 9.5rem; padding-right: 1.4rem; border-right: 1px solid var(--rule); min-height: 12rem; }
   .side h3 { margin: 0 0 0.7rem; font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 0.45rem; }
   .side .new { width: 100%; justify-content: center; display: flex; align-items: center; margin-bottom: 0.9rem; }
   .side .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0.4rem; padding: 0.45rem 0.55rem; margin: 0 -0.55rem; border-radius: 8px; }
@@ -288,7 +295,8 @@
   .side .none { color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
   @media (max-width: 900px) {
     .chat { grid-template-columns: 1fr; gap: 2rem; }
-    .side { position: static; padding: 1rem 0 0; border-left: 0; border-top: 1px solid var(--rule); }
+    .thread { grid-column: auto; grid-row: auto; }
+    .side { grid-column: auto; grid-row: auto; position: static; min-height: 0; padding: 1rem 0 0; border-right: 0; border-top: 1px solid var(--rule); }
     .tries { grid-template-columns: 1fr; }
   }
   .pill:disabled { opacity: 0.5; cursor: default; }
@@ -364,7 +372,7 @@
   #player {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 3;
     display: flex; flex-direction: column; gap: 0.45rem;
-    padding: 0.65rem clamp(1rem, 4vw, 3rem) 0.75rem;
+    padding: 0.65rem calc(var(--pad) + var(--shift)) 0.75rem;
     background: var(--ink); color: var(--paper);
   }
   #transport { display: flex; align-items: center; gap: 0.7rem; }
@@ -404,7 +412,7 @@
     <button id="paused" hidden title="Audio is not being kept. Click to open Settings."><span>Paused</span></button>
     <button id="ask" aria-pressed="false"><span>Ask</span></button>
     <button id="remind" aria-pressed="false"><span id="remindLabel">Reminders</span></button>
-    <button id="settings" aria-pressed="false"><span>Settings</span></button>
+    <button id="settings" aria-pressed="false" aria-label="Settings" title="Settings"></button>
     <input type="file" id="file" accept=".zip,application/zip" hidden>
     <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said">
   </div>
