@@ -537,14 +537,46 @@ async def _cmd_watch(args) -> int:
     return 0
 
 
+async def _cmd_autostart(args) -> int:
+    import socket
+
+    from . import autostart
+
+    try:
+        if args.action == "on":
+            # If the Lifelog is already open on that port, the login item waits for the next login.
+            with socket.socket() as probe:
+                free = probe.connect_ex(("127.0.0.1", args.port)) != 0
+            autostart.enable(args.data_dir, args.port, start_now=free)
+            print(f"Limitful will start when you log in and sync the pendant every "
+                  f"{autostart.SYNC_EVERY_S // 60} minutes. Lifelog: http://localhost:{args.port}")
+            print("It is running now." if free else
+                  f"Port {args.port} is in use (is `limitful serve` open?), so it starts at your next login.")
+        elif args.action == "off":
+            autostart.disable()
+            print("Limitful no longer starts at login.")
+        else:
+            state = autostart.status()
+            if not state["supported"]:
+                print("Starting at login is only supported on macOS so far.")
+            else:
+                print("Starts at login: " + ("yes" if state["enabled"] else "no")
+                      + (", and it is running now." if state["running"] else "."))
+    except autostart.AutostartError as err:
+        raise PendantError(str(err)) from None
+    return 0
+
+
 async def _cmd_serve(args) -> int:
     from .web import make_server
 
     try:
-        server = make_server(args.data_dir, args.port)
+        server = make_server(args.data_dir, args.port, sync_every=args.sync_every)
     except OSError as err:
         raise PendantError(f"could not use port {args.port}: {err.strerror or err}") from None
     print(f"Lifelog is at http://localhost:{server.server_port}  (data: {args.data_dir})")
+    if args.sync_every:
+        print(f"Syncing the pendant by itself every {int(args.sync_every)} seconds.")
     print("Press Ctrl-C to stop.")
     try:
         await asyncio.to_thread(server.serve_forever)
@@ -707,7 +739,16 @@ def main(argv: list[str] | None = None) -> int:
     data_args(p)
     p.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 4747),
                    help="port to listen on (default: $PORT or 4747)")
+    p.add_argument("--sync-every", type=float, default=0, metavar="SECONDS",
+                   help="also sync the pendant by itself this often, freeing synced audio on it "
+                        "(default: 0, only when asked)")
     p.set_defaults(func=_cmd_serve)
+
+    p = sub.add_parser("autostart", help="start Limitful at login and keep the pendant synced (macOS)")
+    p.add_argument("action", choices=["on", "off", "status"])
+    data_args(p)
+    p.add_argument("--port", type=int, default=4747, help="port the Lifelog listens on (default: 4747)")
+    p.set_defaults(func=_cmd_autostart)
 
     args = parser.parse_args(argv)
     try:

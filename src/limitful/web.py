@@ -107,6 +107,10 @@ class Library:
         # One Bluetooth conversation with the pendant at a time.
         self._radio = threading.Lock()
         self._pendant: dict = {"checked": None, "error": None}
+        self.port = 0
+        # Syncing by itself: how often (0 is off), and how the last attempt went.
+        self.auto: dict = {"every": 0, "last": None, "found": None}
+        self._auto_thread: threading.Thread | None = None
 
     def import_export(self, stream, length: int) -> dict:
         """Save an uploaded export zip, import it, then start linking speakers."""
@@ -288,15 +292,64 @@ class Library:
 
         return self._with_radio(apply)
 
-    def start_sync(self) -> None:
-        """Pull new audio off the pendant, then transcribe and summarise it, in the background."""
+    def start_sync(self, quiet: bool = False) -> None:
+        """Pull new audio off the pendant, then transcribe and summarise it, in the background.
+
+        `quiet` is for syncing by itself: a pendant that is away is normal, not an error.
+        """
         with self._lock:
             if self.job["running"]:
                 raise RuntimeError("something is already running; wait for it to finish")
             self.job.update(running=True, what="Syncing the pendant", done=0, total=0, error=None, note=None)
-        threading.Thread(target=self._sync_job, daemon=True).start()
+        threading.Thread(target=self._sync_job, args=(quiet,), daemon=True).start()
 
-    def _sync_job(self) -> None:
+    def set_auto_sync(self, every: float) -> None:
+        """Sync by itself every `every` seconds; 0 stops it."""
+        self.auto["every"] = max(0.0, float(every))
+        if self.auto["every"] and self._auto_thread is None:
+            self._auto_thread = threading.Thread(target=self._auto_loop, daemon=True)
+            self._auto_thread.start()
+
+    def _auto_loop(self) -> None:
+        waited = 0.0
+        while True:
+            time.sleep(1)
+            waited += 1
+            every = self.auto["every"]
+            if not every or waited < every:
+                continue
+            waited = 0.0
+            try:
+                self.start_sync(quiet=True)
+            except RuntimeError:
+                pass  # something else is running; try again next time
+
+    def autostart(self) -> dict:
+        from . import autostart
+
+        return dict(autostart.status(), syncing_every=self.auto["every"], last=self.auto["last"],
+                    found=self.auto["found"])
+
+    def set_autostart(self, enabled: bool) -> dict:
+        """Add or remove the login item. This running app starts or stops syncing by itself to match."""
+        from . import autostart
+
+        try:
+            if enabled:
+                # Written now, started at the next login: this app already holds the port.
+                autostart.enable(self.data_dir, self.port or 4747, start_now=False)
+                self.set_auto_sync(autostart.SYNC_EVERY_S)
+            else:
+                self.set_auto_sync(0)
+                # If the login item is what is running this app, removing it stops us:
+                # answer the page first.
+                threading.Timer(0.5, autostart.disable).start()
+                return dict(self.autostart(), enabled=False)
+        except autostart.AutostartError as err:
+            raise ValueError(str(err)) from None
+        return self.autostart()
+
+    def _sync_job(self, quiet: bool = False) -> None:
         from . import watch as watch_mod
         from .store import Store
 
@@ -318,11 +371,16 @@ class Library:
                     store.close()
             finally:
                 self._radio.release()
+            self.auto.update(last=int(time.time() * 1000), found=result.found)
             if not result.found:
+                if quiet:
+                    return
                 raise RuntimeError("the pendant is not in range, is switched off, "
                                    "or is connected to another device")
             if result.error:
                 raise RuntimeError(result.error)
+            if quiet and not result.pages_new:
+                return
             self.job["note"] = (f"Synced {result.pages_new} new pages: {result.audio_files} recordings, "
                                 f"{result.lines} lines of speech."
                                 + (f" Deleted {result.pages_discarded} pages recorded while paused."
@@ -638,6 +696,8 @@ def make_handler(library: Library):
                     return self._json(library.reminders(include_done=done))
                 if path == "/api/status":
                     return self._json(dict(library.job, advice=pendant_advice(library.job.get("error"))))
+                if path == "/api/autostart":
+                    return self._json(library.autostart())
                 if path == "/api/welcome":
                     return self._json(library.welcome())
                 if path == "/api/settings":
@@ -735,6 +795,15 @@ def make_handler(library: Library):
                     return self._text(HTTPStatus.BAD_REQUEST, "Day must be YYYY-MM-DD.")
                 try:
                     return self._json(library.write_recap(day))
+                except ValueError as err:
+                    return self._text(HTTPStatus.BAD_REQUEST, str(err))
+            if path == "/api/autostart":
+                try:
+                    length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool):
+                        raise ValueError('send {"enabled": true} or {"enabled": false}')
+                    return self._json(library.set_autostart(body["enabled"]))
                 except ValueError as err:
                     return self._text(HTTPStatus.BAD_REQUEST, str(err))
             if path == "/api/demo":
@@ -899,11 +968,15 @@ def make_handler(library: Library):
     return Handler
 
 
-def make_server(data_dir: Path, port: int, link_speakers: bool = False) -> ThreadingHTTPServer:
+def make_server(data_dir: Path, port: int, link_speakers: bool = False,
+                sync_every: float = 0) -> ThreadingHTTPServer:
     from .store import Store
 
     # Opening the store creates the database if needed and applies any upgrades,
     # so the read-only queries below always see the current layout.
     Store(data_dir).close()
     library = Library(data_dir, link_speakers)
-    return ThreadingHTTPServer(("127.0.0.1", port), make_handler(library))
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(library))
+    library.port = server.server_port
+    library.set_auto_sync(sync_every)
+    return server

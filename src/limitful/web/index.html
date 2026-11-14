@@ -252,6 +252,11 @@
     margin: 0.7rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.9rem;
     border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent);
   }
+  .switch { display: grid; grid-template-columns: 1.8rem 1fr; align-items: start; margin: 1.2rem 0; padding: 0.9rem 0; border-block: 1px solid var(--rule); cursor: pointer; }
+  .switch input { margin-top: 0.25rem; accent-color: var(--accent); width: 1rem; height: 1rem; }
+  .switch b { display: block; font-weight: 600; }
+  .switch small { display: block; margin-top: 0.15rem; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+  .switch small.failed { color: #b3261e; }
   #demobar {
     margin: 0.7rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.9rem;
     border-left: 3px solid var(--mark); background: color-mix(in srgb, var(--mark) 16%, transparent);
@@ -967,8 +972,8 @@ async function showWelcome(step = "start") {
         : "Nothing has been recorded yet, so the Lifelog is empty for now. Wear the pendant, then sync.";
       page("", "You're set",
         el("p", { className: "lede", textContent: `${have}${summarising ? " Summaries are being written in the background and appear as they finish." : ""}` }),
+        autostartSwitch(),
         el("ul", { className: "prep" },
-          el("li", {}, el("b", { textContent: "To keep syncing, " }), "leave ", el("code", { textContent: "limitful watch" }), " running in a terminal, or use Sync now under Settings."),
           el("li", {}, el("b", { textContent: "To name people, " }), "click a speaker beside any line."),
           el("li", {}, el("b", { textContent: "To run this guide again, " }), "open Settings and choose Set up again.")),
         el("div", { className: "row" }, button("Open your Lifelog", () => finish(), "main")));
@@ -1005,6 +1010,31 @@ async function showWelcome(step = "start") {
     },
   };
   (steps[step] || steps.start)();
+}
+
+/* A switch for starting at login and syncing without a terminal. Fills itself in once loaded. */
+function autostartSwitch() {
+  const box = el("input", { type: "checkbox", disabled: true });
+  const about = el("small", { textContent: "Checking…" });
+  const node = el("label", { className: "switch" }, box,
+    el("span", {}, el("b", { textContent: "Start at login and keep the pendant synced" }), about));
+  const show = (a) => {
+    box.checked = a.enabled;
+    box.disabled = !a.supported;
+    about.classList.remove("failed");
+    if (!a.supported) { about.textContent = "Only on macOS so far. Elsewhere, leave limitful watch running in a terminal."; return; }
+    const last = a.last ? ` Last tried ${clock.format(new Date(a.last))}: ${a.found ? "pendant found" : "pendant not in reach"}.` : "";
+    about.textContent = a.enabled
+      ? `Limitful starts when you log in and syncs the pendant every two minutes, with no terminal open. Synced audio is freed on the pendant.${a.syncing_every ? " It is syncing by itself now." : ""}${last}`
+      : "Off. The pendant syncs only when you click Sync now or run limitful watch.";
+  };
+  get("/api/autostart").then(show).catch(() => { about.textContent = "Could not check."; });
+  box.addEventListener("change", async () => {
+    box.disabled = true;
+    try { show(await post("/api/autostart", { enabled: box.checked })); }
+    catch (err) { box.checked = !box.checked; box.disabled = false; about.textContent = err.message; about.classList.add("failed"); }
+  });
+  return node;
 }
 
 /* A standing notice while the Lifelog holds the made-up conversations. */
@@ -2056,6 +2086,7 @@ async function showSettings() {
     hold,
     el("div", { className: "row light" }, el("label", { htmlFor: "light", textContent: "Light" }), icon("dim", 18), light, icon("bright", 20), lightValue),
     lightNote,
+    autostartSwitch(),
     el("p", { className: "small", textContent: "Pause stops the app keeping audio; the pendant itself goes on recording. To stop it recording at all, hold its button for two seconds to switch it off." }),
     el("details", { className: "more" },
       el("summary", { textContent: "Pairing" }),
