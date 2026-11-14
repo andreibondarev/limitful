@@ -312,7 +312,7 @@ twenty other conversations the loudest speaker led the next by a median of
 loudness, so nothing was built on it. Six conversations is a small sample, and
 some of those names may have come from the unreliable voice linking.
 
-#### Speaker labels from a hosted service (opt-in, untested)
+#### Speaker labels from a hosted service (opt-in, measured: not better)
 
 A hosted transcription service can label speakers where local methods could
 not. Limitful can use [Deepgram](https://deepgram.com) in place of local
@@ -333,20 +333,33 @@ Whisper for new recordings from the pendant:
   to name that speaker in that conversation, exactly as with imported ones.
 - Imported conversations are never sent; they keep Limitless's transcript.
 
-**This has not been run against the real Deepgram service**: no key was
-available when it was written. It is tested against a stand-in server that
-follows Deepgram's published reference. Not confirmed from that reference, and
-so the first things to check if it fails:
+**Measured against the real service, its speaker labels are no better than
+guessing.** Five imported conversations were sent to Deepgram (nova-3) and
+its speakers compared with Limitless's, as the share of speaking time given to
+the same speaker:
 
-- that an Ogg Opus body is accepted with the content type `audio/ogg`;
-- that each line in the reply carries its speaker (if not, the speaker heard
-  on most of the line's words is used, which the reference does document);
-- what refused keys and exhausted credit look like (assumed: HTTP 401 or 403,
-  and 402);
-- that `punctuate` and `smart_format` can be sent together;
-- how good the labels are on pendant audio. Nobody has measured it.
+| Conversation | Limitless's speakers | Deepgram found | Score | Always guessing the main speaker |
+|---|---|---|---|---|
+| 1 | 3 | 2 | 59% | 57% |
+| 2 | 2 | 1 | 48% | 64% |
+| 3 | 3 | 1 | 18% | 64% |
+| 4 | 3 | 2 | 45% | 55% |
+| 5 | 3 | 3 | 48% | 45% |
+| Average | | | 44% | 57% |
 
-To measure it, at your own cost:
+It found fewer speakers than Limitless in four of the five, and on a pendant
+recording of one voice repeating a test phrase it found two. The score also
+counts speech Deepgram did not transcribe as wrong, which is why finding one
+speaker can score below the baseline, so read it as "not better", not as a
+precise figure. Five conversations is a small sample, and Limitless's labels
+are themselves an imperfect reference.
+
+What was confirmed: Deepgram accepts both WAV and the pendant's Ogg Opus
+(`audio/ogg`), saved keys are checked and accepted, and each line comes back
+with a speaker. Not seen yet: what a refused key or exhausted credit looks
+like in practice (assumed: HTTP 401 or 403, and 402).
+
+To repeat the measurement, at your own cost:
 
 ```sh
 uv run limitful score-speakers --limit 5
@@ -484,8 +497,6 @@ erase`, `ftl clear`, `storage clear`, `storage full-wipe`, `config reset`,
 ## Not yet verified
 
 - **Linux and Windows.** Everything has been run on macOS only.
-- **Deepgram.** Hosted transcription has not been run against the real
-  service (see Speaker labels).
 - **Ollama.** Summaries from a local model are written but have not been run
   against a real Ollama.
 - **Unpair.** Tested against a simulated pendant only.
@@ -495,7 +506,6 @@ erase`, `ftl clear`, `storage clear`, `storage full-wipe`, `config reset`,
 
 - Run `watch` and the app at login, so syncing needs no terminal.
 - Import the chats in a Limitless export.
-- Try Deepgram against the real service and measure its speaker labels.
 - Let Ask search reminders.
 - An MCP server, so other assistants can query the Lifelog.
 - A real pause or power-off command, if the pendant has one. The USB

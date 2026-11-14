@@ -1487,7 +1487,7 @@ async function showSettings() {
   const heard = el("fieldset", {},
     el("legend", { hidden: true, textContent: "What turns audio into text" }),
     heardBy("local", "On this computer", "Whisper, running here. No audio leaves this computer. It cannot tell speakers apart."),
-    heardBy("deepgram", "Deepgram", `Adds Speaker 1, Speaker 2 to each conversation, using ${now.deepgram_model}. The audio of every new recording is sent to Deepgram, a company in the United States, and usage is billed to your Deepgram account. Not yet tried against the real service.`),
+    heardBy("deepgram", "Deepgram", `Adds Speaker 1, Speaker 2 to each conversation, using ${now.deepgram_model}. The audio of every new recording is sent to Deepgram, a company in the United States, and usage is billed to your Deepgram account. Measured on five conversations, its speaker labels were no better than guessing.`),
     dgBox);
   const showDgKey = () => { dgBox.hidden = heardPicked() !== "deepgram"; };
   heard.addEventListener("change", showDgKey);
