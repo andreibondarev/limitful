@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -42,11 +43,17 @@ def save(settings: dict) -> None:
 
 
 _KEEP: Any = object()  # "leave this setting as it is"
+_updating = threading.Lock()
 
 
 def update(provider: Any = _KEEP, api_key: Any = _KEEP, led_brightness: Any = _KEEP,
            transcriber: Any = _KEEP, deepgram_api_key: Any = _KEEP) -> dict:
     """Change the given settings and return the result. `None` clears a setting."""
+    with _updating:  # two requests saving at once must not undo each other
+        return _update(provider, api_key, led_brightness, transcriber, deepgram_api_key)
+
+
+def _update(provider: Any, api_key: Any, led_brightness: Any, transcriber: Any, deepgram_api_key: Any) -> dict:
     settings = load()
     if provider is not _KEEP:
         if provider is not None and provider not in PROVIDERS:

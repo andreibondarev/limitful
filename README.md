@@ -90,26 +90,31 @@ off Bluetooth on your phone (or quit the Limitless app) first.
 
 The first time, run `pair` and put the pendant in pairing mode: press and
 release the button, then immediately press and hold until the purple light goes
-out, and release. A blue light means it is ready to pair. Accept the connection request your computer shows. **Pairing mode
-resets the pendant and clears the audio stored on it**, so let the Limitless app
-sync first if you still use it.
+out, and release. A blue light means it is ready to pair. Accept the
+connection request your computer shows. **Pairing mode resets the pendant and
+clears the audio stored on it**, so let the Limitless app sync first if you
+still use it. With the pendant's USB cable there is a way to pair that erases
+nothing: see "Moving a pendant to another computer without erasing it".
 
 ```sh
 uv run limitful scan      # find the pendant
 uv run limitful pair      # first use only: pair this computer with it
 uv run limitful status    # how much audio is stored on it
 uv run limitful sync      # download everything into ~/Limitful
-uv run limitful transcribe  # turn new audio into text, on this machine
+uv run limitful transcribe  # turn new audio into text (on this machine, by default)
 ```
 
 Transcripts are written to `transcripts/<date>.md`, one timestamped line
-per utterance. Transcription uses Whisper (`large-v3-turbo`) locally; the model
+per utterance, with each summarised conversation's title and summary above
+its lines. Transcription uses Whisper (`large-v3-turbo`) locally; the model
 is about 1.6 GB and downloads on first use. No audio leaves your computer,
 unless you choose a hosted service (see Speaker labels).
 
-Everything is stored in `~/Limitful` (change it with `--data-dir` or the
-`LIMITFUL_DATA` environment variable). Audio lands in
-`audio/<date>/<time>.ogg` (Ogg Opus, plays in VLC, ffmpeg and most browsers).
+Recordings, transcripts and the database are stored in `~/Limitful` (change
+it with `--data-dir` or the `LIMITFUL_DATA` environment variable). Settings
+are kept apart, in `~/.config/limitful/config.json`, and downloaded models in
+`~/.cache/limitful` and the Hugging Face cache. Audio lands in
+`audio/<date>/<time>_<page>.ogg` (Ogg Opus, plays in VLC, ffmpeg and most browsers).
 The raw pages from the pendant are kept in `pendant.db`, so audio can be
 re-exported later with `uv run limitful export`.
 
@@ -121,11 +126,12 @@ On macOS the first run asks for Bluetooth permission for your terminal app.
 uv run limitful serve
 ```
 
-Opens the Lifelog at http://localhost:4747. The page only answers on your
-own machine.
+Serves the Lifelog at http://localhost:4747 (another port with `--port` or
+the `PORT` environment variable); open that address in a browser. The page
+only answers on your own machine.
 
 **A day.** Each day is a list of its conversations, with time, title and a bar
-for how long each ran, under headings for morning, afternoon and evening.
+for how long each ran, under headings for night, morning, afternoon and evening.
 Stray words with no conversation around them fold into one quiet row. On a
 wide screen the day's recap, its open reminders and the named people heard
 that day sit beside the list.
@@ -160,13 +166,16 @@ A language model can then give each a title and a short summary, and suggest
 reminders for things someone said they would do. This is off until you choose
 what writes them, under Settings, Summaries:
 
-- **Claude**: paste an Anthropic API key. The text of each conversation is
-  sent to Anthropic; audio is not.
+- **Claude**: paste an Anthropic API key, or leave the field empty to use the
+  `ANTHROPIC_API_KEY` environment variable or an `ant auth login` sign-in.
+  The text of each conversation is sent to Anthropic; audio is not.
 - **Ollama**: a model running on your own machine (`llama3.1` by default), so
   nothing leaves it.
 
 New conversations are summarised after each sync. `uv run limitful digest`
-does it by hand, and `--redo` writes them all again.
+does it by hand, and `--redo` writes them again for conversations recorded
+from the pendant. Imported conversations keep Limitless's titles and are not
+summarised.
 
 Each day also gets a recap at the top of its page: one sentence on what the
 day was about, then its main threads. It is written from the titles and
@@ -187,13 +196,14 @@ crown?" by searching and reading your transcripts. Answers cite the lines they
 rest on, and each citation opens that line. Chats are saved. From the command
 line: `uv run limitful ask "..."`.
 
-Ask needs Claude, with the key saved in Settings. The lines it reads to answer
-a question are sent to Anthropic.
+Ask needs Claude chosen under Settings, Summaries. Your questions, the
+earlier messages of that chat and whatever Claude reads to answer (search
+hits, conversation titles, whole conversations) are sent to Anthropic.
 
 ### Bringing your Limitless history
 
 Request a data export from Limitless before December 1, 2026, then import the
-zip from Settings, Import, or with:
+zip from Settings, Import from Limitless, or with:
 
 ```sh
 uv run limitful import data-export.zip
@@ -204,8 +214,8 @@ importing the same export twice adds nothing. Speakers keep Limitless's
 "Speaker 1", "Speaker 2" within each conversation. Chats in the export are not
 imported yet.
 
-Lines in a Limitless transcript often sit a few seconds away from where they
-are heard. `uv run limitful retime` listens to the imported audio with Whisper
+Lines in a Limitless transcript usually sit about a second away from where
+they are heard. `uv run limitful retime` listens to the imported audio with Whisper
 and moves each line to where its words are; `--minutes 60` does it in
 stages and `--undo` puts everything back. It takes roughly a fifth of the
 audio's length on a laptop CPU, and nearer a third when the laptop is busy.
@@ -218,17 +228,26 @@ starting again carries on with the rest.
 
 ### What leaves your computer
 
-Nothing, by default. Syncing, transcription, search and playback are local.
-Three things send data out, and each is off until you turn it on in Settings:
+No recordings or text, by default. Syncing, transcription, search and
+playback are local. Two choices in Settings send data out, and both are off
+until you make them. Choosing Claude under Summaries turns on summaries and
+Ask together:
 
 | If you choose | What is sent | To |
 |---|---|---|
 | Claude for summaries | The text of each conversation; for a day's recap, that day's titles and summaries | Anthropic |
-| Ask | The lines it looks up to answer | Anthropic |
+| Claude, when you use Ask | Your questions, the chat so far, and what Claude reads to answer: search hits, conversation titles, whole conversations | Anthropic |
 | Deepgram for transcription | The audio of new recordings | Deepgram |
 
 API keys are kept in `~/.config/limitful/config.json`, readable only by you,
-outside the data folder, and are never sent back to the page.
+outside the data folder. The page is only ever given a key's last four
+characters, to recognise a saved key by.
+
+Two other kinds of contact carry none of your data: models are downloaded on
+first use (Whisper and the search model from Hugging Face, the voice model
+from GitHub), and saving a key checks it once with Anthropic or Deepgram. The
+`score-speakers` command sends imported audio to Deepgram, only when you run
+it.
 
 ### Search by meaning
 
@@ -302,7 +321,8 @@ With the pendant plugged in by USB cable, the section also shows its firmware
 version, battery voltage and temperature, and the light slider shows the
 pendant's real brightness. These are read over the pendant's USB shell, using
 three read-only commands. The only other thing Limitful ever types there is
-`ble unpair`, and only when you click Forget the old computer (see Pairing).
+`ble unpair`, and only when you click Forget the old computer (see "Moving a
+pendant to another computer without erasing it").
 
 - **Pause** stops the app keeping audio. The pendant itself cannot be told to
   stop recording (no such command is known, and its live-stream mode keeps
@@ -311,9 +331,10 @@ three read-only commands. The only other thing Limitful ever types there is
   when it syncs, without being stored or transcribed. A Paused marker shows on
   every page until you resume. To stop the pendant recording at all, hold its
   button for two seconds to switch it off.
-- **Pairing** has two buttons. Pair this computer waits three minutes while
+- **Pairing** has three buttons. Pair this computer waits three minutes while
   you put the pendant in pairing mode. Unpair makes the pendant forget this
-  computer so another can pair with it, keeping its recordings.
+  computer so another can pair with it, keeping its recordings. Pair without
+  erasing opens the USB route described below.
 
 On the command line: `limitful pause`, `limitful resume`, `limitful pair` and
 `limitful unpair`.
@@ -373,7 +394,9 @@ What does work:
   "Speaker 2". Click one to name that speaker in that conversation.
 - Click a named speaker to rename that person everywhere; giving two speakers
   the same name merges them. "Only this conversation" changes one conversation.
-- `uv run limitful speakers` lists speakers; `--rename 2 Andrei` names one.
+- `uv run limitful speakers` runs the experimental voice labelling on pendant
+  lines not yet labelled (downloading a small voice model the first time),
+  then lists speakers; `--rename 2 Andrei` names one.
 
 Telling which speaker is you, by loudness, was also measured and does not
 work. The idea: the pendant is worn, so its wearer should be the loudest voice
@@ -395,8 +418,8 @@ Whisper for new recordings from the pendant:
   run `uv run limitful transcribe --engine deepgram` once a key is saved.
 - **The audio of every new recording is then sent to Deepgram and billed to
   your Deepgram account.** Nothing is sent until you choose this. The key is
-  kept in `~/.config/limitful/config.json`, readable only by you, and is never
-  shown again.
+  kept in `~/.config/limitful/config.json`, readable only by you, and only its
+  last four characters are shown again.
 - A service's "Speaker 1" only means something within one request, and the
   pendant splits a conversation into many short recordings. So recordings are
   grouped into conversations (a five-minute silence ends one), joined, and sent
@@ -404,7 +427,8 @@ Whisper for new recordings from the pendant:
   minutes, so text appears a little later than with local transcription.
 - Lines arrive as "Speaker 1", "Speaker 2" within each conversation. Click one
   to name that speaker in that conversation, exactly as with imported ones.
-- Imported conversations are never sent; they keep Limitless's transcript.
+- Imported conversations are never sent for transcription; they keep
+  Limitless's transcript.
 
 **Measured against the real service, its speaker labels are no better than
 guessing.** Five imported conversations were sent to Deepgram (nova-3) and
@@ -438,11 +462,11 @@ To repeat the measurement, at your own cost:
 uv run limitful score-speakers --limit 5
 ```
 
-sends up to five imported conversations (two to four speakers, under twenty
-minutes each) to Deepgram and prints, for each, the share of speaking time it
+sends up to five imported conversations (two to four speakers, 50 to 220
+lines, under twenty minutes each) to Deepgram and prints, for each, the share of speaking time it
 gave to the same speaker Limitless did, next to the score for always guessing
 the main speaker. On the conversations used for the table above that baseline
-was 63%; a service worth switching to should beat it clearly.
+averaged 57%; a service worth switching to should beat it clearly.
 
 The experimental voice labelling is still there for anyone who wants to try
 it: `limitful transcribe --speakers`, `limitful watch --speakers`, and
@@ -479,7 +503,7 @@ shared with other programs during the test, which may matter.
 ### Keeping "mhm" and "uh": tried, nothing adopted
 
 Local Whisper leaves out most filler words that Limitless's transcripts keep.
-Seven combinations of Whisper settings were tried to get them back, scored
+Six alternative combinations of Whisper settings were tried to get them back, scored
 against Limitless's own text for the same audio. The rule was to adopt a
 setting only if it kept more fillers without inventing lines on silent audio,
 which is the fault the current settings were chosen to stop.
@@ -546,7 +570,8 @@ uv run limitful watch
 ```
 
 `watch` checks for the pendant every two minutes. When it is in range it
-downloads new audio, frees that audio on the pendant, and transcribes it. Leave
+downloads new audio, frees that audio on the pendant, transcribes it and, if
+a summary writer is chosen, summarises it. Leave
 it running in a terminal. Use `--keep` to leave audio on the pendant and
 `--no-transcribe` to download only. `limitful serve --sync-every 120` does the
 same from inside the Lifelog.
@@ -565,13 +590,15 @@ that your computer holds the only copy, so back up the data folder.
 
 ## How it works
 
+- `cli.py` and `__main__.py`: the commands, and the entry point the login item uses.
 - `protocol.py`: the wire format (protobuf-style messages over one BLE service).
 - `client.py`: connect, set the clock, read storage status, download pages.
 - `usb.py`: readings over the pendant's USB shell, and the one `ble unpair` command.
 - `store.py`: the SQLite store: raw pages, recordings, lines, conversations,
-  reminders and chats.
+  speakers, reminders, day recaps, pauses and chats.
 - `ogg.py`: a small Ogg Opus writer.
 - `transcribe.py`: speech-to-text engines (local Whisper by default).
+- `speech_model.py`: whether the Whisper model is downloaded yet, and how far along.
 - `hosted.py`: hosted transcription with speaker labels (Deepgram).
 - `scoring.py`: scoring a service's speaker labels against Limitless's.
 - `speakers.py`: voice fingerprints for speaker labels.
@@ -579,7 +606,7 @@ that your computer holds the only copy, so back up the data folder.
 - `ask.py`: question answering over the transcripts, with citations.
 - `search.py`: search by meaning: the local model and its index.
 - `upkeep.py`: long jobs the Lifelog can start and stop (re-timing, indexing).
-- `config.py`: saved settings, including the API key.
+- `config.py`: saved settings, including the API keys.
 - `importer.py`: import of a Limitless data export.
 - `demo.py`: the made-up data folder.
 - `watch.py`: the background loop.
@@ -615,9 +642,10 @@ Observed on one pendant; treat as provisional.
 - Bluetooth services: battery, the Limitless data service, and Zephyr's device
   management (SMP) service, which is normally used for firmware updates.
 - Commands are refused with "Insufficient Encryption" until the host is paired.
-  The pendant only accepts a new host in pairing mode.
+  The pendant only accepts a new host once it has forgotten the old one: by
+  pairing mode (a factory reset) or by `ble unpair` over USB.
 - Audio is mono Opus in 20 ms frames. A flash page is about 4 KB and holds
-  roughly 1.4 s; the pendant reports 95,232 pages, so about 38 hours.
+  roughly 1.45 s; the pendant reports 95,232 pages, so about 38 hours.
 - The pendant stops recording during silence, so audio arrives as short bursts.
 
 The USB serial port (115200 baud) carries the firmware's log and a Zephyr
@@ -639,7 +667,8 @@ shell prompt (`uart:~$`). Listening to it, without typing anything, showed:
 - Bluetooth also offers the Nordic UART Service.
 
 The shell is a developer console. `help` lists its commands and `<command> -h`
-lists subcommands. Only read-only commands and `ble unpair` have been run. What they showed:
+lists subcommands. Only read-only commands and `ble unpair` have been run.
+What they showed:
 
 - `config list`: settings include `led_brightness`, `vad_threshold_ms` (5000),
   `allow_recording_on_usb`, `sync_mode`, microphone and beamforming debug
@@ -654,7 +683,7 @@ lists subcommands. Only read-only commands and `ble unpair` have been run. What 
 
 Commands that exist but have not been run: `button push [short|long|double-short]`
 (simulates the button, so a long push may switch the pendant off),
-`dev shipping_mode`, `dev reset`, `config set`, `ble unpair`, `ble set_name`,
+`dev shipping_mode`, `dev reset`, `config set`, `ble set_name`,
 `date set`, `imu enable/disable`, `settings write/delete` and
 `mcuboot request_upgrade`. Several others erase storage or flash (`flash
 erase`, `ftl clear`, `storage clear`, `storage full-wipe`, `config reset`,
@@ -693,6 +722,16 @@ ONNX conversion published as
 [Xenova/bge-small-en-v1.5](https://huggingface.co/Xenova/bge-small-en-v1.5).
 It is downloaded on first use, not shipped with Limitful.
 
+Transcription uses OpenAI's [Whisper](https://github.com/openai/whisper)
+`large-v3-turbo` model (MIT licence) through
+[faster-whisper](https://github.com/SYSTRAN/faster-whisper) and CTranslate2
+(both MIT). The experimental speaker labels use NVIDIA's TitaNet-small voice
+model in the ONNX conversion published by the
+[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) project. Both models are
+downloaded on first use. Bluetooth is handled by
+[bleak](https://github.com/hbldh/bleak) and the USB port by
+[pyserial](https://github.com/pyserial/pyserial).
+
 The wordmark is set in [Outfit](https://github.com/Outfitio/Outfit-Fonts) (SIL Open Font
 License), drawn as outlines; `assets/make_logo.py` rebuilds the logo files.
 
@@ -700,4 +739,4 @@ Not affiliated with or endorsed by Limitless or Meta.
 
 ## Licence
 
-MIT
+[MIT](LICENSE)

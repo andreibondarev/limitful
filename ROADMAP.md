@@ -9,8 +9,8 @@ says what already works and what has not been verified.
 - Let Ask search reminders.
 - An MCP server, so other assistants can query the Lifelog.
 - Open firmware. Research only so far.
-- Import the chats in a Limitless export before the service ends on
-  December 1, 2026.
+- Import the chats in a Limitless export. They are already in the zip; only
+  requesting the export has the December 1, 2026 deadline.
 
 ## Ideas
 
@@ -23,13 +23,15 @@ Not designed or scheduled. Each needs deciding what it should do first.
   edit audio to clean it up, for example cutting silence or a section that
   should not be kept.
 - **Sharing.** Send a conversation's audio or transcript to someone else,
-  whole or as a selected stretch.
+  whole or as a selected stretch. Copying one conversation as Markdown is the
+  only part that exists.
 
 ## Dropped, with reasons
 
-- **Automatic speaker labels.** Every local method tried, and Deepgram, scored
-  at or below always guessing the main speaker. The numbers are in the README.
-- **Transcription on the Apple GPU by default.** About three times faster when
+- **Automatic speaker labels, as a default.** Every local method tried, and
+  Deepgram, scored at or below always guessing the main speaker. The numbers
+  are in the README. The experimental commands remain.
+- **Transcription on the Apple GPU by default.** Three to four times faster when
   it works, but half the test runs failed outright.
 - **A true pause or power-off command.** The pendant's USB shell has no
   recording switch, and anything it can do only works while plugged in. The

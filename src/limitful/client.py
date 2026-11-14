@@ -37,7 +37,9 @@ _NOT_PAIRED = (
     "with it. Put the pendant in pairing mode (press and release the button, then "
     "immediately press and hold until the purple light goes out; blue means ready "
     "to pair; this erases audio stored on the pendant), accept the pairing "
-    "request on this computer, and run the command again."
+    "request on this computer, and run the command again. To pair without "
+    "erasing, plug the pendant in by USB and use Pair without erasing under "
+    "Settings, Pendant in the Lifelog."
 )
 _DROPPED = (
     "the pendant kept dropping the connection. Check it is nearby, charged and "

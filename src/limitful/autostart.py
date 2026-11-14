@@ -71,7 +71,8 @@ def enable(data_dir: Path, port: int, start_now: bool = True, sync_every: float 
     path = plist_path(label, home)
     path.parent.mkdir(parents=True, exist_ok=True)
     Path(data_dir).mkdir(parents=True, exist_ok=True)
-    run("bootout", _target(label))  # an older copy, if one is loaded; fine if not
+    if start_now:
+        run("bootout", _target(label))  # an older copy, if one is loaded; fine if not
     with open(path, "wb") as out:
         plistlib.dump(job(data_dir, port, sync_every, label), out)
     if start_now:

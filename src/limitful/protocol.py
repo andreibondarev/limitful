@@ -306,7 +306,7 @@ def extract_opus_frames(page_data: bytes) -> list[bytes]:
     frames: list[bytes] = []
     n = len(page_data)
     pos = 0
-    for leading in (0x08, 0x10):  # timestamp, then an unidentified varint
+    for leading in (0x08, 0x10):  # timestamp, then time since boot
         if pos < n and page_data[pos] == leading:
             _, pos = decode_varint(page_data, pos + 1)
 

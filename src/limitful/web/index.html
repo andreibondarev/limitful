@@ -27,6 +27,7 @@
     color-scheme: light dark;
     /* One colour per speaker in a conversation. */
     --who-0: #1f7a6d; --who-1: #3b6fb6; --who-2: #7a5bb5; --who-3: #b0508f;
+    --bad: #b3261e;
     --who-4: #c2553a; --who-5: #a8771a; --who-6: #6f7d2a; --who-7: #5a6b7b;
   }
   /* Dark follows the computer, unless a theme was chosen under Settings. */
@@ -37,6 +38,7 @@
       --muted: #8fa097;
       --rule: #26322c;
       --accent: #63d2b6;
+      --bad: #ff8a80;
       --who-0: #5fc3b3; --who-1: #7fa9e6; --who-2: #b29be6; --who-3: #e08fc4;
       --who-4: #ef8f76; --who-5: #dcae55; --who-6: #a9b860; --who-7: #9fb0c0;
     }
@@ -47,6 +49,7 @@
     --muted: #8fa097;
     --rule: #26322c;
     --accent: #63d2b6;
+    --bad: #ff8a80;
     --who-0: #5fc3b3; --who-1: #7fa9e6; --who-2: #b29be6; --who-3: #e08fc4;
     --who-4: #ef8f76; --who-5: #dcae55; --who-6: #a9b860; --who-7: #9fb0c0;
     color-scheme: dark;
@@ -64,6 +67,7 @@
   }
   button, input { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  .welcome h2:focus { outline: none; }
 
   header {
     position: sticky; top: 0; z-index: 2;
@@ -130,13 +134,13 @@
   }
   #search { flex: 1 1 6rem; max-width: 13rem; min-width: 0; }
   /* Settings is an icon alone, so the row has room for the search box even while paused. */
-  #settings { padding-inline: 0.65rem; }
+  header #settings { padding-inline: 0.65rem; }
   #settings .icon { margin: 0; }
   #search::placeholder { color: var(--muted); }
 
   /* The day as a strip: one mark for every stretch of speech. */
   /* Off the day view there is no day to chart or step through. */
-  header.plain #strip, header.plain #hours, header.plain .step { display: none; }
+  header.plain #strip, header.plain #hours, header.plain #prev, header.plain #next { display: none; }
   header.plain { padding-bottom: 1rem; }
   /* The day at a glance: how much was said through the day, and the conversations beneath. */
   #strip { position: relative; height: 3.6rem; margin-top: 1rem; cursor: pointer; }
@@ -196,10 +200,6 @@
   }
   .line:hover span { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   .line.on span { background: var(--mark); color: var(--mark-ink); }
-  .line.mute { cursor: default; }
-  /* A thin rule in the speaker's colour runs down the left of what they said. */
-  .line.tinted { background: linear-gradient(var(--who), var(--who)) no-repeat calc(var(--gutter) - 0.85rem) 0 / 2px 100%; }
-  .line.found span { box-shadow: 0 0 0 2px var(--accent); }
   /* In a conversation, a speaker's turn is one paragraph; each thing said in it can be played. */
   .turn { display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr); align-items: baseline; padding: 0.3rem 0; }
   .turn time { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
@@ -297,11 +297,7 @@
   .card .brief > ul + .todo { margin-top: 0.8rem; }
   .card .brief > .todo { max-width: none; }
   .card .brief > .todo:first-child { margin-top: 0; }
-  .card .body > ul {
-    margin: 0 0 0.6rem var(--gutter); padding-left: 1.1rem; max-width: 68ch;
-    color: var(--muted); font-size: 0.95rem; line-height: 1.5;
-  }
-  .card .body > .todo, .card .copy { margin-left: var(--gutter); }
+  .card .copy { margin-left: var(--gutter); }
   .card .copy { margin-top: 0.4rem; }
   .card h3 {
     margin: 1.6rem 0 0.2rem var(--gutter); max-width: 68ch;
@@ -319,8 +315,6 @@
   }
   .todo p { margin: 0; flex: 1 1 14rem; }
   .todo small { color: var(--muted); flex-basis: 100%; }
-  .todo .where a { color: var(--accent); text-underline-offset: 3px; }
-  .todo .where q { display: block; margin-top: 0.2rem; font-family: var(--voice); font-size: 0.95rem; font-style: italic; }
   .todo .jump { border-style: dashed; }
   .recap { margin: 0 0 1.8rem; padding: 1.3rem 1.5rem 1.2rem; max-width: 46rem; border-left: 3px solid var(--mark); background: color-mix(in srgb, var(--accent) 5%, transparent); border-radius: 0 14px 14px 0; }
   .recap.bare { padding: 0; border: 0; background: none; }
@@ -328,7 +322,7 @@
   .recap ul { margin: 0.8rem 0 0; padding-left: 1.1rem; color: var(--muted); line-height: 1.55; }
   .recap li + li { margin-top: 0.3rem; }
   .recap .stale { margin: 0.9rem 0 0; font-size: 0.88rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
-  .recap .oops { margin: 0.6rem 0 0; color: #b3261e; font-size: 0.9rem; }
+  .recap .oops { margin: 0.6rem 0 0; color: var(--bad); font-size: 0.9rem; }
   .remind { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 3.5rem; align-items: start; }
   .remind h2 { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 0.3rem; font-size: 1.6rem; }
   .remind h2 small { font-family: var(--chrome); font-size: 0.85rem; color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 0.05rem 0.55rem; }
@@ -350,7 +344,7 @@
     border: 1px solid var(--rule); border-radius: 50%; background: transparent; color: var(--muted);
   }
   .round .icon { margin: 0; }
-  .round:hover { border-color: #b3261e; color: #b3261e; }
+  .round:hover { border-color: var(--bad); color: var(--bad); }
   .round.yes { border-color: var(--accent); color: var(--accent); }
   .round.yes:hover { background: var(--accent); color: var(--paper); border-color: var(--accent); }
   .round.tick { width: 1.5rem; height: 1.5rem; margin-top: 0.2rem; border: 1.5px solid var(--accent); color: transparent; }
@@ -359,14 +353,14 @@
   .round.tick .icon { width: 14px; height: 14px; }
   .round.faint { border-color: transparent; opacity: 0; }
   .task:hover .round.faint, .round.faint:focus-visible { opacity: 1; }
-  @media (hover: none) { .round.faint { opacity: 0.6; } }
+  @media (hover: none) { .round.faint { opacity: 0.6; } .side .remove { opacity: 1; } }
   .mine { position: sticky; top: 6rem; padding: 1.2rem 1.4rem 0.6rem; border: 1px solid var(--rule); border-radius: 16px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
   .mine .task:first-of-type { border-top: 0; }
   .task.was p { color: var(--muted); text-decoration: line-through; font-size: 1rem; }
   .finished { margin-top: 0.6rem; border-top: 1px solid var(--rule); padding-top: 0.6rem; }
   .finished summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
   .finished .task { border-top: 0; padding: 0.4rem 0; }
-  .oops { grid-column: 1 / -1; color: #b3261e; }
+  .oops { grid-column: 1 / -1; color: var(--bad); }
   @media (max-width: 900px) {
     .remind { grid-template-columns: 1fr; gap: 2rem; }
     .mine { position: static; order: -1; }
@@ -380,7 +374,7 @@
   .switch input { margin-top: 0.25rem; accent-color: var(--accent); width: 1rem; height: 1rem; }
   .switch b { display: block; font-weight: 600; }
   .switch small { display: block; margin-top: 0.15rem; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
-  .switch small.failed { color: #b3261e; }
+  .switch small.failed { color: var(--bad); }
   #demobar {
     margin: 0.7rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.9rem;
     border-left: 3px solid var(--mark); background: color-mix(in srgb, var(--mark) 16%, transparent);
@@ -413,7 +407,7 @@
   .welcome .status:empty { display: none; }
   .welcome .plug { display: inline-block; padding: 0.05rem 0.55rem; border-radius: 999px; background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
   .welcome .plug.yes { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
-  .welcome .trouble { padding: 0.7rem 0.9rem; border-left: 3px solid #b3261e; background: color-mix(in srgb, #b3261e 8%, transparent); line-height: 1.5; }
+  .welcome .trouble { padding: 0.7rem 0.9rem; border-left: 3px solid var(--bad); background: color-mix(in srgb, var(--bad) 8%, transparent); line-height: 1.5; }
   .welcome .trouble p { margin: 0; }
   .welcome .trouble .advice { margin-top: 0.5rem; color: var(--muted); font-size: 0.93rem; }
   .welcome .pairing { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2rem; align-items: center; margin-bottom: 0.4rem; }
@@ -430,7 +424,7 @@
   .welcome .key input { width: 100%; max-width: 26rem; padding: 0.45rem 0.6rem; font: inherit; border: 1px solid var(--rule); border-radius: 8px; background: transparent; color: var(--ink); }
   .welcome .key small { display: block; margin-top: 0.35rem; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
   @media (max-width: 560px) { .welcome .pairing { grid-template-columns: 1fr; justify-items: center; } .welcome h2 { font-size: 1.8rem; } }
-  #status.failed { border-left-color: #b3261e; background: color-mix(in srgb, #b3261e 10%, transparent); }
+  #status.failed { border-left-color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
   .todo button, #remind, #settings, #ask, .pill {
     border: 1px solid var(--rule); border-radius: 999px; background: transparent;
     padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
@@ -452,7 +446,7 @@
   .setup details.more summary { cursor: pointer; color: var(--accent); font-size: 0.95rem; }
   .setup details.more ol { margin: 0.7rem 0; padding-left: 1.3rem; color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
   .setup details.more .row { margin-top: 0.6rem; }
-  .pill.danger:hover:not(:disabled) { border-color: #b3261e; color: #b3261e; }
+  .pill.danger:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); }
   #ask[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   /* Chats down the left, the conversation centred in the space beside them. */
   .chat { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 3rem; align-items: start; }
@@ -490,7 +484,7 @@
   .chat .cite:hover { background: var(--accent); color: var(--paper); }
   .working { display: grid; grid-template-columns: 2.1rem minmax(0, 1fr); align-items: center; color: var(--muted); font-size: 0.92rem; margin: 0 0 0.8rem; }
   .working[hidden] { display: none; }
-  .working.failed { color: #b3261e; }
+  .working.failed { color: var(--bad); }
   .working.busy .star { animation: turn 2.4s linear infinite; }
   @keyframes turn { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .working.busy .star { animation: none; } }
@@ -536,7 +530,7 @@
   .side small { grid-column: 1; color: var(--muted); font-size: 0.76rem; }
   .side .remove { grid-row: 1; grid-column: 2; border: 0; background: none; padding: 0; cursor: pointer; color: var(--muted); font-size: 0.76rem; opacity: 0; }
   .side .row:hover .remove, .side .remove:focus-visible, .side .remove.sure { opacity: 1; }
-  .side .remove:hover, .side .remove.sure { color: #b3261e; }
+  .side .remove:hover, .side .remove.sure { color: var(--bad); }
   .side .none { color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
   @media (max-width: 900px) {
     .chat { grid-template-columns: 1fr; gap: 2rem; }
@@ -590,7 +584,7 @@
   .setup .key small { display: block; margin-top: 0.35rem; color: var(--muted); line-height: 1.45; }
   .setup .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
   .setup .note { margin: 0.7rem 0 0; font-size: 0.9rem; }
-  .setup .note.failed { color: #b3261e; }
+  .setup .note.failed { color: var(--bad); }
   .halt {
     margin-left: 0.5rem; padding: 0.1rem 0.6rem; cursor: pointer; font-size: 0.82rem;
     border: 1px solid var(--accent); border-radius: 999px; background: transparent; color: var(--accent);
@@ -643,10 +637,7 @@
   .setup .row.light output { color: var(--ink); }
   .setup .row.light input { flex: 0 1 16rem; accent-color: var(--accent); }
   .setup .row.light output { min-width: 3rem; font-variant-numeric: tabular-nums; }
-  .setup .small { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
-  .setup .about { margin: 3rem 0 0; font-size: 1.25rem; font-weight: 600; line-height: 1.3; }
-  .setup .about b { color: var(--mark); font-size: 1.5em; line-height: 0; vertical-align: -0.18em; }
-  .setup .about small { font-size: 0.8rem; font-weight: 400; color: var(--muted); margin-left: 1.45rem; }
+  .setup .small, .settings > div > .small { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
   #remind[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .quiet {
     margin: 0.9rem 0 0.9rem var(--gutter);
@@ -726,10 +717,10 @@
   </div>
   <p id="status" role="status" hidden></p>
   <p id="demobar" hidden></p>
-  <div id="strip" role="img" aria-label="When speech was recorded during this day"></div>
+  <div id="strip" role="group" aria-label="When speech was recorded during this day"></div>
   <div id="hours" aria-hidden="true"></div>
 </header>
-<main id="main" aria-live="polite"></main>
+<main id="main"></main>
 <div id="player" hidden>
   <div id="now"></div>
   <div id="transport">
@@ -746,7 +737,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const main = $("main"), strip = $("strip"), audio = $("audio");
-const DAY_MS = 86400000, QUIET_MS = 120000;
+const QUIET_MS = 120000;
 const clock = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" });
 const clockSec = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 const longDay = new Intl.DateTimeFormat([], { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -773,7 +764,17 @@ const TALK_GAP_MS = 300000;   // a silence this long separates unsummarised conv
 const pad = (n) => String(n).padStart(2, "0");
 const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const dayStart = (key) => { const [y, m, d] = key.split("-").map(Number); return new Date(y, m - 1, d).getTime(); };
-const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
+const el = (tag, props = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [key, value] of Object.entries(props)) {
+    // Names for assistive tech go in as attributes: older browsers ignore them as properties.
+    if (key === "role") n.setAttribute("role", value);
+    else if (key.startsWith("aria")) n.setAttribute(`aria-${key.slice(4).toLowerCase()}`, value);
+    else n[key] = value;
+  }
+  n.append(...kids);
+  return n;
+};
 
 /* Icons: 24-unit line drawings that take the colour of the text around them. */
 const ICONS = {
@@ -789,7 +790,6 @@ const ICONS = {
   summary: "M5 6h14 M5 11h14 M5 16h9",
   import: "M12 3v11 M7.5 9.5 12 14l4.5-4.5 M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3",
   pendant: "M9 4.5h6v4H9Z M12 21a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Z",
-  key: "M14.5 9.5a4 4 0 1 0-3.6 4l1.6 1.5h2v2h2v2h3v-3l-5.2-5.2c.1-.4.2-.9.2-1.3Z",
   send: "M12 19V5 M6 11l6-6 6 6",
   plus: "M12 5v14 M5 12h14",
   chats: "M4 6h16 M4 12h16 M4 18h10",
@@ -843,14 +843,12 @@ function quietFor(ms) {
   return `quiet for ${h} h${m ? ` ${m} min` : ""}`;
 }
 
-function lineButton(u, showDay, sameMinute) {
+function lineButton(u, showDay) {
   const t = new Date(u.start);
-  // Within a run of speech, only show the time when the minute changes.
   const b = el("button", { className: "line", id: `u${u.id}`, title: clockSec.format(t) },
-    el("time", { dateTime: t.toISOString(), textContent: sameMinute ? "" : clock.format(t) }),
+    el("time", { dateTime: t.toISOString(), textContent: clock.format(t) }),
     el("span", { textContent: u.text }));
-  if (!u.audio && !showDay) b.classList.add("mute");
-  b.addEventListener("click", () => showDay ? openDay(showDay, u.id) : play(u));
+  b.addEventListener("click", () => openDay(showDay, u.id));
   return b;
 }
 
@@ -895,7 +893,6 @@ async function showWelcome(step = "start") {
   leaveWelcome();
   welcoming = true;
   searching = reminding = configuring = asking = false;
-  main.classList.remove("wide");
   document.querySelector("header").classList.add("plain");
   for (const id of ["ask", "remind", "settings"]) $(id).setAttribute("aria-pressed", "false");
   history.replaceState(null, "", "#welcome");
@@ -916,7 +913,10 @@ async function showWelcome(step = "start") {
         ...ROUTE.map((_, n) => el("i", { className: n <= at ? "done" : "" }))),
       el("p", { className: "where", textContent: `Step ${at + 1} of ${ROUTE.length}` })];
     main.replaceChildren(el("div", { className: "welcome" }, ...head, el("h2", { textContent: title }), ...children));
-    main.querySelector("h2").scrollIntoView({ block: "nearest" });
+    const heading = main.querySelector("h2");
+    heading.tabIndex = -1;
+    heading.scrollIntoView({ block: "nearest" });
+    heading.focus({ preventScroll: true });  // the button just clicked is gone; start reading from the new step
   };
   const trouble = (message, advice) => el("div", { className: "trouble", role: "alert" },
     el("p", { textContent: message.endsWith(".") ? message : `${message}.` }),
@@ -937,6 +937,7 @@ async function showWelcome(step = "start") {
     setWelcomed();
     try { days = await get("/api/days"); } catch { /* keep what we had */ }
     countReminders();
+    watchJob();  // summarising or speaker linking may still be running
     const busiest = fullestDay && days.length ? days.reduce((a, b) => (b.lines > a.lines ? b : a)) : null;
     openDay(busiest ? busiest.day : days.length ? days[days.length - 1].day : dayKey(new Date()));
   };
@@ -1055,7 +1056,7 @@ async function showWelcome(step = "start") {
       const look = async () => {
         if (!watching || !welcoming || !plugged.isConnected) return;
         let seen = false;
-        try { const p = await post("/api/pendant", { action: "usb" }); seen = Boolean(p.usb); } catch { /* look again */ }
+        try { const p = await post("/api/pendant", { action: "usb" }); seen = Boolean(p.usb && !p.usb.error); } catch { /* look again */ }
         if (!watching || !plugged.isConnected) return;
         if (seen) {
           plugged.textContent = "Plugged in";
@@ -1267,7 +1268,7 @@ async function showDemoBar() {
     remove.disabled = true;
     try { await post("/api/demo", { action: "remove" }); } catch (err) { say(`Could not remove them. ${err.message}`, true); remove.disabled = false; return; }
     bar.hidden = true;
-    days = await get("/api/days");
+    try { days = await get("/api/days"); } catch { /* keep what we had */ }
     countReminders();
     showWelcome();
   });
@@ -1291,20 +1292,6 @@ function todoRow(r, after, source) {
   return row;
 }
 
-/* A link from a reminder back to the conversation, and the line, it came from. */
-function whereLink(r) {
-  const box = el("small", { className: "where" });
-  const go = el("a", { href: `#${r.day}`, textContent: `${longDay.format(new Date(r.line ? r.line.start : r.start))}, in “${r.from}”` });
-  // Going to where a reminder came from also plays it: hearing it is the point.
-  go.addEventListener("click", (e) => { e.preventDefault(); openDay(r.day, r.line?.id, r.conversation, true); });
-  box.append(go);
-  if (r.line) {
-    const said = r.line.text.length > 160 ? `${r.line.text.slice(0, 160)}…` : r.line.text;
-    box.append(el("q", { textContent: said }));
-  }
-  return box;
-}
-
 async function countReminders() {
   try {
     const waiting = (await get("/api/reminders")).filter((r) => r.status === "suggested").length;
@@ -1315,7 +1302,6 @@ async function countReminders() {
 /* Reminders: suggestions to sort through on the left, your own list on the right. */
 async function showReminders() {
   leaveWelcome();
-  main.classList.remove("wide");
   document.querySelector("header").classList.add("plain");
   reminding = true;
   configuring = false;
@@ -1376,7 +1362,7 @@ async function showReminders() {
   for (const r of kept) {
     const row = el("article", { className: "task" });
     row.append(
-      round("", "Mark as done", () => set(r, "done", row), "tick"),
+      round("check", "Mark as done", () => set(r, "done", row), "tick"),
       el("div", {}, el("p", { textContent: r.text }), source(r)),
       round("x", "Remove from your list", () => set(r, "dismissed", row), "faint"));
     list.append(row);
@@ -1447,6 +1433,7 @@ function whoRow(speaker, colour) {
     };
     // Leaving the field cancels, unless the click went to the button beside it.
     input.addEventListener("blur", (e) => { if (e.relatedTarget !== here) cancel(); });
+    here.addEventListener("mousedown", (e) => e.preventDefault());  // Safari does not focus a clicked button
     input.addEventListener("keydown", (e) => {
       if (e.key === "Escape") cancel();
       else if (e.key === "Enter") save(linked);
@@ -1544,7 +1531,7 @@ function drawCalendar() {
     const key = `${year}-${pad(month + 1)}-${pad(n)}`, d = known.get(key);
     const level = d ? Math.max(1, Math.min(4, Math.ceil(4 * d.lines / busy))) : 0;
     const cell = el("button", { textContent: String(n), className: `l${level}${key === day ? " picked" : ""}${key === today ? " today" : ""}`, disabled: !d });
-    cell.setAttribute("aria-label", `${longDay.format(new Date(year, month, n))}${d ? `, ${d.lines} lines` : ", nothing recorded"}`);
+    cell.setAttribute("aria-label", `${longDay.format(new Date(year, month, n))}${d ? `, ${d.lines} line${d.lines === 1 ? "" : "s"}` : ", nothing recorded"}`);
     if (d) {
       cell.addEventListener("click", () => { closeCalendar(); openDay(key); });
       cell.addEventListener("mouseenter", () => describe(key));
@@ -1903,7 +1890,7 @@ function saying(u) {
   node.tabIndex = 0;
   node.setAttribute("role", "button");
   node.addEventListener("click", () => play(u));
-  node.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); play(u); } });
+  node.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); play(u); } });
   return node;
 }
 
@@ -1994,12 +1981,15 @@ function reveal(id, mark) {
   const node = $(`u${id}`);
   if (!node) return;
   node.scrollIntoView({ block: "center" });
+  if (mark) document.querySelectorAll(".found").forEach((n) => n.classList.remove("found"));
   if (mark) node.classList.add("found"); else node.focus({ preventScroll: true });
 }
 
+/* True while the day view is showing this day: answers that arrive after leaving it are dropped. */
+const onDay = (key) => day === key && !searching && !reminding && !configuring && !asking && !welcoming;
+
 async function openDay(key, revealId, revealTalk, startPlaying) {
   leaveWelcome();
-  main.classList.remove("wide");
   document.querySelector("header").classList.remove("plain");
   searching = false;
   reminding = false;
@@ -2014,9 +2004,12 @@ async function openDay(key, revealId, revealTalk, startPlaying) {
     ? { line: revealId || null, talk: revealTalk || null, start: Boolean(startPlaying) } : null;
   history.replaceState(null, "", `#${key}`);
   try {
-    [lines, talks] = await Promise.all([get(`/api/day/${key}`), get(`/api/conversations/${key}`)]);
+    const [gotLines, gotTalks] = await Promise.all([get(`/api/day/${key}`), get(`/api/conversations/${key}`)]);
+    if (!onDay(key)) return;  // moved on while this was loading
+    lines = gotLines; talks = gotTalks;
     renderDay();
   } catch (err) {
+    if (!onDay(key)) return;
     main.replaceChildren(el("p", { className: "empty", textContent: `Could not load this day. ${err.message}` }));
   }
 }
@@ -2031,7 +2024,6 @@ function step(direction) {
 
 async function runSearch(query) {
   leaveWelcome();
-  main.classList.remove("wide");
   document.querySelector("header").classList.add("plain");
   searching = true;
   reminding = false;
@@ -2259,8 +2251,17 @@ strip.addEventListener("click", (e) => {
   reveal(nearest.id, false);
 });
 
+/* A notice that something is done, which clears itself. */
+function sayDone(text) {
+  say(text);
+  sayTimer = setTimeout(() => say(""), 8000);
+}
+const withAdvice = (error, advice) => `${error}${/[.!?]$/.test(error) ? "" : "."}${advice ? ` ${advice}` : ""}`;
+
 /* Importing a Limitless export, and the slower speaker recognition that follows it. */
+let sayTimer = null, toldError = null;
 function say(text, failed) {
+  clearTimeout(sayTimer);
   const box = $("status");
   box.hidden = !text;
   box.textContent = text || "";
@@ -2289,12 +2290,14 @@ async function watchJob() {
   if (watching) {
     clearInterval(watching);
     watching = null;
-    say(job.error || job.note || "Finished.", Boolean(job.error));
+    toldError = job.error;
+    if (job.error) say(withAdvice(job.error, job.advice), true); else sayDone(job.note || "Finished.");
     if (configuring) showSettings();
-    days = await get("/api/days");
+    try { days = await get("/api/days"); } catch { /* keep what we had */ }
     if (!searching && !reminding && !configuring && !asking && !welcoming) openDay(day);
-  } else if (job.error) {
-    say(job.error, true);
+  } else if (job.error && job.error !== toldError) {
+    toldError = job.error;  // an old failure is shown once, not on every visit to Settings
+    say(withAdvice(job.error, job.advice), true);
   }
 }
 
@@ -2312,7 +2315,7 @@ $("file").addEventListener("change", async (e) => {
       ? `Imported ${r.conversations} conversations, ${r.lines} lines and ${r.hours} hours of audio.`
       : "Nothing new in that export.";
     say(r.skipped ? `${added} ${r.skipped} conversations were already here.` : added);
-    days = await get("/api/days");
+    try { days = await get("/api/days"); } catch { /* keep what we had */ }
     countReminders();
     if (r.conversations && days.length) openDay(days[days.length - 1].day);
     watchJob();
@@ -2359,7 +2362,6 @@ async function showSettings() {
   const save = el("button", { className: "pill main", textContent: "Save" });
   // Only switched on and off by running jobs when there is something to run it with.
   const run = el("button", { className: now.provider ? "pill busy-off" : "pill", disabled: !now.provider }, ...withIcon("summary", "Summarise new conversations now", 16));
-  run.dataset.label = "Summarise";
   const picked = () => document.querySelector('input[name="provider"]:checked')?.value ?? "";
   const options = el("fieldset", {},
     el("legend", { hidden: true, textContent: "What writes summaries" }),
@@ -2379,9 +2381,9 @@ async function showSettings() {
   save.addEventListener("click", () => {
     const body = { provider: picked() };
     if (key.value.trim()) body.api_key = key.value.trim();
-    send(body, () => say("Settings saved."));
+    send(body, () => sayDone("Settings saved."));
   });
-  forget.addEventListener("click", () => send({ provider: picked() === "claude" ? "" : picked(), api_key: "" }, () => say("Key removed.")));
+  forget.addEventListener("click", () => send({ provider: picked() === "claude" ? "" : picked(), api_key: "" }, () => sayDone("Key removed.")));
   run.addEventListener("click", async () => {
     try { await post("/api/digest", {}); watchJob(); }
     catch (err) { tell(err.message, true); }
@@ -2411,7 +2413,7 @@ async function showSettings() {
     heardSave.disabled = true;
     heardNote.classList.remove("failed");
     heardNote.textContent = body.transcriber === "deepgram" ? "Checking with Deepgram…" : "Saving…";
-    try { await post("/api/settings", body); await showSettings(); say(done); }
+    try { await post("/api/settings", body); await showSettings(); sayDone(done); }
     catch (err) { heardNote.textContent = `Could not save. ${err.message}`; heardNote.classList.add("failed"); heardSave.disabled = false; }
   };
   heardSave.addEventListener("click", () => {
@@ -2451,14 +2453,14 @@ async function showSettings() {
     const known = p.checked && !p.error;
     power.value.textContent = known && p.battery != null ? `${p.battery}%` : "–";
     cell.setAttribute("width", known && p.battery != null ? Math.max(1, 14 * p.battery / 100) : 0);
-    cell.setAttribute("fill", !known || p.battery == null ? "none" : p.battery < 15 ? "#b3261e" : p.battery < 30 ? "var(--mark)" : "var(--accent)");
+    cell.setAttribute("fill", !known || p.battery == null ? "none" : p.battery < 15 ? "var(--bad)" : p.battery < 30 ? "var(--mark)" : "var(--accent)");
     waiting.value.textContent = !known ? "–" : p.minutes_waiting < 1 ? "nothing" : lengthOf(p.minutes_waiting * 60000);
     room.value.textContent = known ? `${Math.round(p.hours_free)} h` : "–";
     used.style.width = known && p.total_pages ? `${Math.max(1, 100 * (1 - p.free_pages / p.total_pages))}%` : "0";
     if (!p.checked) { about.textContent = "Not checked yet. Checking takes a few seconds over Bluetooth."; return; }
     const ago = Math.max(0, Math.round((Date.now() - p.checked) / 60000));
     const when = ago < 1 ? "just now" : `${ago} min ago`;
-    about.textContent = p.error ? `Could not reach it (${when}): ${p.error}.` : `Checked ${when}.`;
+    about.textContent = p.error ? `Could not reach it (${when}): ${withAdvice(p.error, p.advice)}` : `Checked ${when}.`;
   };
   const check = el("button", { className: "pill busy-off" }, ...withIcon("refresh", "Check pendant", 16));
   const sync = el("button", { className: "pill main busy-off" }, ...withIcon("sync", "Sync now", 16));
@@ -2678,7 +2680,6 @@ async function showSettings() {
     tabs.append(b);
   }
   restate = () => { for (const [id, , , state] of menu) states[id].textContent = state(); };
-  main.classList.add("wide");
   main.replaceChildren(el("div", { className: "settings" }, tabs, el("div", {}, ...Object.values(panes),
     el("p", { className: "about" }, el("b", { textContent: "*" }), " Limitful", el("br"), el("small", { textContent: "limits apply" })),
     (() => { const b = el("button", { className: "pill", textContent: "Set up again" }); b.title = "Run the first-time guide: connect a pendant, import history, choose summaries"; b.addEventListener("click", () => showWelcome()); return el("p", { className: "small" }, b); })())));
@@ -2735,7 +2736,6 @@ function showAsk() {
   for (const [id, on] of [["ask", true], ["remind", false], ["settings", false]]) $(id).setAttribute("aria-pressed", String(on));
   $("title").textContent = "Ask";
   strip.replaceChildren();
-  main.classList.add("wide");
   document.querySelector("header").classList.add("plain");
 
   const thread = el("div", { className: "thread" });
@@ -2871,6 +2871,13 @@ function showAsk() {
     chatBusy = false;
     live.remove();
     if (!failure) { try { threads = await get("/api/chats"); } catch { /* the list catches up next time */ } }
+    if (!form.isConnected) {
+      // Ask was left while this was being answered. If it is open again, that is a new
+      // page waiting on us: draw it afresh, with the answer or the question to retry.
+      if (failure) chat.pop();
+      if (asking) showAsk();
+      return;
+    }
     if (failure) {
       chat.pop();  // the question was not answered; put it back in the box to retry
       if (asking) { paint(); field.value = question; grow(); }
@@ -2895,7 +2902,7 @@ $("ask").addEventListener("click", () => asking ? openDay(day) : showAsk());
 
 for (const id of ["ask", "remind", "settings"]) $(id).prepend(icon(id === "remind" ? "reminders" : id, 16));
 $("paused").prepend(icon("pause", 16));
-$("paused").addEventListener("click", () => showSettings());
+$("paused").addEventListener("click", () => { settingsPane = "pendant"; showSettings(); });
 /* Show on every page when audio is not being kept: it is easy to forget. */
 async function showPaused() {
   try { $("paused").hidden = (await get("/api/pendant")).paused_since == null; } catch { /* leave it as it is */ }
@@ -2909,7 +2916,12 @@ $("prev").addEventListener("click", () => step(-1));
 $("next").addEventListener("click", () => step(1));
 $("pick").addEventListener("click", () => ($("calendar").hidden ? openCalendar() : closeCalendar()));
 document.addEventListener("click", (e) => { if (!$("calendar").hidden && !$("when").contains(e.target)) closeCalendar(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("calendar").hidden) { closeCalendar(); $("pick").focus(); } });
+document.addEventListener("keydown", (e) => {
+  if ($("calendar").hidden) return;
+  // While the calendar is open its keys are its own: Escape closes it and nothing else.
+  if (e.key === "Escape") { closeCalendar(); $("pick").focus(); }
+  if (e.key === "Escape" || e.key.startsWith("Arrow")) e.stopImmediatePropagation();
+});
 
 let timer;
 $("search").addEventListener("input", (e) => {
@@ -2920,23 +2932,26 @@ $("search").addEventListener("input", (e) => {
 
 document.addEventListener("keydown", (e) => {
   const typing = e.target.matches("input, textarea");
-  if (e.key === "Escape" && (searching || reminding || configuring || asking)) { openDay(day); return; }
+  // Escape goes back to the day, but not out of a field with something typed in it (search aside).
+  if (e.key === "Escape" && (searching || reminding || configuring || asking) && (!typing || e.target.id === "search")) { openDay(day); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "/") { e.preventDefault(); $("search").focus(); }
   else if (e.shiftKey && track && e.key === "ArrowLeft") jumpTo(position() - 10);
   else if (e.shiftKey && track && e.key === "ArrowRight") jumpTo(position() + 10);
-  else if (e.key === "ArrowLeft") step(-1);
-  else if (e.key === "ArrowRight") step(1);
-  else if (e.key === " " && playing && !e.target.matches("button")) { e.preventDefault(); $("toggle").click(); }
+  else if (e.key === "ArrowLeft" && onDay(day)) step(-1);
+  else if (e.key === "ArrowRight" && onDay(day)) step(1);
+  else if (e.key === " " && playing && !e.defaultPrevented && !e.target.closest("button, summary, a, [role=button]")) { e.preventDefault(); $("toggle").click(); }
 });
 
 /* New lines arrive while `limitful watch` runs; pick them up quietly. */
 setInterval(async () => {
   showPaused();
   if (searching || reminding || configuring || asking || welcoming || document.hidden || !day) return;
+  const at = day;
   try {
     days = await get("/api/days");
-    const [fresh, freshTalks] = await Promise.all([get(`/api/day/${day}`), get(`/api/conversations/${day}`)]);
+    const [fresh, freshTalks] = await Promise.all([get(`/api/day/${at}`), get(`/api/conversations/${at}`)]);
+    if (!onDay(at) || main.querySelector(".who input")) return;  // moved on, or a name is being typed
     if (fresh.length !== lines.length || freshTalks.length !== talks.length) {
       lines = fresh; talks = freshTalks; renderDay(); countReminders();
     }
@@ -2957,6 +2972,7 @@ window.addEventListener("hashchange", () => {
   try {
     days = await get("/api/days");
   } catch (err) {
+    day = dayKey(new Date());
     main.replaceChildren(el("p", { className: "empty", textContent: `Could not load recordings. ${err.message}` }));
     return;
   }

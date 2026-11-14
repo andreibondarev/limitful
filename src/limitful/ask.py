@@ -328,7 +328,11 @@ def answer(
     if not messages or messages[-1]["role"] != "user":
         raise DigestError("ask a question first")
     lookup = Lookup(data_dir)
-    meaning = lookup.has_meaning()
+    try:
+        meaning, coverage = lookup.has_meaning(), lookup.coverage()
+    except Exception:
+        lookup.close()
+        raise
 
     def run_tool(name: str, given: object) -> str:
         """Carry out one lookup. Inputs are checked here: they arrive unvalidated."""
@@ -360,7 +364,7 @@ def answer(
         return f"There is no tool called {name}."
 
     now = datetime.now()
-    system = (f"{system_prompt(meaning)}\n\nToday is {now.strftime('%A, %Y-%m-%d')}. {lookup.coverage()}")
+    system = (f"{system_prompt(meaning)}\n\nToday is {now.strftime('%A, %Y-%m-%d')}. {coverage}")
     try:
         client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
         final = None

@@ -280,8 +280,12 @@ class OllamaSummarizer:
             ) from None
         except json.JSONDecodeError:
             raise DigestError("Ollama's reply was not valid JSON") from None
+        message = reply.get("message") if isinstance(reply, dict) else None
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, str):
+            raise DigestError("Ollama's reply had no text in it")
         try:
-            return json.loads(reply.get("message", {}).get("content", ""))
+            return json.loads(content)
         except json.JSONDecodeError:
             raise DigestError("the local model's reply was not valid JSON") from None
 

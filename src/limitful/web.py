@@ -102,7 +102,7 @@ def pendant_advice(message: str | None) -> str | None:
 
 
 class Library:
-    """Read-only queries over the data folder."""
+    """Everything the Lifelog page can ask for: the stored days, and the jobs and settings it can change."""
 
     def __init__(self, data_dir: Path, link_speakers: bool = False) -> None:
         self.data_dir = Path(data_dir).resolve()
@@ -327,9 +327,10 @@ class Library:
     def set_auto_sync(self, every: float) -> None:
         """Sync by itself every `every` seconds; 0 stops it."""
         self.auto["every"] = max(0.0, float(every))
-        if self.auto["every"] and self._auto_thread is None:
-            self._auto_thread = threading.Thread(target=self._auto_loop, daemon=True)
-            self._auto_thread.start()
+        with self._lock:  # two requests at once must not start two loops
+            if self.auto["every"] and self._auto_thread is None:
+                self._auto_thread = threading.Thread(target=self._auto_loop, daemon=True)
+                self._auto_thread.start()
 
     def _auto_loop(self) -> None:
         waited = 0.0
@@ -707,7 +708,30 @@ def make_handler(library: Library):
         def log_message(self, format, *args) -> None:  # keep the terminal quiet
             pass
 
+        def _safely(self, answer) -> None:
+            """Answer a request, and still answer when something unforeseen goes wrong."""
+            try:
+                answer()
+            except (BrokenPipeError, ConnectionError):
+                pass  # the page went away
+            except sqlite3.OperationalError as err:
+                self._fail(HTTPStatus.SERVICE_UNAVAILABLE, f"The data is busy just now ({err}). Try again in a moment.")
+            except Exception as err:
+                self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, f"Something went wrong: {err or type(err).__name__}")
+
+        def _fail(self, status, message: str) -> None:
+            try:
+                self._text(status, message)
+            except Exception:
+                pass  # the reply was already under way; nothing more can be said
+
         def do_GET(self) -> None:
+            self._safely(self._get)
+
+        def do_POST(self) -> None:
+            self._safely(self._post)
+
+        def _get(self) -> None:
             host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
             if host not in _LOCAL_HOSTS:
                 return self._text(HTTPStatus.FORBIDDEN, "This app only answers on localhost.")
@@ -761,11 +785,13 @@ def make_handler(library: Library):
                     return self._json(library.search_meaning(query) if query else {"ready": True, "lines": []})
                 if path.startswith("/audio/"):
                     return self._audio(library.audio_path(path))
-            except (sqlite3.Error, ValueError) as err:
+            except ValueError as err:
+                return self._text(HTTPStatus.BAD_REQUEST, f"That request cannot be answered: {err}")
+            except sqlite3.Error as err:
                 return self._text(HTTPStatus.INTERNAL_SERVER_ERROR, f"Could not read the data: {err}")
             self._text(HTTPStatus.NOT_FOUND, "Not found.")
 
-        def do_POST(self) -> None:
+        def _post(self) -> None:
             """POST /api/speakers/<id> {"name": ...} or /api/reminders/<id> {"status": ...}."""
             host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
             if host not in _LOCAL_HOSTS:
@@ -788,7 +814,7 @@ def make_handler(library: Library):
                 return self._json({"deleted": int(found.group(1))})
             if path == "/api/pendant":
                 try:
-                    length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                    length = max(0, min(int(self.headers.get("Content-Length") or 0), 4096))
                     body = json.loads(self.rfile.read(length) or b"{}")
                     action = body.get("action") if isinstance(body, dict) else None
                     if action == "check":
@@ -817,7 +843,7 @@ def make_handler(library: Library):
             if path == "/api/upkeep":
                 # Re-timing and index building: {"action": "retime" | "index" | "stop"}.
                 try:
-                    length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                    length = max(0, min(int(self.headers.get("Content-Length") or 0), 4096))
                     body = json.loads(self.rfile.read(length) or b"{}")
                     action = body.get("action") if isinstance(body, dict) else None
                     if action == "retime":
@@ -843,7 +869,7 @@ def make_handler(library: Library):
                     return self._text(HTTPStatus.BAD_REQUEST, str(err))
             if path == "/api/autostart":
                 try:
-                    length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                    length = max(0, min(int(self.headers.get("Content-Length") or 0), 4096))
                     body = json.loads(self.rfile.read(length) or b"{}")
                     if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool):
                         raise ValueError('send {"enabled": true} or {"enabled": false}')
@@ -852,14 +878,14 @@ def make_handler(library: Library):
                     return self._text(HTTPStatus.BAD_REQUEST, str(err))
             if path == "/api/demo":
                 try:
-                    length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                    length = max(0, min(int(self.headers.get("Content-Length") or 0), 4096))
                     body = json.loads(self.rfile.read(length) or b"{}")
                     return self._json(library.demo(body.get("action") if isinstance(body, dict) else ""))
                 except ValueError as err:
                     return self._text(HTTPStatus.BAD_REQUEST, str(err))
             if path in ("/api/settings", "/api/digest"):
                 try:
-                    length = min(int(self.headers.get("Content-Length") or 0), 8192)
+                    length = max(0, min(int(self.headers.get("Content-Length") or 0), 8192))
                     body = json.loads(self.rfile.read(length) or b"{}")
                     if not isinstance(body, dict):
                         raise ValueError("send a JSON object")
@@ -877,7 +903,7 @@ def make_handler(library: Library):
                 return self._text(HTTPStatus.NOT_FOUND, "Not found.")
             kind, item = match.group(1), int(match.group(2))
             try:
-                length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                length = max(0, min(int(self.headers.get("Content-Length") or 0), 4096))
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if not isinstance(body, dict):
                     raise ValueError("send a JSON object")
@@ -907,7 +933,7 @@ def make_handler(library: Library):
             Send {"question": ..., "chat": thread id or null}.
             """
             try:
-                length = min(int(self.headers.get("Content-Length") or 0), 1 << 20)
+                length = max(0, min(int(self.headers.get("Content-Length") or 0), 1 << 20))
                 body = json.loads(self.rfile.read(length) or b"{}")
                 if not isinstance(body, dict):
                     raise ValueError("send a JSON object")

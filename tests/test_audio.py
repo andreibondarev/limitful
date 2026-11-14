@@ -117,6 +117,33 @@ def test_pages_recorded_before_clock_was_set_get_a_real_time(tmp_path):
     store.close()
 
 
+def test_last_pages_before_a_reboot_take_their_time_from_earlier_ones(tmp_path):
+    from limitful.store import _resolve_times
+
+    boot = 1_763_000_000_000
+    # Clock set, then lost within the same boot, then the pendant restarted (uptime starts over).
+    rows = [(boot + 1_000, 1_000, 9), (2_000, 2_000, 9), (500, 500, 9)]
+    assert _resolve_times(rows) == [boot + 1_000, boot + 2_000, 9]
+
+
+def test_a_pause_also_covers_pages_recorded_before_the_clock_was_set(tmp_path):
+    store = Store(tmp_path)
+    boot = 1_763_000_000_000
+    frames = [opus_frame(i) for i in range(50)]
+    store.pause(boot + 4_000)
+    store.resume(boot + 6_500)
+    # No clock yet, so these cannot be checked against the pause as they arrive.
+    store.add_page(_page(0, 5_000, frames, uptime=5_000))
+    store.add_page(_page(1, 6_000, frames, uptime=6_000))
+    store.add_page(_page(2, boot + 7_000, frames, uptime=7_000))
+    store.commit()
+    assert store.page_count() == 3
+    (segment,) = store.export_audio()
+    assert segment.start_ms == boot + 7_000  # only the page from after the pause
+    assert store.page_count() == 1 and store.discarded_pages == 2
+    store.close()
+
+
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg not installed")
 def test_real_opus_survives_page_round_trip(tmp_path):
     """Real Opus packets -> flash pages -> store -> Ogg file that ffmpeg decodes."""

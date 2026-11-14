@@ -1,4 +1,4 @@
-"""Command-line interface: scan, pair, status, sync, export, transcribe, speakers, digest, ask, import, watch, serve."""
+"""Command-line interface. `limitful --help` lists the commands; each is a `_cmd_*` function here."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from datetime import datetime
 import zipfile
 import time
 from pathlib import Path
+
+from bleak.exc import BleakError
 
 from . import __version__, config
 from .client import Pendant, PendantError, pair, scan
@@ -79,6 +81,7 @@ async def _cmd_pair(args) -> int:
     print("Put the pendant in pairing mode now: press and release the button, then")
     print("immediately press and hold until the purple light goes out. Blue means ready.")
     print("This is a factory reset: it erases any audio still stored on the pendant.")
+    print("(To keep that audio, pair from the Lifelog instead: Settings, Pendant, Pair without erasing.)")
     print(f"Accept the pairing request if your computer shows one. Waiting {args.timeout:.0f} s...")
     state = await pair(args.timeout)
     if state is None:
@@ -600,8 +603,8 @@ def main(argv: list[str] | None = None) -> int:
 
     def data_args(p) -> None:
         p.add_argument("--data-dir", type=Path, default=default_data_dir(),
-                       help="where recordings are stored (default: ~/Limitful, "
-                            "or $LIMITFUL_DATA)")
+                       help="where recordings are stored (default: $LIMITFUL_DATA, else ~/Limitful, "
+                            "else an existing ~/PendantSync from before the rename)")
 
     p = sub.add_parser("scan", help="list pendants advertising nearby")
     p.add_argument("--timeout", type=float, default=8.0)
@@ -662,7 +665,7 @@ def main(argv: list[str] | None = None) -> int:
     data_args(p)
     p.set_defaults(func=_cmd_export)
 
-    p = sub.add_parser("transcribe", help="turn downloaded audio into text, locally")
+    p = sub.add_parser("transcribe", help="turn downloaded audio into text (locally, unless Deepgram is chosen)")
     data_args(p)
     p.add_argument("--model", default=DEFAULT_MODEL, help=f"Whisper model (default: {DEFAULT_MODEL})")
     p.add_argument("--language", help="language code such as en (default: detect per file)")
@@ -681,16 +684,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--rename", nargs=2, metavar=("ID", "NAME"),
                    help="name a speaker; using an existing name merges the two")
     p.add_argument("--reset", action="store_true",
-                   help="forget all speakers and names, and group every line again")
+                   help="forget all speakers and names, then group the pendant's lines again by voice")
     p.add_argument("--link-imported", action="store_true",
                    help="experimental: match imported speakers across conversations by voice")
     p.add_argument("--unlink-imported", action="store_true",
                    help="undo --link-imported for speakers that were never named")
     p.set_defaults(func=_cmd_speakers)
 
-    def llm_args(p) -> None:
-        p.add_argument("--provider", choices=["claude", "ollama"],
-                       help="what writes summaries (default: the choice saved in Settings)")
+    def llm_args(p, what="what writes summaries") -> None:
+        p.add_argument("--provider", choices=list(config.PROVIDERS),
+                       help=f"{what} (default: the choice saved in Settings)")
         p.add_argument("--llm-model", help="model name for that provider")
 
     p = sub.add_parser("digest", help="title and summarise conversations, and suggest reminders")
@@ -716,7 +719,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("ask", help="ask a question about what was said (uses Claude)")
     p.add_argument("question")
     data_args(p)
-    llm_args(p)
+    llm_args(p, "what answers; only claude can")
     p.set_defaults(func=_cmd_ask)
 
     p = sub.add_parser("watch", help="keep syncing and transcribing in the background")
@@ -747,7 +750,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("autostart", help="start Limitful at login and keep the pendant synced (macOS)")
     p.add_argument("action", choices=["on", "off", "status"])
     data_args(p)
-    p.add_argument("--port", type=int, default=4747, help="port the Lifelog listens on (default: 4747)")
+    p.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 4747),
+                   help="port the Lifelog listens on (default: $PORT or 4747)")
     p.set_defaults(func=_cmd_autostart)
 
     args = parser.parse_args(argv)
@@ -758,6 +762,14 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except KeyboardInterrupt:
         return 130
+    except (BleakError, asyncio.TimeoutError, OSError) as err:
+        # Bluetooth switched off or not allowed, a port in use, a file that cannot be written.
+        from .web import pendant_advice
+
+        message = str(err) or type(err).__name__
+        advice = pendant_advice(message)
+        print(f"error: {message}" + (f"\n{advice}" if advice else ""), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

@@ -93,7 +93,7 @@ async def watch(
         try:
             result = await run_cycle(store, ack=ack, get_transcriber=get_transcriber,
                                      get_embedder=get_embedder, summarizer=summarizer)
-        except (client.PendantError, BleakError, asyncio.TimeoutError, OSError) as err:
+        except Exception as err:  # a busy database or a failed download must not end the loop
             result = CycleResult(found=True, error=str(err) or type(err).__name__)
         if result.error and result.error.startswith(("summaries:", "transcription:")):
             log(f"synced, but {result.error}; will retry")

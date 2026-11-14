@@ -50,7 +50,8 @@ def test_enable_for_next_login_only_and_disable(tmp_path):
     run = Launchctl()
     state = autostart.enable(tmp_path / "data", 4800, start_now=False, home=tmp_path, run=run)
     assert state == {"supported": True, "enabled": True, "running": False}
-    assert "bootstrap" not in [c[0] for c in run.calls]
+    # Nothing is stopped or started: a copy already running stays up until the next login.
+    assert not {"bootstrap", "bootout"} & {c[0] for c in run.calls}
     assert autostart.disable(home=tmp_path, run=run) == {"supported": True, "enabled": False, "running": False}
     assert not autostart.plist_path(home=tmp_path).exists()
     autostart.disable(home=tmp_path, run=run)  # twice is fine

@@ -461,6 +461,11 @@ def test_hosted_lines_show_numbered_speakers_without_the_import_lead(site, tmp_p
     assert '"offset": 1200' in json.dumps(reply)
 
 
+def test_an_impossible_date_is_a_bad_request_not_a_failure(site):
+    status, _, body = site("/api/day/2026-13-45")
+    assert status == 400 and b"cannot be answered" in body
+
+
 def test_forget_over_usb(site, monkeypatch):
     from limitful import usb
 

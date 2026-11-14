@@ -13,8 +13,8 @@ recordings; they are joined and sent as one piece (a "session") so that
 Deepgram is the first service: one request with the audio as its body, no
 upload step and no polling. The request follows Deepgram's published
 reference (POST /v1/listen, `Authorization: Token <key>`, `diarize_model`,
-`utterances`). It has not been run against the real service from this
-project: no key was available when it was written.
+`utterances`). It has been run against the real service; its speaker labels
+scored no better than always guessing the main speaker (see the README).
 """
 
 from __future__ import annotations

@@ -267,21 +267,21 @@ def _resolve_times(rows: list[tuple]) -> list[int]:
         if valid(i):
             times.append(ts)
             continue
-        resolved = received
+        resolved = None
         for j in range(i + 1, len(rows)):  # later page, same boot: uptime keeps rising
             if rows[j][1] < uptime:
                 break
             if valid(j):
                 resolved = rows[j][0] - rows[j][1] + uptime
                 break
-        else:
+        if resolved is None:  # nothing later in this boot: look at earlier pages of it
             for j in range(i - 1, -1, -1):
                 if rows[j][1] > uptime:
                     break
                 if valid(j):
                     resolved = rows[j][0] - rows[j][1] + uptime
                     break
-        times.append(resolved)
+        times.append(received if resolved is None else resolved)
     return times
 
 
@@ -289,8 +289,9 @@ class Store:
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        # Transcription runs in a worker thread; callers never use the store from
-        # two threads at once, so sharing one connection is safe.
+        # Transcription runs in a worker thread; callers never use one store from
+        # two threads at once, so sharing its connection is safe. Other stores may
+        # have the same file open (the web server opens one per request).
         self.db = sqlite3.connect(self.data_dir / "pendant.db", check_same_thread=False)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")  # commit() must mean "on disk"
@@ -402,6 +403,13 @@ class Store:
             segments.append(Segment(path, seg["start_ms"], duration_ms))
 
         for (page_id, idx, _ts, _uptime, _received, raw), ts in zip(rows, times):
+            if _ts < MIN_VALID_TIMESTAMP_MS and self._was_paused(ts):
+                # Recorded before the pendant's clock was set, so the pause could only
+                # be checked now that its time is worked out. Not kept, like the rest.
+                finish()
+                self.db.execute("DELETE FROM pages WHERE id = ?", (page_id,))
+                self.discarded_pages += 1
+                continue
             frames = extract_opus_frames(raw)
             if not frames:
                 continue  # diagnostic page, or audio we could not parse; raw is kept
@@ -578,6 +586,10 @@ class Store:
             added += len(rows)
             if on_progress:
                 on_progress(n, len(sessions))
+        if added:
+            from . import search
+
+            search.update_if_built(self)  # keeps search by meaning complete, if it is in use
         return added, [self.write_transcript(day) for day in sorted(days)]
 
     def write_transcript(self, day: str) -> Path:
@@ -724,9 +736,10 @@ class Store:
             entry[1] += 1
             self.db.execute("UPDATE utterances SET speaker_id = ? WHERE id = ?", (speaker_id, uid))
         self.db.commit()
-        if pending:
-            marks = ",".join("?" * len(pending))
-            self._rewrite_days(f"id IN ({marks})", tuple(uid for uid, _ in pending))
+        ids = [uid for uid, _ in pending]
+        for at in range(0, len(ids), 20000):  # SQLite takes at most 32,766 values in one query
+            some = ids[at:at + 20000]
+            self._rewrite_days(f"id IN ({','.join('?' * len(some))})", tuple(some))
         return len(pending)
 
     # Imported conversations already say which lines share a speaker, so a few
