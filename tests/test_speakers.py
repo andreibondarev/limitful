@@ -133,6 +133,7 @@ def imported_store(tmp_path):
     store.db.execute(
         "INSERT INTO utterances (segment, start_ms, end_ms, text, source, source_speaker) "
         "VALUES (?, ?, ?, 'mm', 'conv-a', '1')", (seg[0], seg[1] + 100, seg[1] + 400))
+    store.db.execute("UPDATE utterances SET speaker_group = source")  # as the importer does
     store.db.commit()
     return store
 

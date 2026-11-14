@@ -70,3 +70,16 @@ class WhisperTranscriber:
             word_timestamps=True,
         )
         return [(word.start, word.word) for seg in segments for word in (seg.words or [])]
+
+
+def make_transcriber(engine: str = "local", model: str = DEFAULT_MODEL, language: str | None = None,
+                     device: str = "auto"):
+    """The engine the user chose: local Whisper, or a hosted service with speaker labels."""
+    if engine == "deepgram":
+        from . import config
+        from .hosted import DeepgramTranscriber
+
+        return DeepgramTranscriber(config.deepgram_api_key() or "", language=language)
+    if engine != "local":
+        raise ValueError(f"unknown transcription engine {engine!r}; use local or deepgram")
+    return WhisperTranscriber(model, language, device)

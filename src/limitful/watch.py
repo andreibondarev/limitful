@@ -11,6 +11,7 @@ from bleak.exc import BleakError
 
 from . import client
 from .digest import DigestError, Summarizer
+from .hosted import HostedError
 from .speakers import Embedder, load_audio
 from .store import Store
 from .transcribe import Transcriber
@@ -53,7 +54,12 @@ async def run_cycle(
     if get_transcriber is not None and store.pending_transcription():
         on_stage("Transcribing")
         # Whisper is CPU-heavy and blocking; keep the event loop free.
-        lines, _files = await asyncio.to_thread(store.transcribe_pending, get_transcriber())
+        try:
+            lines, _files = await asyncio.to_thread(store.transcribe_pending, get_transcriber())
+        except HostedError as err:
+            # The audio is safe on disk; transcription is retried next cycle.
+            return CycleResult(True, result.pages_new, len(segments), 0,
+                               error=f"transcription: {err}", pages_discarded=result.pages_discarded)
         if lines and get_embedder is not None:
             await asyncio.to_thread(store.label_speakers, get_embedder(), load_audio)
     if summarizer is not None:
@@ -89,7 +95,7 @@ async def watch(
                                      get_embedder=get_embedder, summarizer=summarizer)
         except (client.PendantError, BleakError, asyncio.TimeoutError, OSError) as err:
             result = CycleResult(found=True, error=str(err) or type(err).__name__)
-        if result.error and result.error.startswith("summaries:"):
+        if result.error and result.error.startswith(("summaries:", "transcription:")):
             log(f"synced, but {result.error}; will retry")
         elif result.error:
             log(f"sync failed, will retry: {result.error}")

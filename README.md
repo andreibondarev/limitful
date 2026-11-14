@@ -42,7 +42,8 @@ uv run limitful transcribe  # turn new audio into text, on this machine
 
 Transcripts are written to `transcripts/<date>.md`, one timestamped line
 per utterance. Transcription uses Whisper (`large-v3-turbo`) locally; the model
-is about 1.6 GB and downloads on first use. No audio leaves your computer.
+is about 1.6 GB and downloads on first use. No audio leaves your computer,
+unless you choose a hosted service (see Speaker labels).
 
 Everything is stored in `~/Limitful` (change it with `--data-dir` or the
 `LIMITFUL_DATA` environment variable). Audio lands in
@@ -127,6 +128,62 @@ What does work:
   the same name merges them. "Only this conversation" changes one conversation.
 - `uv run limitful speakers` lists speakers; `--rename 2 Andrei` names one.
 
+Telling which speaker is you, by loudness, was also measured and does not
+work. The idea: the pendant is worn, so its wearer should be the loudest voice
+in every conversation. In the six imported conversations where one speaker is
+named as the wearer, the wearer was the loudest speaker in three (chance
+would be 2.6 of six), and never by more than half a decibel either way. Across
+twenty other conversations the loudest speaker led the next by a median of
+1.7 dB, and by under 1 dB in 30% of them. The pendant appears to even out
+loudness, so nothing was built on it. Six conversations is a small sample, and
+some of those names may have come from the unreliable voice linking.
+
+#### Speaker labels from a hosted service (opt-in, untested)
+
+A hosted transcription service can label speakers where local methods could
+not. Limitful can use [Deepgram](https://deepgram.com) in place of local
+Whisper for new recordings from the pendant:
+
+- Choose it under Settings, Transcription, and paste a Deepgram API key, or
+  run `uv run limitful transcribe --engine deepgram` once a key is saved.
+- **The audio of every new recording is then sent to Deepgram and billed to
+  your Deepgram account.** Nothing is sent until you choose this. The key is
+  kept in `~/.config/limitful/config.json`, readable only by you, and is never
+  shown again.
+- A service's "Speaker 1" only means something within one request, and the
+  pendant splits a conversation into many short recordings. So recordings are
+  grouped into conversations (a five-minute silence ends one), joined, and sent
+  as one piece. The newest conversation waits until it has been quiet for five
+  minutes, so text appears a little later than with local transcription.
+- Lines arrive as "Speaker 1", "Speaker 2" within each conversation. Click one
+  to name that speaker in that conversation, exactly as with imported ones.
+- Imported conversations are never sent; they keep Limitless's transcript.
+
+**This has not been run against the real Deepgram service**: no key was
+available when it was written. It is tested against a stand-in server that
+follows Deepgram's published reference. Not confirmed from that reference, and
+so the first things to check if it fails:
+
+- that an Ogg Opus body is accepted with the content type `audio/ogg`;
+- that each line in the reply carries its speaker (if not, the speaker heard
+  on most of the line's words is used, which the reference does document);
+- what refused keys and exhausted credit look like (assumed: HTTP 401 or 403,
+  and 402);
+- that `punctuate` and `smart_format` can be sent together;
+- how good the labels are on pendant audio. Nobody has measured it.
+
+To measure it, at your own cost:
+
+```sh
+uv run limitful score-speakers --limit 5
+```
+
+sends up to five imported conversations (two to four speakers, under twenty
+minutes each) to Deepgram and prints, for each, the share of speaking time it
+gave to the same speaker Limitless did, next to the score for always guessing
+the main speaker. On the conversations used for the table above that baseline
+was 63%; a service worth switching to should beat it clearly.
+
 The experimental voice labelling is still there for anyone who wants to try
 it: `limitful transcribe --speakers`, `limitful watch --speakers`, and
 `limitful speakers --link-imported` for imported conversations.
@@ -206,8 +263,8 @@ Observed on one pendant; treat as provisional.
 ## Roadmap
 
 1. Run `watch` as a login service.
-2. Better speaker labels (splitting a line between two voices), and a hosted
-   transcription option.
+2. Try hosted transcription against the real service and measure its speaker
+   labels with `score-speakers`.
 3. An MCP server, so other assistants can query the transcripts; search by meaning.
 4. Link imported speakers to named speakers; import chats.
 5. MCP server, Obsidian sync, mobile app.

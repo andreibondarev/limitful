@@ -74,3 +74,17 @@ def test_watch_survives_failures_and_reports_once(pendant, in_range, tmp_path, m
         "pendant not in range; waiting",  # said once, not every cycle
     ]
     store.close()
+
+
+def test_a_hosted_transcription_failure_keeps_the_audio_and_is_reported(pendant, in_range, tmp_path):
+    from limitful.transcribe import make_transcriber
+
+    pendant.page_indices = [0, 1, 2]
+    store = Store(tmp_path)
+    logs = []
+    # Deepgram is chosen but no key is saved: nothing can be sent.
+    asyncio.run(watch_mod.watch(store, interval=0, ack=True, log=logs.append, cycles=1,
+                                get_transcriber=lambda: make_transcriber("deepgram")))
+    assert logs == ["synced, but transcription: add a Deepgram API key in Settings first; will retry"]
+    assert len(store.pending_transcription()) == 1  # still waiting, for the next cycle
+    store.close()

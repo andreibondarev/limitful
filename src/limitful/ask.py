@@ -23,7 +23,7 @@ MAX_TURNS = 14          # model turns in one answer, tool calls included
 SEARCH_LIMIT = 40
 READ_LIMIT = 250        # lines of a conversation returned per call
 _CITATION = re.compile(r"\[L(\d+)\]")
-_WHO = "COALESCE(p.name, 'Speaker ' || u.source_speaker, 'Unknown')"
+_WHO = "COALESCE(p.name, 'Speaker ' || NULLIF(u.source_speaker, ''), 'Unknown')"
 
 SYSTEM = """\
 You answer questions for the owner of a Lifelog: transcripts of what a small \

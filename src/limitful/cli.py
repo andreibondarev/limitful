@@ -129,6 +129,36 @@ async def _cmd_retime(args) -> int:
         store.close()
 
 
+async def _cmd_score_speakers(args) -> int:
+    from .hosted import HostedError
+    from .scoring import score_service
+    from .speakers import load_audio
+    from .transcribe import make_transcriber
+
+    try:
+        service = make_transcriber("deepgram", language=args.language)
+    except HostedError as err:
+        raise PendantError(str(err)) from None
+    Store(args.data_dir).close()  # make sure the database is up to date
+    print(f"Sending up to {args.limit} imported conversation(s) to {service.name} and comparing its "
+          "speakers with Limitless's.")
+    try:
+        rows = await asyncio.to_thread(score_service, args.data_dir, service, load_audio, args.limit)
+    except HostedError as err:
+        raise PendantError(str(err)) from None
+    if not rows:
+        print("No imported conversations fit the test (two to four speakers, 50 to 220 lines, with audio).")
+        return 1
+    for title, lines, speakers, found, score, baseline in rows:
+        print(f"  {title[:44]:44s} {lines:3d} lines, {speakers} speakers, service found {found}: "
+              f"{score:.0%} (guessing the main speaker: {baseline:.0%})")
+    mean = sum(r[4] for r in rows) / len(rows)
+    base = sum(r[5] for r in rows) / len(rows)
+    print(f"Speaking time given to the right speaker, on average: {mean:.0%}. "
+          f"Always guessing the main speaker: {base:.0%}.")
+    return 0
+
+
 async def _cmd_pause(args) -> int:
     store = Store(args.data_dir)
     try:
@@ -360,21 +390,38 @@ async def _cmd_transcribe(args) -> int:
         if not pending:
             print("Nothing new to transcribe.")
             return 0
-        from .transcribe import WhisperTranscriber
+        from .hosted import HostedError
+        from .transcribe import make_transcriber
 
-        print(f"Loading {args.model} (downloads on first use)...", file=sys.stderr)
-        transcriber = WhisperTranscriber(args.model, args.language, args.device)
+        engine = args.engine or config.transcriber()
+        if engine == "local":
+            print(f"Loading {args.model} (downloads on first use)...", file=sys.stderr)
+        else:
+            print(f"Sending audio to {engine.capitalize()}, a conversation at a time...", file=sys.stderr)
+        try:
+            transcriber = make_transcriber(engine, args.model, args.language, args.device)
+        except HostedError as err:
+            raise PendantError(str(err)) from None
 
         def progress(done: int, total: int) -> None:
-            print(f"\r  {done}/{total} files", end="", file=sys.stderr, flush=True)
+            what = "files" if engine == "local" else "conversations"
+            print(f"\r  {done}/{total} {what}", end="", file=sys.stderr, flush=True)
 
         started = time.monotonic()
-        added, files = store.transcribe_pending(transcriber, progress)
+        try:
+            added, files = store.transcribe_pending(transcriber, progress)
+        except HostedError as err:
+            print(file=sys.stderr)
+            raise PendantError(f"{err}. Conversations already transcribed were kept.") from None
         print(file=sys.stderr)
-        audio_s = sum(duration for _, _, duration in pending) / 1000
+        waiting = store.pending_transcription()  # a hosted service leaves the newest conversation
+        audio_s = (sum(duration for _, _, duration in pending) - sum(duration for _, _, duration in waiting)) / 1000
         took = time.monotonic() - started
         print(f"Transcribed {audio_s / 60:.1f} min of audio in {took:.0f} s: {added} line(s).")
-        if not added:
+        if waiting:
+            print("The most recent conversation is sent once it has been quiet for five minutes, "
+                  "so that it goes as one piece.")
+        elif not added:
             print("No speech was detected in the new audio.")
         if args.speakers:
             _label_speakers(store)
@@ -391,10 +438,12 @@ async def _cmd_watch(args) -> int:
 
     def get_transcriber():
         if not cached:
-            from .transcribe import WhisperTranscriber
+            from .transcribe import make_transcriber
 
-            print(f"Loading {args.model} (downloads on first use)...", flush=True)
-            cached.append(WhisperTranscriber(args.model, args.language, args.device))
+            engine = config.transcriber()
+            if engine == "local":
+                print(f"Loading {args.model} (downloads on first use)...", flush=True)
+            cached.append(make_transcriber(engine, args.model, args.language, args.device))
         return cached[0]
 
     embedders: list = []
@@ -475,6 +524,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--device", default="auto", help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
     p.set_defaults(func=_cmd_retime)
 
+    p = sub.add_parser("score-speakers",
+                       help="check a hosted service's speaker labels against Limitless's (sends audio)")
+    data_args(p)
+    p.add_argument("--limit", type=int, default=5, help="how many imported conversations to send (default: 5)")
+    p.add_argument("--language", help="language code such as en (default: let the service decide)")
+    p.set_defaults(func=_cmd_score_speakers)
+
     for name, text in (("pause", "stop keeping audio: what the pendant records from now is deleted at sync"),
                        ("resume", "keep audio again after a pause")):
         p = sub.add_parser(name, help=text)
@@ -510,7 +566,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--device", default="auto",
                    help="auto, cpu, cuda, or mps (experimental Apple GPU support)")
     p.add_argument("--redo", action="store_true",
-                   help="transcribe everything again, replacing existing transcripts")
+                   help="transcribe pendant recordings again, replacing their transcripts")
+    p.add_argument("--engine", choices=["local", "deepgram"],
+                   help="local Whisper, or Deepgram for speaker labels (default: the choice saved in Settings)")
     p.add_argument("--speakers", action="store_true",
                    help="experimental: guess speakers by voice (unreliable on real recordings)")
     p.set_defaults(func=_cmd_transcribe)

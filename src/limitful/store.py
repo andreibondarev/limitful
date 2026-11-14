@@ -136,7 +136,14 @@ _MIGRATIONS = [
     ("segments", "retimed", "INTEGER"),          # 1 once its imported lines have been re-timed
     ("conversations", "source", "TEXT"),         # the import it came from, once known
     ("sections", "orig_start_ms", "INTEGER"),    # a heading's own position, once re-timed
+    # Which lines share a set of per-conversation speaker numbers: an imported
+    # conversation, or one request to a hosted transcription service.
+    ("utterances", "speaker_group", "TEXT"),
 ]
+
+# A hosted service's speaker numbers only hold within one request, so recordings
+# are sent a conversation at a time. This caps how much goes in one request.
+SESSION_MAX_MS = 3 * 60 * 60 * 1000
 
 # Imported timestamps are rounded to the second and run about a second late.
 # Re-timing looks for each line's words in a local transcript of the same audio.
@@ -286,6 +293,10 @@ class Store:
                 added.add((table, column))
         self.db.commit()
         self.discarded_pages = 0  # pages dropped this session because they fell in a pause
+        if ("utterances", "speaker_group") in added:
+            # Imported lines were grouped by their import before this column existed.
+            self.db.execute("UPDATE utterances SET speaker_group = source WHERE source IS NOT NULL")
+            self.db.commit()
         if ("reminders", "utterance_id") in added:
             self.link_reminders_to_lines()  # reminders saved before lines were tracked
 
@@ -405,8 +416,11 @@ class Store:
         return segments
 
     def forget_transcriptions(self) -> None:
-        """Mark every audio file as not transcribed, so the next run redoes them."""
-        self.db.execute("DELETE FROM transcriptions")
+        """Mark recordings from the pendant as not transcribed, so the next run redoes them.
+
+        Imported recordings keep the transcript they came with.
+        """
+        self.db.execute("DELETE FROM transcriptions WHERE engine != 'limitless'")
         self.db.commit()
 
     def pending_transcription(self) -> list[tuple[str, int, int]]:
@@ -422,6 +436,9 @@ class Store:
         on_progress: Callable[[int, int], None] | None = None,
     ) -> tuple[int, list[Path]]:
         """Transcribe new audio files. Returns (utterances added, transcript files written)."""
+        if hasattr(transcriber, "transcribe_session"):
+            # A hosted service with speaker labels works a conversation at a time.
+            return self.transcribe_sessions(transcriber, on_progress)
         pending = self.pending_transcription()
         added = 0
         days: set[str] = set()
@@ -447,13 +464,115 @@ class Store:
                 on_progress(n, len(pending))
         return added, [self.write_transcript(day) for day in sorted(days)]
 
+    # --- hosted transcription, a conversation at a time -----------------------------
+
+    def pending_sessions(self, now_ms: int | None = None) -> list[list[tuple[str, int, int]]]:
+        """Untranscribed pendant recordings grouped into conversations.
+
+        The pendant stops recording during silence, so a conversation is many
+        short recordings. A silence of CONVERSATION_GAP_MS ends a group. The
+        newest group is held back until it has been quiet that long: sending
+        half a conversation would give its two halves unrelated speaker numbers.
+        """
+        now_ms = int(time.time() * 1000) if now_ms is None else now_ms
+        pending = self.db.execute(
+            "SELECT path, start_ms, duration_ms FROM segments WHERE first_page >= 0 "
+            "AND path NOT IN (SELECT segment FROM transcriptions) ORDER BY start_ms").fetchall()
+        sessions: list[list[tuple[str, int, int]]] = []
+        for item in pending:
+            _path, start, _duration = item
+            last = sessions[-1] if sessions else None
+            if (last and start - (last[-1][1] + last[-1][2]) <= CONVERSATION_GAP_MS
+                    and start + _duration - last[0][1] <= SESSION_MAX_MS):
+                last.append(item)
+            else:
+                sessions.append([item])
+        if sessions:
+            _path, start, duration = sessions[-1][-1]
+            if now_ms - (start + duration) <= CONVERSATION_GAP_MS:
+                sessions.pop()  # may still be going on
+        return sessions
+
+    def session_audio(self, session: list[tuple[str, int, int]]) -> tuple[bytes, list[tuple[str, int, float, float]]]:
+        """One Ogg Opus stream of a session's recordings end to end.
+
+        Also returns, for each recording: (path, the clock time it starts at in ms,
+        where it starts in the joined audio in seconds, how long it is in seconds).
+        The stream is rebuilt from the stored pages, so nothing is re-encoded.
+        """
+        import io
+
+        packets: list[bytes] = []
+        pieces: list[tuple[str, int, float, float]] = []
+        at = 0.0
+        for path, start_ms, _duration in session:
+            first, last = self.db.execute(
+                "SELECT first_page, last_page FROM segments WHERE path = ?", (path,)).fetchone()
+            frames = [frame for (raw,) in self.db.execute(
+                "SELECT raw FROM pages WHERE id BETWEEN ? AND ? ORDER BY id", (first, last))
+                for frame in extract_opus_frames(raw)]
+            length = sum(packet_samples(frame) for frame in frames) / 48000
+            pieces.append((path, start_ms, at, length))
+            at += length
+            packets += frames
+        out = io.BytesIO()
+        write_ogg_opus(out, packets)
+        return out.getvalue(), pieces
+
+    def transcribe_sessions(
+        self,
+        service,
+        on_progress: Callable[[int, int], None] | None = None,
+        now_ms: int | None = None,
+    ) -> tuple[int, list[Path]]:
+        """Send each waiting conversation to a hosted service and store its lines.
+
+        Every line keeps the service's speaker number, which holds within that
+        conversation only, exactly like an imported conversation's speakers.
+        """
+        import bisect
+
+        sessions = self.pending_sessions(now_ms)
+        added = 0
+        days: set[str] = set()
+        for n, session in enumerate(sessions, 1):
+            audio, pieces = self.session_audio(session)
+            total_s = pieces[-1][2] + pieces[-1][3]
+            # Too short to hold speech: not worth a request.
+            lines = service.transcribe_session(audio) if total_s >= MIN_TRANSCRIBE_MS / 1000 else []
+            group = f"{service.name.split(':')[0]}:{session[0][1]}"
+            starts = [piece[2] for piece in pieces]
+            rows = []
+            for line in lines:
+                # Which recording was playing at that moment of the joined audio.
+                path, wall_ms, base, length = pieces[max(0, bisect.bisect_right(starts, line.start_s) - 1)]
+                offset = min(max(0.0, line.start_s - base), length)
+                start_ms = wall_ms + round(offset * 1000)
+                label = "" if line.speaker is None else str(line.speaker + 1)
+                rows.append((path, start_ms, start_ms + max(1, round((line.end_s - line.start_s) * 1000)),
+                             line.text, group, label))
+            for path, start_ms, _duration in session:
+                # Replace rather than append, so an interrupted run cannot duplicate text.
+                self.db.execute("DELETE FROM utterances WHERE segment = ?", (path,))
+                self.db.execute("INSERT OR REPLACE INTO transcriptions VALUES (?, ?, ?)",
+                                (path, service.name, int(time.time() * 1000)))
+                days.add(datetime.fromtimestamp(start_ms / 1000).strftime("%Y-%m-%d"))
+            self.db.executemany(
+                "INSERT INTO utterances (segment, start_ms, end_ms, text, speaker_group, source_speaker) "
+                "VALUES (?, ?, ?, ?, ?, ?)", rows)
+            self.db.commit()
+            added += len(rows)
+            if on_progress:
+                on_progress(n, len(sessions))
+        return added, [self.write_transcript(day) for day in sorted(days)]
+
     def write_transcript(self, day: str) -> Path:
         """Rewrite the Markdown transcript for one local-time day (YYYY-MM-DD)."""
         start = datetime.strptime(day, "%Y-%m-%d")
         start_ms = int(start.timestamp() * 1000)
         end_ms = int(start.replace(hour=23, minute=59, second=59).timestamp() * 1000) + 1000
         rows = self.db.execute(
-            "SELECT u.start_ms, u.text, COALESCE(s.name, 'Speaker ' || u.source_speaker) "
+            "SELECT u.start_ms, u.text, COALESCE(s.name, 'Speaker ' || NULLIF(u.source_speaker, '')) "
             "FROM utterances u LEFT JOIN speakers s ON s.id = u.speaker_id "
             "WHERE u.start_ms >= ? AND u.start_ms < ? ORDER BY u.start_ms, u.id",
             (start_ms, end_ms),
@@ -499,7 +618,8 @@ class Store:
         todo = self.db.execute(
             "SELECT u.id, u.segment, u.start_ms - s.start_ms, u.end_ms - u.start_ms "
             "FROM utterances u JOIN segments s ON s.path = u.segment "
-            "WHERE u.embedding IS NULL AND u.source IS NULL AND u.end_ms - u.start_ms >= ? "
+            "WHERE u.embedding IS NULL AND u.source IS NULL AND u.speaker_group IS NULL "
+            "AND u.end_ms - u.start_ms >= ? "
             "ORDER BY u.segment",
             (MIN_SPEAKER_MS,),
         ).fetchall()
@@ -578,7 +698,7 @@ class Store:
             return 0
         pending = self.db.execute(
             "SELECT id, embedding FROM utterances WHERE embedding IS NOT NULL "
-            "AND speaker_id IS NULL AND source IS NULL ORDER BY start_ms, id"
+            "AND speaker_id IS NULL AND source IS NULL AND speaker_group IS NULL ORDER BY start_ms, id"
         ).fetchall()
         for uid, blob in pending:
             voice = np.frombuffer(blob, dtype=np.float32).astype(np.float64)
@@ -746,20 +866,21 @@ class Store:
     def assign_line_speaker(self, utterance_id: int, name: str) -> int:
         """Say who spoke a line, here only.
 
-        For an imported line this covers every line of the same speaker in that
-        conversation; for a line recorded from the pendant, just that line. The
-        name is matched to an existing speaker or creates a new one.
+        Where the conversation has numbered speakers (an imported one, or one
+        transcribed by a hosted service) this covers every line of that speaker
+        in that conversation; otherwise just the one line. The name is matched
+        to an existing speaker or creates a new one.
         """
         name = self._clean_name(name)
         row = self.db.execute(
-            "SELECT source, source_speaker FROM utterances WHERE id = ?", (utterance_id,)).fetchone()
+            "SELECT speaker_group, source_speaker FROM utterances WHERE id = ?", (utterance_id,)).fetchone()
         if row is None:
             raise ValueError(f"there is no line {utterance_id}")
         found = self.db.execute(
             "SELECT id FROM speakers WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
         target = found[0] if found else self._new_speaker(name)
         if row[0] and row[1]:
-            where, params = "source = ? AND source_speaker = ?", (row[0], row[1])
+            where, params = "speaker_group = ? AND source_speaker = ?", (row[0], row[1])
         else:
             where, params = "id = ?", (utterance_id,)
         self.db.execute(f"UPDATE utterances SET speaker_id = ? WHERE {where}", (target, *params))
@@ -811,8 +932,8 @@ class Store:
         """The transcript handed to the summariser, how many words were said, and
         the id of each numbered line."""
         rows = self.db.execute(
-            "SELECT u.id, u.start_ms, u.text, s.name FROM utterances u "
-            "LEFT JOIN speakers s ON s.id = u.speaker_id "
+            "SELECT u.id, u.start_ms, u.text, COALESCE(s.name, 'Speaker ' || NULLIF(u.source_speaker, '')) "
+            "FROM utterances u LEFT JOIN speakers s ON s.id = u.speaker_id "
             "WHERE u.start_ms >= ? AND u.start_ms <= ? ORDER BY u.start_ms, u.id",
             (start_ms, end_ms),
         ).fetchall()

@@ -1269,6 +1269,41 @@ async function showSettings() {
     catch (err) { tell(err.message, true); }
   });
 
+  // --- transcription: on this computer, or a hosted service that also labels speakers
+  const heardBy = (value, name, about) => {
+    const radio = el("input", { type: "radio", name: "transcriber", value, checked: (now.transcriber || "local") === value });
+    return el("label", { className: "choice" }, radio, el("b", { textContent: name }), el("span", { textContent: about }));
+  };
+  const dgKey = el("input", { type: "password", id: "dgkey", autocomplete: "off", spellcheck: false,
+    placeholder: now.has_deepgram_key ? `A key is saved (${now.deepgram_key_hint}). Type a new one to replace it.` : "Deepgram API key" });
+  const dgBox = el("div", { className: "key" }, el("label", { htmlFor: "dgkey", textContent: "Deepgram API key" }), dgKey,
+    el("small", { textContent: "Kept on this computer in ~/.config/limitful/config.json and sent only to Deepgram. Nothing is sent until you save this choice." }));
+  const heardNote = el("p", { className: "note", role: "status" });
+  const heardSave = el("button", { className: "pill main", textContent: "Save" });
+  const dgForget = el("button", { className: "pill", textContent: "Remove saved key", hidden: !now.has_deepgram_key });
+  const heardPicked = () => document.querySelector('input[name="transcriber"]:checked')?.value ?? "local";
+  const heard = el("fieldset", {},
+    el("legend", { hidden: true, textContent: "What turns audio into text" }),
+    heardBy("local", "On this computer", "Whisper, running here. No audio leaves this computer. It cannot tell speakers apart."),
+    heardBy("deepgram", "Deepgram", `Adds Speaker 1, Speaker 2 to each conversation, using ${now.deepgram_model}. The audio of every new recording is sent to Deepgram, a company in the United States, and usage is billed to your Deepgram account. Not yet tried against the real service.`),
+    dgBox);
+  const showDgKey = () => { dgBox.hidden = heardPicked() !== "deepgram"; };
+  heard.addEventListener("change", showDgKey);
+  const heardSend = async (body, done) => {
+    heardSave.disabled = true;
+    heardNote.classList.remove("failed");
+    heardNote.textContent = body.transcriber === "deepgram" ? "Checking with Deepgram…" : "Saving…";
+    try { await post("/api/settings", body); await showSettings(); say(done); }
+    catch (err) { heardNote.textContent = `Could not save. ${err.message}`; heardNote.classList.add("failed"); heardSave.disabled = false; }
+  };
+  heardSave.addEventListener("click", () => {
+    const body = { transcriber: heardPicked() };
+    if (dgKey.value.trim()) body.deepgram_api_key = dgKey.value.trim();
+    heardSend(body, "Settings saved.");
+  });
+  // Removing the key also goes back to this computer: Deepgram cannot be used without one.
+  dgForget.addEventListener("click", () => heardSend({ transcriber: "local", deepgram_api_key: "" }, "Key removed."));
+
   // --- the pendant: what it reports, its light, and syncing on demand
   const about = el("p", { className: "note", role: "status" });
 
@@ -1420,6 +1455,11 @@ async function showSettings() {
         el("li", { textContent: "A blue light means it is ready. Accept the connection request your computer shows." })),
       el("p", { className: "small", textContent: "Unpair makes the pendant forget this computer, so it can be paired with another. Its recordings are kept. Your computer may also remember the pendant: if pairing again fails, remove it under Bluetooth in System Settings." }),
       el("div", { className: "row" }, pair, unpair)),
+    el("h2", {}, ...withIcon("wave", "Transcription", 22)),
+    el("p", { textContent: "What turns new recordings from the pendant into text. Conversations imported from Limitless keep the transcript they came with." }),
+    heard,
+    el("div", { className: "row" }, heardSave, dgForget),
+    heardNote,
     el("h2", {}, ...withIcon("summary", "Summaries", 22)),
     el("p", { textContent: "A title, a short summary and suggested reminders for each conversation recorded from the pendant. Conversations imported from Limitless already have theirs." }),
     options,
@@ -1430,6 +1470,7 @@ async function showSettings() {
     el("div", { className: "row" }, pick),
     el("p", { className: "about" }, el("b", { textContent: "*" }), " Limitful", el("br"), el("small", { textContent: "limits apply" }))));
   showKey();
+  showDgKey();
   watchJob();
 }
 $("settings").addEventListener("click", () => configuring ? openDay(day) : showSettings());

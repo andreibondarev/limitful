@@ -202,10 +202,10 @@ def import_limitless(
             for speaker, line_start, line_end, text in lifelog.lines:
                 segment = recording_at(line_start)
                 result.lines_with_audio += bool(segment)
-                rows.append((segment, line_start, line_end, text, lifelog.key, speaker))
+                rows.append((segment, line_start, line_end, text, lifelog.key, lifelog.key, speaker))
             store.db.executemany(
-                "INSERT INTO utterances (segment, start_ms, end_ms, text, source, source_speaker) "
-                "VALUES (?, ?, ?, ?, ?, ?)", rows)
+                "INSERT INTO utterances (segment, start_ms, end_ms, text, source, speaker_group, source_speaker) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
             store.db.execute("INSERT INTO imports VALUES (?)", (lifelog.key,))
             result.conversations += 1
             result.lines += len(rows)

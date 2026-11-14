@@ -396,3 +396,62 @@ def test_pause_pair_and_unpair_from_the_page(site, monkeypatch):
     monkeypatch.setattr(client, "unpair", gone)
     status, _h, body = site("/api/pendant", JSON, b'{"action": "unpair"}')
     assert status == 400 and b"Could not unpair: the pendant is not in range" in body
+
+
+def test_transcription_settings_keep_the_deepgram_key_private(site, monkeypatch):
+    import os
+    import stat
+
+    from limitful import config, digest, hosted
+
+    checked = []
+    monkeypatch.setattr(hosted, "check_deepgram", lambda key, base_url=None: checked.append(key))
+    monkeypatch.setattr(digest, "check_claude", lambda key=None, model=None: pytest.fail("summaries were not touched"))
+    start = json.loads(site("/api/settings")[2])
+    assert (start["transcriber"], start["has_deepgram_key"], start["deepgram_key_hint"]) == ("local", False, None)
+
+    # Deepgram cannot be chosen without a key, and nothing is sent to check one that is missing.
+    status, _h, body = site("/api/settings", JSON, b'{"transcriber": "deepgram"}')
+    assert status == 400 and b"needs an API key" in body and checked == [] and config.load() == {}
+
+    status, _h, body = site("/api/settings", JSON, b'{"transcriber": "deepgram", "deepgram_api_key": " dg-SECRETSECRET9876 "}')
+    assert status == 200 and b"SECRETSECRET" not in body
+    got = json.loads(body)
+    assert (got["transcriber"], got["has_deepgram_key"], got["deepgram_key_hint"]) == ("deepgram", True, "ends in 9876")
+    assert got["provider"] is None  # the summaries choice is untouched
+    assert checked == ["dg-SECRETSECRET9876"] and config.transcriber() == "deepgram"
+    assert b"SECRETSECRET" not in site("/api/settings")[2]
+    assert stat.S_IMODE(os.stat(config.config_path()).st_mode) == 0o600
+
+    # Going back to this computer keeps the key; removing the key is explicit.
+    assert json.loads(site("/api/settings", JSON, b'{"transcriber": "local"}')[2])["has_deepgram_key"] is True
+    after = json.loads(site("/api/settings", JSON, b'{"transcriber": "local", "deepgram_api_key": ""}')[2])
+    assert (after["transcriber"], after["has_deepgram_key"]) == ("local", False)
+    assert site("/api/settings", JSON, b'{"transcriber": "deepgram", "deepgram_api_key": ""}')[0] == 400
+    assert site("/api/settings", JSON, b'{"transcriber": "elsewhere"}')[0] == 400
+    assert site("/api/settings", JSON, b'{"deepgram_api_key": 7}')[0] == 400
+
+
+def test_transcription_settings_reject_a_key_deepgram_refuses(site, monkeypatch):
+    from limitful import config, hosted
+
+    def refuse(key, base_url=None):
+        raise hosted.HostedError("Deepgram did not accept that key")
+
+    monkeypatch.setattr(hosted, "check_deepgram", refuse)
+    status, _h, body = site("/api/settings", JSON, b'{"transcriber": "deepgram", "deepgram_api_key": "dg-wrong-0000000"}')
+    assert status == 400 and b"Nothing was saved" in body and config.load() == {}
+
+
+def test_hosted_lines_show_numbered_speakers_without_the_import_lead(site, tmp_path):
+    store = Store(tmp_path)
+    store.db.execute("UPDATE utterances SET speaker_id = NULL, speaker_group = 'deepgram:1', source_speaker = '2' "
+                     "WHERE text LIKE 'call%'")
+    store.db.commit()
+    store.close()
+    day = datetime.fromtimestamp(T0 / 1000).strftime("%Y-%m-%d")
+    reply = json.loads(site(f"/api/day/{day}")[2])
+    found = [line for line in json.dumps(reply).split('"text"') if "call Joseph" in line]
+    assert found and '"Speaker 2"' in json.dumps(reply)
+    # Its audio offset is its own start (1.2 s in), not moved earlier as for imported lines.
+    assert '"offset": 1200' in json.dumps(reply)

@@ -26,6 +26,7 @@ from . import ask as ask_mod
 from . import client as client_mod
 from . import config
 from . import digest as digest_mod
+from . import hosted as hosted_mod
 
 _INDEX = Path(__file__).parent / "web" / "index.html"
 _DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -41,10 +42,10 @@ def _day_of(ms: int) -> str:
 
 
 def _utterance(row) -> dict:
-    uid, start_ms, end_ms, text, segment, segment_start, speaker_id, speaker, label, retimed = row
+    uid, start_ms, end_ms, text, segment, segment_start, speaker_id, speaker, label, retimed, imported = row
     if speaker_id:
         who = {"id": speaker_id, "name": speaker, "line": uid}
-    elif label:  # an imported line: the label only holds within its conversation
+    elif label:  # a numbered speaker: the number only holds within its conversation
         who = {"id": None, "name": f"Speaker {label}", "line": uid}
     else:
         who = None
@@ -57,14 +58,15 @@ def _utterance(row) -> dict:
         "text": text,
         "audio": "/" + segment if has_audio else None,
         # Imported lines that have not been re-timed run late, so start those early.
-        "offset": max(0, start_ms - segment_start - (_IMPORT_LEAD_MS if label and retimed is None else 0))
+        "offset": max(0, start_ms - segment_start - (_IMPORT_LEAD_MS if imported and retimed is None else 0))
         if has_audio else 0,
     }
 
 
 _SELECT = (
     "SELECT u.id, u.start_ms, u.end_ms, u.text, u.segment, s.start_ms, u.speaker_id, p.name, "
-    "u.source_speaker, u.orig_start_ms FROM utterances u LEFT JOIN segments s ON s.path = u.segment "
+    "u.source_speaker, u.orig_start_ms, u.source IS NOT NULL "
+    "FROM utterances u LEFT JOIN segments s ON s.path = u.segment "
     "LEFT JOIN speakers p ON p.id = u.speaker_id "
 )
 
@@ -211,7 +213,7 @@ class Library:
     def _sync_job(self) -> None:
         from . import watch as watch_mod
         from .store import Store
-        from .transcribe import WhisperTranscriber
+        from .transcribe import make_transcriber
 
         try:
             if not self._radio.acquire(timeout=20):
@@ -223,7 +225,8 @@ class Library:
                 store = Store(self.data_dir)
                 try:
                     result = asyncio.run(watch_mod.run_cycle(
-                        store, ack=True, get_transcriber=WhisperTranscriber,
+                        store, ack=True,
+                        get_transcriber=lambda: make_transcriber(config.transcriber()),
                         get_embedder=None, summarizer=summarizer,  # voice labels are opt-in: see README
                         on_stage=lambda stage: self.job.update(what=stage)))
                 finally:
@@ -254,9 +257,45 @@ class Library:
             "key_hint": f"ends in {key[-4:]}" if key and len(key) >= 12 else ("saved" if key else None),
             "claude_model": digest_mod.CLAUDE_MODEL,
             "ollama_model": digest_mod.OLLAMA_MODEL,
+            "transcriber": config.load().get("transcriber") or "local",
+            "has_deepgram_key": bool(config.deepgram_api_key()),
+            "deepgram_key_hint": self._hint(config.deepgram_api_key()),
+            "deepgram_model": hosted_mod.DEEPGRAM_MODEL,
         }
 
+    @staticmethod
+    def _hint(key: str | None) -> str | None:
+        """Enough to recognise a saved key by, never the key itself."""
+        if not key:
+            return None
+        return f"ends in {key[-4:]}" if len(key) >= 12 else "saved"
+
+    def _save_transcription(self, body: dict) -> None:
+        engine = body.get("transcriber", config.load().get("transcriber") or "local")
+        key = body.get("deepgram_api_key")
+        if key is not None and not isinstance(key, str):
+            raise ValueError("the key must be text")
+        if engine not in config.TRANSCRIBERS:
+            raise ValueError("choose local transcription or Deepgram")
+        candidate = key.strip() if key else (config.deepgram_api_key() if key is None else None)
+        if engine == "deepgram":
+            if not candidate:
+                raise ValueError("Deepgram needs an API key. Nothing was saved.")
+            # Check before saving, so a mistyped key is caught here and not at the next sync.
+            try:
+                hosted_mod.check_deepgram(candidate)
+            except hosted_mod.HostedError as err:
+                raise ValueError(f"{err}. Nothing was saved.") from None
+        if key is None:
+            config.update(transcriber=engine)
+        else:
+            config.update(transcriber=engine, deepgram_api_key=key)
+
     def save_settings(self, body: dict) -> dict:
+        if "transcriber" in body or "deepgram_api_key" in body:
+            self._save_transcription(body)
+            if "provider" not in body and "api_key" not in body:
+                return self.settings()
         provider = body.get("provider", config.load().get("provider"))
         if provider in ("", "none"):
             provider = None
