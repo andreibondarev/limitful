@@ -206,8 +206,9 @@ uv run limitful index --remove              # delete it; transcripts are untouch
 It runs on this computer. A small model (34 MB, downloaded once and checked
 against a pinned checksum) turns each line, together with the two lines either
 side of it, into a list of numbers; these are kept in `search.db` next to
-`pendant.db`, about 24 MB for 30,000 lines. Building took 9 minutes for 31,750
-lines on a laptop that was busy with other work. It can be stopped and carries
+`pendant.db`, 26 MB for 31,750 lines. Building it for those lines took 9
+minutes on one run and 23 on another, on a laptop busy with other work both
+times; a search then takes about a fiftieth of a second. It can be stopped and carries
 on where it left off, and once it exists new lines are added as they are
 transcribed. After importing an export, run it again (or press the button) to
 add the imported lines.
@@ -228,6 +229,12 @@ the line holding the answer:
 | Word matching, as Ask used before | 0 | 2 | 3 |
 | Meaning, each line on its own | 6 | 9 | 12 |
 | Meaning, each line with its neighbours (what is used) | 8 | 9 | 14 |
+
+Neighbouring lines come back in clumps, so what is shown is one line per
+moment. Counted that way, the answer was among the eight moments the search
+box shows for 10 of the 15 questions, and among the thirty Ask is given for
+all 15. Fifteen questions written by the person who built the feature, on one
+person's recordings, is a small and friendly sample.
 
 Limits worth knowing. It always returns its closest lines, related or not, and
 the closeness score does not tell the two apart: right answers scored 0.57 to
