@@ -350,6 +350,26 @@ Observed on one pendant; treat as provisional.
   roughly 1.4 s; the pendant reports 95,232 pages, so about 38 hours.
 - The pendant stops recording during silence, so audio arrives as short bursts.
 
+The USB serial port (115200 baud) carries the firmware's log and a Zephyr
+shell prompt (`uart:~$`). Listening to it, without typing anything, showed:
+
+- The chip is a Nordic nRF53, running nRF Connect SDK with the MCUboot
+  bootloader. Firmware version 1.1.20, about 512 KB, with a primary and a
+  secondary image slot, which is how MCUboot installs updates.
+- Start-up initialises, in order: usb, led, watchdog, button, poll, storage,
+  pendant_settings, device_state, battery, imu, crypto, wifi, comm, bluetooth.
+  So there is a motion sensor, and at least a Wi-Fi module in the firmware.
+- Storage reports four flash chip positions, two of them working. The other
+  two fail at start-up; whether they are fitted on this model is not known.
+- A crypto module holds a device key, a storage key and a server public key.
+  After a factory reset the last two are missing.
+- The firmware logs its own state as it changes: "Recording state set to
+  RECORDING" / "NOT_RECORDING", storage sessions starting, and the light's
+  colour ("Recording while charging, LED alternating colors").
+- Bluetooth also offers the Nordic UART Service.
+
+No command has been typed into the shell yet, so what it accepts is unknown.
+
 ## Not yet verified
 
 - **Linux and Windows.** Everything has been run on macOS only.
@@ -368,7 +388,8 @@ Observed on one pendant; treat as provisional.
 - Let Ask search reminders.
 - An MCP server, so other assistants can query the Lifelog.
 - A real pause or power-off command, if the pendant has one. The USB serial
-  port and the firmware update service are unexplored.
+  port has a shell that has not been tried; the firmware update service is
+  unexplored.
 - Open firmware. Research only so far.
 
 ## Development
