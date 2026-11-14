@@ -1416,7 +1416,7 @@ async function showSettings() {
   searching = false;
   asking = false;
   $("ask").setAttribute("aria-pressed", "false");
-  history.replaceState(null, "", "#settings");
+  history.replaceState(null, "", `#settings/${settingsPane}`);
   $("settings").setAttribute("aria-pressed", "true");
   $("remind").setAttribute("aria-pressed", "false");
   $("title").textContent = "Settings";
@@ -1740,6 +1740,7 @@ async function showSettings() {
   const states = {};
   const open = (id) => {
     settingsPane = id;
+    history.replaceState(null, "", `#settings/${id}`);  // so a section can be bookmarked or linked
     for (const [name, pane] of Object.entries(panes)) pane.hidden = name !== id;
     for (const b of tabs.children) b.setAttribute("aria-current", String(b.dataset.pane === id));
   };
@@ -2017,7 +2018,7 @@ window.addEventListener("hashchange", () => {
   const [where, id] = location.hash.slice(1).split("/");
   if (/^\d{4}-\d{2}-\d{2}$/.test(where)) openDay(where, id && Number(id));
   else if (where === "reminders") showReminders();
-  else if (where === "settings") showSettings();
+  else if (where === "settings") { if (id) settingsPane = id; showSettings(); }
   else if (where === "ask") showAsk();
 });
 
@@ -2033,7 +2034,7 @@ window.addEventListener("hashchange", () => {
     : days.length ? days[days.length - 1].day : dayKey(new Date());
   await openDay(start, hashId && Number(hashId));
   if (hashDay === "reminders") showReminders();
-  if (hashDay === "settings") showSettings();
+  if (hashDay === "settings") { if (hashId) settingsPane = hashId; showSettings(); }
   if (hashDay === "ask") showAsk();
   watchJob();
   countReminders();
