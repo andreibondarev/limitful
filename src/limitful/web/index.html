@@ -21,6 +21,9 @@
     /* On screens wider than the page, everything moves in by this much so it sits centred. */
     --shift: max(0px, calc((100vw - 84rem) / 2 - var(--pad)));
     color-scheme: light dark;
+    /* One colour per speaker in a conversation. */
+    --who-0: #1f7a6d; --who-1: #3b6fb6; --who-2: #7a5bb5; --who-3: #b0508f;
+    --who-4: #c2553a; --who-5: #a8771a; --who-6: #6f7d2a; --who-7: #5a6b7b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -29,6 +32,8 @@
       --muted: #8fa097;
       --rule: #26322c;
       --accent: #63d2b6;
+      --who-0: #5fc3b3; --who-1: #7fa9e6; --who-2: #b29be6; --who-3: #e08fc4;
+      --who-4: #ef8f76; --who-5: #dcae55; --who-6: #a9b860; --who-7: #9fb0c0;
     }
   }
   * { box-sizing: border-box; }
@@ -134,11 +139,13 @@
   .line:hover span { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   .line.on span { background: var(--mark); color: var(--mark-ink); }
   .line.mute { cursor: default; }
+  /* A thin rule in the speaker's colour runs down the left of what they said. */
+  .line.tinted { background: linear-gradient(var(--who), var(--who)) no-repeat calc(var(--gutter) - 0.85rem) 0 / 2px 100%; }
   .line.found span { box-shadow: 0 0 0 2px var(--accent); }
   .who { margin: 0.75rem 0 0 var(--gutter); font-size: 0.85rem; min-height: 1.5rem; }
   .who button {
     border: 0; background: none; padding: 0; cursor: pointer;
-    font-weight: 600; color: var(--accent);
+    font-weight: 600; color: var(--who, var(--accent));
     text-decoration: underline dotted transparent; text-underline-offset: 3px;
   }
   .who button:hover { text-decoration-color: currentColor; }
@@ -161,6 +168,42 @@
     padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
   }
   #all:hover, .copy:hover { border-color: var(--accent); color: var(--accent); }
+  /* The day: conversations on the left, the day at a glance on the right. */
+  .daygrid { display: grid; grid-template-columns: minmax(0, 1fr) 21rem; gap: 3.5rem; align-items: start; }
+  .daygrid.solo { grid-template-columns: minmax(0, 1fr); }
+  .daygrid.solo .glance { display: none; }
+  .glance { position: sticky; top: calc(var(--head, 10rem) + 1.5rem); max-height: calc(100vh - var(--head, 10rem) - 8rem); overflow-y: auto; padding-bottom: 0.5rem; }
+  .glance > section { margin: 0 0 1.6rem; }
+  .glance h3 { margin: 0 0 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+  .glance .recap { margin: 0 0 1.6rem; padding: 1rem 1.1rem; max-width: none; }
+  .glance .recap .headline { font-size: 1.2rem; }
+  .glance .recap ul { font-size: 0.92rem; }
+  .glance ul.plain { list-style: none; margin: 0; padding: 0; }
+  .glance ul.plain li { border-top: 1px solid var(--rule); }
+  .glance ul.plain button {
+    display: block; width: 100%; padding: 0.5rem 0; border: 0; background: none; text-align: left; cursor: pointer; line-height: 1.4;
+  }
+  .glance ul.plain button:hover span { color: var(--accent); }
+  .glance ul.plain small { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .dot { display: inline-block; width: 0.55rem; height: 0.55rem; margin-right: 0.45rem; border-radius: 50%; background: var(--who, var(--muted)); }
+  @media (max-width: 1100px) {
+    .daygrid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .glance { position: static; max-height: none; order: -1; margin-bottom: 0.6rem; }
+  }
+  .scraps { border-top: 1px solid var(--rule); }
+  .scraps > summary {
+    display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr); align-items: baseline;
+    padding: 0.5rem 0; cursor: pointer; list-style: none; color: var(--muted); font-size: 0.85rem;
+  }
+  .scraps > summary::-webkit-details-marker { display: none; }
+  .scraps > summary b { font-weight: 500; }
+  .scraps > summary small { display: block; font-family: var(--voice); font-style: italic; font-size: 0.9rem; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scraps > summary:hover b { color: var(--accent); }
+  .scraps[open] > summary small { display: none; }
+  .scraps .card > summary { padding: 0.5rem 0; }
+  .when { padding-right: 1.1rem; }
+  .len { display: block; height: 3px; margin-top: 0.4rem; border-radius: 2px; background: color-mix(in srgb, var(--accent) 60%, transparent); }
+  .len[hidden] { display: none; }
   .card { border-top: 1px solid var(--rule); }
   .card > summary {
     display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr); align-items: baseline;
@@ -1177,11 +1220,33 @@ async function showReminders() {
   countReminders();
 }
 
-function whoRow(speaker) {
+/* Speakers are told apart by colour. A named person keeps theirs from day to day; a numbered
+   speaker's only holds within its conversation, like the number itself. */
+const WHO_COLOURS = 8;
+const whoIndex = (speaker) => speaker.id !== null ? speaker.id % WHO_COLOURS
+  : ((parseInt(speaker.name.replace(/\D/g, ""), 10) || 1) + 3) % WHO_COLOURS;
+function tinter() {
+  const given = new Map(), taken = new Set();
+  return (speaker) => {
+    if (!speaker) return null;
+    const key = speaker.id ?? speaker.name;
+    if (!given.has(key)) {
+      let i = whoIndex(speaker);
+      for (let n = 0; n < WHO_COLOURS && taken.has(i); n++) i = (i + 1) % WHO_COLOURS;  // two people never share one
+      taken.add(i);
+      given.set(key, i);
+    }
+    return `var(--who-${given.get(key)})`;
+  };
+}
+
+function whoRow(speaker, colour) {
   if (!speaker) return el("div", { className: "who unknown", textContent: "Not identified" });
   const linked = speaker.id !== null;  // false: an imported label not yet tied to a person
   const row = el("div", { className: "who" });
-  const name = el("button", { textContent: speaker.name, title: "Name this speaker" });
+  if (colour) row.style.setProperty("--who", colour);
+  const name = el("button", {}, el("i", { className: "dot" }), speaker.name);
+  name.title = "Name this speaker";
   name.addEventListener("click", () => {
     const input = el("input", { value: linked ? speaker.name : "", placeholder: "Who is this?", maxLength: 80, ariaLabel: "Speaker name" });
     const here = el("button", { className: "here", textContent: "Only this conversation" });
@@ -1245,6 +1310,77 @@ async function showRecap(box, forDay) {
   draw();
 }
 
+/* The header's height changes (notices, the day strip), and the side column sticks just under it. */
+new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty("--head", `${Math.round(entry.target.offsetHeight)}px`);
+}).observe(document.querySelector("header"));
+
+/* A run of stray moments, folded into one row that opens to show them. */
+function scraps(run) {
+  const cards = run.map((g) => card(g));
+  const first = clock.format(new Date(run[0].start)), last = clock.format(new Date(run[run.length - 1].start));
+  const said = run.map((g) => g.own.map((u) => u.text).join(" ")).join(" · ");
+  const key = `s${run[0].key}`;
+  const box = el("details", { className: "scraps" },
+    el("summary", {},
+      el("span", {}),
+      el("span", {},
+        el("b", { textContent: `${run.length} short moment${run.length === 1 ? "" : "s"}` }),
+        ` ${run.length === 1 || first === last ? first : `${first} to ${last}`}`,
+        el("small", { textContent: said.length > 90 ? `${said.slice(0, 90)}…` : said }))),
+    ...cards);
+  box.addEventListener("toggle", () => { if (box.open) openCards.add(key); else openCards.delete(key); });
+  if (openCards.has(key)) box.open = true;
+  // Opening one of its moments (to show a search hit, say) opens the fold too.
+  for (const g of run) {
+    const inner = g.setOpen;
+    g.setOpen = (open) => { if (open) box.open = true; inner(open); };
+  }
+  return box;
+}
+
+/* Beside the conversations: what from this day is still to be done. */
+function followUps() {
+  const open = groups.flatMap((g) => g.reminders
+    .filter((r) => r.status === "suggested" || r.status === "accepted").map((r) => ({ r, g })));
+  if (!open.length) return [];
+  const list = el("ul", { className: "plain" });
+  for (const { r, g } of open) {
+    const go = el("button", {}, el("span", { textContent: r.text }),
+      el("small", { textContent: `${clock.format(new Date(g.start))}${r.status === "suggested" ? ", to review" : ""}` }));
+    go.addEventListener("click", () => {
+      if (r.line && g.own.some((u) => u.id === r.line)) reveal(r.line, true);
+      else { g.setOpen(true); $(`g${g.key}`).scrollIntoView({ block: "start" }); }
+    });
+    list.append(el("li", {}, go));
+  }
+  return [el("section", {}, el("h3", { textContent: "To follow up" }), list)];
+}
+
+/* Beside the conversations: the named people heard this day, by how long they spoke. */
+function people() {
+  const heard = new Map();
+  for (const g of groups) {
+    for (const u of g.own) {
+      if (!u.speaker || u.speaker.id === null) continue;
+      const p = heard.get(u.speaker.id) || { speaker: u.speaker, ms: 0, first: g };
+      p.ms += Math.max(0, u.end - u.start);
+      heard.set(u.speaker.id, p);
+    }
+  }
+  if (!heard.size) return [];
+  const list = el("ul", { className: "plain" });
+  for (const p of [...heard.values()].sort((a, b) => b.ms - a.ms)) {
+    const go = el("button", { title: `Open the first conversation with ${p.speaker.name}` },
+      el("span", {}, el("i", { className: "dot" }), p.speaker.name),
+      el("small", { textContent: p.ms < 60000 ? "under a minute" : `${lengthOf(p.ms)} speaking` }));
+    go.style.setProperty("--who", `var(--who-${whoIndex(p.speaker)})`);
+    go.addEventListener("click", () => { p.first.setOpen(true); $(`g${p.first.key}`).scrollIntoView({ block: "start" }); });
+    list.append(el("li", {}, go));
+  }
+  return [el("section", {}, el("h3", { textContent: "People" }), list)];
+}
+
 function renderDay() {
   // The year is in the date field beside it; only spell it out for other years.
   const shown = new Date(dayStart(day));
@@ -1272,13 +1408,35 @@ function renderDay() {
     groups.forEach((g) => g.setOpen(open));
     toggleAll.textContent = open ? "Close all" : "Open all";
   });
-  const count = `${groups.length} conversation${groups.length === 1 ? "" : "s"}`;
+  // A few stray words with no title are not a conversation: fold runs of them into one quiet row,
+  // unless they are all the day has.
+  const stray = (g) => !g.title && g.own.length <= 3 && g.own.reduce((n, u) => n + u.text.split(/\s+/).length, 0) < 25;
+  const fold = groups.some((g) => !stray(g));
+  const longest = Math.max(1, ...groups.map((g) => g.end - g.start));
+  const rows = [];
+  let run = [], strays = 0;
+  const flush = () => { if (run.length) { rows.push(scraps(run)); strays += run.length; run = []; } };
+  for (const g of groups) {
+    if (fold && stray(g)) run.push(g);
+    else { flush(); rows.push(card(g, longest)); }
+  }
+  flush();
+  const real = groups.length - strays;
+  const count = `${real} conversation${real === 1 ? "" : "s"}${strays ? `, ${strays} short moment${strays === 1 ? "" : "s"}` : ""}`;
+  toggleAll.addEventListener("click", () => {
+    const open = toggleAll.textContent === "Close all";  // the label has just flipped
+    document.querySelectorAll(".scraps").forEach((box) => { box.open = open; });
+  });
   const recap = el("section", { className: "recap", hidden: true });
-  main.replaceChildren(
-    recap,
-    el("div", { className: "tools" }, el("span", { textContent: count }), toggleAll),
-    ...groups.map(card));
-  showRecap(recap, day);
+  const side = [recap, ...followUps(), ...people()];
+  const grid = el("div", { className: "daygrid" },
+    el("div", { className: "talks" }, el("div", { className: "tools" }, el("span", { textContent: count }), toggleAll), ...rows),
+    el("aside", { className: "glance", ariaLabel: "This day at a glance" }, ...side));
+  main.replaceChildren(grid);
+  // With nothing to put beside them, the conversations take the full width.
+  const solo = () => grid.classList.toggle("solo", recap.hidden && side.length === 1);
+  solo();
+  showRecap(recap, day).then(solo);
   if (groups.length === 1) groups[0].setOpen(true);
   markPlaying();
   if (wanted) {
@@ -1419,16 +1577,20 @@ function lengthOf(ms) {
   return `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`;
 }
 
-function card(g) {
+/* A conversation, closed until clicked. The bar under its time shows how long it ran,
+   against the day's longest. */
+function card(g, longest = 0) {
   const first = g.own[0].text;
   const title = g.title || (first.length > 70 ? `${first.slice(0, 70)}…` : first);
   const waiting = g.reminders.filter((r) => r.status === "suggested").length;
   const meta = [lengthOf(g.end - g.start), `${g.own.length} line${g.own.length === 1 ? "" : "s"}`];
   if (waiting) meta.push(`${waiting} reminder${waiting === 1 ? "" : "s"} to review`);
   const body = el("div", { className: "body" });
+  const length = el("i", { className: "len", hidden: !longest, title: lengthOf(g.end - g.start) });
+  if (longest) length.style.width = `${Math.max(6, 100 * (g.end - g.start) / longest)}%`;
   const box = el("details", { className: "card", id: `g${g.key}` },
     el("summary", {},
-      el("time", { textContent: clock.format(new Date(g.start)) }),
+      el("div", { className: "when" }, el("time", { textContent: clock.format(new Date(g.start)) }), length),
       el("div", {},
         el("h2", { textContent: title, className: g.title ? "" : "untitled" }),
         el("p", { className: "meta", textContent: meta.join(", ") }))),
@@ -1469,6 +1631,7 @@ function cardBody(g) {
   nodes.push(copy);
 
   const labelled = g.own.some((u) => u.speaker);
+  const tint = tinter();
   const who = (x) => x.speaker ? (x.speaker.id ?? x.speaker.name) : 0;
   const headings = [...g.sections];
   g.own.forEach((u, n) => {
@@ -1482,9 +1645,12 @@ function cardBody(g) {
     const gap = before && u.start - before.end > QUIET_MS;
     if (gap) nodes.push(el("div", { className: "quiet", textContent: quietFor(u.start - before.end) }));
     // Say who is speaking whenever it changes, and at the top of each section.
-    if (labelled && (fresh || gap || who(before) !== who(u))) nodes.push(whoRow(u.speaker));
+    const colour = tint(u.speaker);
+    if (labelled && (fresh || gap || who(before) !== who(u))) nodes.push(whoRow(u.speaker, colour));
     const sameMinute = !fresh && !gap && Math.floor(before.start / 60000) === Math.floor(u.start / 60000);
-    nodes.push(lineButton(u, null, sameMinute));
+    const row = lineButton(u, null, sameMinute);
+    if (colour) { row.classList.add("tinted"); row.style.setProperty("--who", colour); }
+    nodes.push(row);
   });
   return nodes;
 }

@@ -124,7 +124,10 @@ conversations with their time, title and length, under a strip showing when
 speech happened; click the strip to jump to that moment. Open a conversation
 to read it under its section headings, click any line to hear it (playback
 carries on through the conversation, with a timeline to jump around in), or
-copy it as Markdown. Search covers every day. The page only answers on
+copy it as Markdown. Each speaker in a conversation has a colour, stray
+words with no conversation around them fold into one quiet row, and on a wide
+screen the day's recap, open reminders and named people sit beside the list.
+Search covers every day. The page only answers on
 your own machine. Recordings are Ogg Opus, which Chrome and Firefox play;
 older versions of Safari do not.
 
