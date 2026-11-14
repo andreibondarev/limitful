@@ -68,6 +68,19 @@ played. It will not write into a folder that already has conversations.
 
 ## Use
 
+The quickest way in is the app itself:
+
+```sh
+uv run limitful serve
+```
+
+The first time, with nothing recorded yet, it opens a setup guide that walks
+through connecting the pendant (what to do before pairing, the button press,
+the first sync and its one-off 1.6 GB speech model download) and choosing
+what writes summaries. It can also import a Limitless export or load made-up
+conversations to look around. Every step can be skipped, and Settings has
+"Set up again". The commands below do the same things from a terminal.
+
 The pendant only advertises when no other device is connected to it, so turn
 off Bluetooth on your phone (or quit the Limitless app) first.
 

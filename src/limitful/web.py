@@ -73,6 +73,28 @@ _SELECT = (
 )
 
 
+def pendant_advice(message: str | None) -> str | None:
+    """What to try, in plain words, for the ways reaching the pendant usually fails."""
+    text = (message or "").lower()
+    if not text:
+        return None
+    if "not authorized" in text or "privacy settings" in text:
+        return ("This program is not allowed to use Bluetooth. On a Mac, open System Settings, "
+                "Privacy & Security, Bluetooth, and switch on the app you started Limitful from "
+                "(Terminal, iTerm or similar), then quit and reopen that app.")
+    if "turned off" in text:
+        return "Bluetooth is off on this computer. Switch it on and try again."
+    if "unsupported" in text:
+        return "This computer has no Bluetooth that Limitful can use."
+    if "not paired" in text:
+        return "This computer has not been paired with the pendant yet, or the pendant was reset since."
+    if "not in range" in text or "dropping the connection" in text or "is busy" in text:
+        return ("The pendant only answers when nothing else is connected to it. Turn off Bluetooth on "
+                "your phone (or quit the Limitless app), check the pendant is switched on and within a "
+                "few metres, and try again. Holding its button for two seconds switches it on or off.")
+    return None
+
+
 class Library:
     """Read-only queries over the data folder."""
 
@@ -122,11 +144,61 @@ class Library:
             "reminders": result.reminders, "skipped": result.skipped_existing,
         }
 
+    # --- first run -------------------------------------------------------------------
+
+    def welcome(self) -> dict:
+        """What the first-run guide needs to know to pick where to start."""
+        from . import demo, speech_model
+
+        db = self._db()
+        try:
+            empty = db.execute("SELECT 1 FROM utterances LIMIT 1").fetchone() is None
+        finally:
+            db.close()
+        return {"empty": empty, "demo": demo.present(self.data_dir),
+                "model_ready": speech_model.ready(), "provider": config.provider()}
+
+    def demo(self, action: str) -> dict:
+        from . import demo
+
+        if action == "load":
+            demo.build(self.data_dir)
+        elif action == "remove":
+            demo.remove(self.data_dir)
+        else:
+            raise ValueError("unknown action")
+        return self.welcome()
+
+    def _transcriber(self):
+        """The chosen transcriber, reporting the speech model's download if it has to be fetched."""
+        from . import speech_model
+        from .transcribe import DEFAULT_MODEL, make_transcriber
+
+        engine = config.transcriber()
+        if engine != "local" or speech_model.ready():
+            return make_transcriber(engine)
+        megabytes = 1024 * 1024
+        total = speech_model.KNOWN_BYTES.get(DEFAULT_MODEL, 0) // megabytes
+        self.job.update(what="Downloading the speech model (first time only), in MB", done=0, total=total)
+        finished = threading.Event()
+
+        def report():
+            while not finished.wait(1.0):
+                self.job.update(done=min(speech_model.downloaded_bytes() // megabytes, total or 10**9))
+
+        threading.Thread(target=report, daemon=True).start()
+        try:
+            return make_transcriber(engine)
+        finally:
+            finished.set()
+            self.job.update(what="Transcribing", done=0, total=0)
+
     # --- the pendant -----------------------------------------------------------------
 
     def pendant(self) -> dict:
         """What was last learned about the pendant, without touching the radio."""
         return dict(self._pendant, brightness=config.load().get("led_brightness"),
+                    advice=pendant_advice(self._pendant.get("error")),
                     paused_since=self._with_store(lambda store: store.paused_since()))
 
     def read_usb(self) -> dict:
@@ -227,7 +299,6 @@ class Library:
     def _sync_job(self) -> None:
         from . import watch as watch_mod
         from .store import Store
-        from .transcribe import make_transcriber
 
         try:
             if not self._radio.acquire(timeout=20):
@@ -240,7 +311,7 @@ class Library:
                 try:
                     result = asyncio.run(watch_mod.run_cycle(
                         store, ack=True,
-                        get_transcriber=lambda: make_transcriber(config.transcriber()),
+                        get_transcriber=self._transcriber,
                         get_embedder=None, summarizer=summarizer,  # voice labels are opt-in: see README
                         on_stage=lambda stage: self.job.update(what=stage)))
                 finally:
@@ -566,7 +637,9 @@ def make_handler(library: Library):
                     done = parse_qs(url.query).get("done", ["0"])[0] == "1"
                     return self._json(library.reminders(include_done=done))
                 if path == "/api/status":
-                    return self._json(library.job)
+                    return self._json(dict(library.job, advice=pendant_advice(library.job.get("error"))))
+                if path == "/api/welcome":
+                    return self._json(library.welcome())
                 if path == "/api/settings":
                     return self._json(library.settings())
                 if path == "/api/pendant":
@@ -662,6 +735,13 @@ def make_handler(library: Library):
                     return self._text(HTTPStatus.BAD_REQUEST, "Day must be YYYY-MM-DD.")
                 try:
                     return self._json(library.write_recap(day))
+                except ValueError as err:
+                    return self._text(HTTPStatus.BAD_REQUEST, str(err))
+            if path == "/api/demo":
+                try:
+                    length = min(int(self.headers.get("Content-Length") or 0), 4096)
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    return self._json(library.demo(body.get("action") if isinstance(body, dict) else ""))
                 except ValueError as err:
                     return self._text(HTTPStatus.BAD_REQUEST, str(err))
             if path in ("/api/settings", "/api/digest"):

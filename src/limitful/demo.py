@@ -187,14 +187,15 @@ def build(data_dir: Path, today: date | None = None) -> dict:
                             "INSERT INTO speakers (name, voice_sum, lines) VALUES (?, ?, 0)", (who, b"")).lastrowid
                     length = 1200 + 330 * len(text.split())   # about three words a second
                     line_ids[text] = db.execute(
-                        "INSERT INTO utterances (segment, start_ms, end_ms, text, speaker_id) VALUES ('', ?, ?, ?, ?)",
+                        "INSERT INTO utterances (segment, start_ms, end_ms, text, speaker_id, source) "
+                        "VALUES ('', ?, ?, ?, ?, 'demo')",
                         (cursor, cursor + length, text, speakers[who])).lastrowid
                     db.execute("UPDATE speakers SET lines = lines + 1 WHERE id = ?", (speakers[who],))
                     cursor += length + 900
                 cursor += 45_000  # a pause between subjects
             cid = db.execute(
-                "INSERT INTO conversations (start_ms, end_ms, status, title, summary, engine) "
-                "VALUES (?, ?, 'done', ?, ?, 'demo')", (start_ms, cursor, title, json.dumps(summary))).lastrowid
+                "INSERT INTO conversations (start_ms, end_ms, status, title, summary, engine, source) "
+                "VALUES (?, ?, 'done', ?, ?, 'demo', 'demo')", (start_ms, cursor, title, json.dumps(summary))).lastrowid
             talk_ids[title] = (cid, start_ms)
             db.executemany(
                 "INSERT INTO sections (conversation_id, start_ms, level, title) VALUES (?, ?, 2, ?)",
@@ -225,5 +226,39 @@ def build(data_dir: Path, today: date | None = None) -> dict:
         finally:
             lookup.close()
         return {"conversations": len(TALKS), "lines": len(line_ids), "days": 3, "reminders": len(REMINDERS)}
+    finally:
+        store.close()
+
+
+def present(data_dir: Path) -> bool:
+    """True if the folder holds the made-up conversations."""
+    store = Store(data_dir)
+    try:
+        return store.db.execute("SELECT 1 FROM conversations WHERE engine = 'demo' LIMIT 1").fetchone() is not None
+    finally:
+        store.close()
+
+
+def remove(data_dir: Path) -> int:
+    """Take the made-up conversations out again, leaving anything real. Returns how many went."""
+    store = Store(data_dir)
+    try:
+        db = store.db
+        ours = "SELECT id FROM conversations WHERE engine = 'demo'"
+        (count,) = db.execute(f"SELECT COUNT(*) FROM ({ours})").fetchone()
+        db.execute(f"DELETE FROM reminders WHERE conversation_id IN ({ours})")
+        db.execute(f"DELETE FROM sections WHERE conversation_id IN ({ours})")
+        db.execute("DELETE FROM conversations WHERE engine = 'demo'")
+        db.execute("DELETE FROM utterances WHERE source = 'demo'")
+        db.execute("DELETE FROM day_recaps WHERE engine = 'demo'")
+        db.execute("DELETE FROM speakers WHERE voice_sum = ? AND id NOT IN "
+                   "(SELECT speaker_id FROM utterances WHERE speaker_id IS NOT NULL)", (b"",))
+        chats = [cid for (cid,) in db.execute(
+            "SELECT chat_id FROM chat_messages WHERE role = 'user' AND content = ?", (QUESTION,))]
+        for cid in chats:
+            db.execute("DELETE FROM chat_messages WHERE chat_id = ?", (cid,))
+            db.execute("DELETE FROM chats WHERE id = ?", (cid,))
+        db.commit()
+        return count
     finally:
         store.close()

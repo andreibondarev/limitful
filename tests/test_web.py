@@ -511,3 +511,84 @@ def test_day_recap_is_offered_written_and_served(site, tmp_path, monkeypatch):
     assert (written["headline"], written["points"], written["stale"]) == ("Two talks", ["One.", "Two."], False)
     assert json.loads(site(f"/api/recap/{day}")[2])["recap"]["headline"] == "Two talks"
     assert site("/api/recap/2026-11-01", JSON, b"{}")[0] == 400  # an empty day
+
+
+def test_first_run_state_demo_load_and_remove(site, tmp_path, monkeypatch):
+    import sqlite3
+
+    from limitful import speech_model
+    from limitful.web import Library
+
+    monkeypatch.setattr(speech_model, "ready", lambda: False)
+    # The fixture's folder already has lines in it: not a first run, and no demo on top.
+    assert json.loads(site("/api/welcome")[2]) == {"empty": False, "demo": False, "model_ready": False, "provider": None}
+    assert site("/api/demo", JSON, b'{"action": "load"}')[0] == 400
+    assert site("/api/demo", JSON, b'{"action": "explode"}')[0] == 400
+
+    fresh = tmp_path / "fresh"
+    Store(fresh).close()
+    library = Library(fresh)
+    assert library.welcome()["empty"] is True
+    loaded = library.demo("load")
+    assert (loaded["empty"], loaded["demo"]) == (False, True) and len(library.days()) == 3
+
+    # A real line among the made-up ones survives their removal.
+    db = sqlite3.connect(fresh / "pendant.db")
+    db.execute("INSERT INTO utterances (segment, start_ms, end_ms, text) VALUES ('', 1, 2, 'a real line')")
+    db.commit()
+    db.close()
+    gone = library.demo("remove")
+    assert (gone["empty"], gone["demo"]) == (False, False)
+    db = sqlite3.connect(fresh / "pendant.db")
+    assert db.execute("SELECT text FROM utterances").fetchall() == [("a real line",)]
+    for table in ("conversations", "sections", "reminders", "day_recaps", "speakers", "chats", "chat_messages"):
+        assert db.execute(f"SELECT COUNT(*) FROM {table}").fetchone() == (0,), table
+    db.close()
+
+
+def test_pendant_failures_come_with_plain_advice(site, monkeypatch):
+    from limitful import client
+    from limitful.web import pendant_advice
+
+    assert "Privacy & Security" in pendant_advice("Bluetooth is not authorized for an unknown reason. Check macOS privacy settings.")
+    assert "Switch it on" in pendant_advice("Bluetooth device is turned off")
+    assert "Bluetooth on your phone" in pendant_advice(
+        "Sync stopped: the pendant is not in range, is switched off, or is connected to another device")
+    assert "not been paired" in pendant_advice("the pendant refused the connection because this computer is not paired with it")
+    assert pendant_advice("") is None and pendant_advice(None) is None and pendant_advice("disk full") is None
+
+    async def away(*args, **kwargs):
+        raise client.PendantError("the pendant is not in range, is switched off, or is connected to another device")
+    monkeypatch.setattr(client, "read_state", away)
+    checked = json.loads(site("/api/pendant", JSON, b'{"action": "check"}')[2])
+    assert "Bluetooth on your phone" in checked["advice"]
+    assert json.loads(site("/api/status")[2])["advice"] is None
+
+
+def test_speech_model_download_is_reported_while_it_loads(tmp_path, monkeypatch):
+    import time as clock
+
+    from limitful import config, speech_model, transcribe
+    from limitful.web import Library
+
+    library = Library(tmp_path)
+    seen = []
+
+    def slow_load(engine):
+        clock.sleep(1.3)                      # long enough for one progress reading
+        seen.append(dict(library.job))
+        return "the transcriber"
+
+    monkeypatch.setattr(config, "transcriber", lambda: "local")
+    monkeypatch.setattr(speech_model, "ready", lambda: False)
+    monkeypatch.setattr(speech_model, "downloaded_bytes", lambda: 300 * 1024 * 1024)
+    monkeypatch.setattr(transcribe, "make_transcriber", slow_load)
+    assert library._transcriber() == "the transcriber"
+    assert seen[0]["what"].startswith("Downloading the speech model") and (seen[0]["done"], seen[0]["total"]) == (300, 1546)
+    assert (library.job["what"], library.job["total"]) == ("Transcribing", 0)
+
+    # Already on this computer: nothing is announced.
+    monkeypatch.setattr(speech_model, "ready", lambda: True)
+    library.job.update(what="Syncing the pendant")
+    library._transcriber()
+    assert library.job["what"] == "Syncing the pendant"

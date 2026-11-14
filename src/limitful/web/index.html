@@ -252,6 +252,53 @@
     margin: 0.7rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.9rem;
     border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent);
   }
+  #demobar {
+    margin: 0.7rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.9rem;
+    border-left: 3px solid var(--mark); background: color-mix(in srgb, var(--mark) 16%, transparent);
+  }
+  #demobar[hidden] { display: none; }
+  #demobar button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .welcome { max-width: 40rem; margin: 2.5rem auto 0; }
+  .welcome h2 { margin: 0 0 0.8rem; font-size: 2.3rem; line-height: 1.15; text-wrap: balance; }
+  .welcome .lede { margin: 0 0 1.6rem; font-size: 1.08rem; line-height: 1.55; color: var(--muted); }
+  .welcome .progress { display: flex; gap: 0.35rem; margin-bottom: 0.7rem; }
+  .welcome .progress i { flex: 1; height: 3px; border-radius: 2px; background: var(--rule); }
+  .welcome .progress i.done { background: var(--accent); }
+  .welcome .where { margin: 0 0 1.4rem; font-size: 0.85rem; color: var(--muted); }
+  .welcome .way {
+    display: flex; align-items: center; gap: 1.1rem; width: 100%; margin: 0 0 0.7rem; padding: 1.05rem 1.2rem; text-align: left; cursor: pointer;
+    font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: 14px;
+  }
+  .welcome .way .icon { margin: 0; color: var(--accent); }
+  .welcome .way b { display: block; font-size: 1.1rem; font-weight: 600; }
+  .welcome .way small { display: block; margin-top: 0.15rem; color: var(--muted); font-size: 0.92rem; line-height: 1.45; }
+  .welcome .way:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  .welcome .prep { margin: 0 0 1.2rem; padding-left: 1.3rem; line-height: 1.55; color: var(--muted); }
+  .welcome .prep li { margin-bottom: 0.75rem; padding-left: 0.2rem; }
+  .welcome .prep b { color: var(--ink); font-weight: 600; }
+  .welcome .small { margin: 0 0 1.2rem; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+  .welcome .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 1.4rem; }
+  .welcome .pill { padding: 0.55rem 1.1rem; }
+  .welcome .pill.plain { border: 0; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+  .welcome .status { margin: 1.1rem 0 0; line-height: 1.5; min-height: 1.5em; }
+  .welcome .status:empty { display: none; }
+  .welcome .trouble { padding: 0.7rem 0.9rem; border-left: 3px solid #b3261e; background: color-mix(in srgb, #b3261e 8%, transparent); line-height: 1.5; }
+  .welcome .trouble p { margin: 0; }
+  .welcome .trouble .advice { margin-top: 0.5rem; color: var(--muted); font-size: 0.93rem; }
+  .welcome .pairing { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2rem; align-items: center; margin-bottom: 0.4rem; }
+  .welcome .pairing .prep { margin: 0; }
+  .welcome .pulsing circle:nth-last-child(-n+2) { animation: beat 1.6s ease-in-out infinite; }
+  @keyframes beat { 50% { opacity: 0.45; } }
+  @media (prefers-reduced-motion: reduce) { .welcome .pulsing circle { animation: none; } }
+  .welcome .meter.wide { width: 100%; height: 6px; margin-top: 0.7rem; }
+  .welcome fieldset { border: 0; margin: 0; padding: 0; }
+  .welcome label.choice { display: grid; grid-template-columns: 1.8rem 1fr; padding: 0.8rem 0; border-top: 1px solid var(--rule); cursor: pointer; }
+  .welcome label.choice b { font-weight: 600; }
+  .welcome label.choice span { grid-column: 2; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+  .welcome .key { margin: 0 0 1rem 1.8rem; }
+  .welcome .key input { width: 100%; max-width: 26rem; padding: 0.45rem 0.6rem; font: inherit; border: 1px solid var(--rule); border-radius: 8px; background: transparent; color: var(--ink); }
+  .welcome .key small { display: block; margin-top: 0.35rem; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
+  @media (max-width: 560px) { .welcome .pairing { grid-template-columns: 1fr; justify-items: center; } .welcome h2 { font-size: 1.8rem; } }
   #status.failed { border-left-color: #b3261e; background: color-mix(in srgb, #b3261e 10%, transparent); }
   .todo button, #remind, #settings, #ask, .pill {
     border: 1px solid var(--rule); border-radius: 999px; background: transparent;
@@ -521,6 +568,7 @@
     <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said">
   </div>
   <p id="status" role="status" hidden></p>
+  <p id="demobar" hidden></p>
   <div id="strip" role="img" aria-label="When speech was recorded during this day"></div>
   <div id="hours" aria-hidden="true"></div>
 </header>
@@ -657,6 +705,327 @@ async function post(url, body) {
   return res.json();
 }
 
+/* First run: a guide from an empty folder to a Lifelog with something in it. */
+let welcoming = false;
+let welcomeTimer = null;  // while the guide follows a background job
+function leaveWelcome() {
+  welcoming = false;
+  if (welcomeTimer) { clearInterval(welcomeTimer); welcomeTimer = null; }
+}
+const welcomed = () => { try { return localStorage.getItem("limitful-welcomed") === "1"; } catch { return false; } };
+const setWelcomed = () => { try { localStorage.setItem("limitful-welcomed", "1"); } catch { /* private window */ } };
+
+/* The pendant, front on: clip, microphone holes, side button and its light. */
+function pendantDrawing(width = 108) {
+  const glow = svgEl("circle", { cx: 60, cy: 86, r: 2.7, fill: "#ffffff" });
+  const halo = svgEl("circle", { cx: 60, cy: 86, r: 10, fill: "#ffffff" });
+  const holes = (d) => svgEl("path", { d, fill: "none", stroke: "#131517", "stroke-width": 1.7,
+    "stroke-linecap": "round", "stroke-dasharray": "0.01 3.4" });
+  const node = svgEl("svg", { viewBox: "0 0 120 136", width, height: Math.round(width * 136 / 120), role: "img", "aria-label": "The pendant" });
+  node.append(
+    svgEl("path", { d: "M34 60V28a22 22 0 0 1 22-22h8a22 22 0 0 1 22 22v32Z", fill: "#3c4044" }),       // clip
+    svgEl("rect", { x: 104, y: 79, width: 5, height: 20, rx: 2.5, fill: "#1b1d1f" }),                    // side button
+    svgEl("circle", { cx: 60, cy: 86, r: 47, fill: "#26292c" }),                                         // body
+    svgEl("circle", { cx: 60, cy: 86, r: 43.5, fill: "#3a3e42" }),                                       // face
+    holes("M28.7 71.4A34.5 34.5 0 0 1 91.3 71.4"),
+    holes("M31.9 72.9A31 31 0 0 1 88.1 72.9"),
+    holes("M35.1 74.4A27.5 27.5 0 0 1 84.9 74.4"),
+    halo, glow);
+  return { node, glow, halo };
+}
+
+async function showWelcome(step = "start") {
+  leaveWelcome();
+  welcoming = true;
+  searching = reminding = configuring = asking = false;
+  main.classList.remove("wide");
+  document.querySelector("header").classList.add("plain");
+  for (const id of ["ask", "remind", "settings"]) $(id).setAttribute("aria-pressed", "false");
+  history.replaceState(null, "", "#welcome");
+  $("title").textContent = "Welcome";
+  strip.replaceChildren();
+  say("");
+
+  const ROUTE = ["before", "connect", "sync", "summaries"];  // the numbered steps of the pendant path
+  const button = (label, onClick, kind = "") => {
+    const b = el("button", { className: `pill ${kind}`, textContent: label });
+    b.addEventListener("click", onClick);
+    return b;
+  };
+  const page = (stage, title, ...children) => {
+    const at = ROUTE.indexOf(stage);
+    const head = at < 0 ? [] : [
+      el("div", { className: "progress", role: "img", ariaLabel: `Step ${at + 1} of ${ROUTE.length}` },
+        ...ROUTE.map((_, n) => el("i", { className: n <= at ? "done" : "" }))),
+      el("p", { className: "where", textContent: `Step ${at + 1} of ${ROUTE.length}` })];
+    main.replaceChildren(el("div", { className: "welcome" }, ...head, el("h2", { textContent: title }), ...children));
+    main.querySelector("h2").scrollIntoView({ block: "nearest" });
+  };
+  const trouble = (message, advice) => el("div", { className: "trouble", role: "alert" },
+    el("p", { textContent: message.endsWith(".") ? message : `${message}.` }),
+    ...(advice ? [el("p", { className: "advice", textContent: advice })] : []));
+  // Poll the server's job until it stops; `each` sees every reading.
+  const follow = (each) => new Promise((resolve) => {
+    const tick = async () => {
+      let job;
+      try { job = await get("/api/status"); } catch { return; }
+      if (!welcoming) return;
+      each(job);
+      if (!job.running) { clearInterval(welcomeTimer); welcomeTimer = null; resolve(job); }
+    };
+    welcomeTimer = setInterval(tick, 1500);
+    tick();
+  });
+  const finish = async (fullestDay = false) => {
+    setWelcomed();
+    try { days = await get("/api/days"); } catch { /* keep what we had */ }
+    countReminders();
+    const busiest = fullestDay && days.length ? days.reduce((a, b) => (b.lines > a.lines ? b : a)) : null;
+    openDay(busiest ? busiest.day : days.length ? days[days.length - 1].day : dayKey(new Date()));
+  };
+  let state = { empty: true, demo: false, model_ready: true, provider: null };
+  try { state = await get("/api/welcome"); } catch { /* assume a fresh start */ }
+  if (!welcoming) return;
+
+  const steps = {
+    start() {
+      const way = (pic, title, about, go) => {
+        const b = el("button", { className: "way" }, icon(pic, 26), el("span", {}, el("b", { textContent: title }), el("small", { textContent: about })));
+        b.addEventListener("click", go);
+        return b;
+      };
+      const note = el("p", { className: "small" });
+      page("", "Keep your pendant working",
+        el("p", { className: "lede", textContent: "Limitful takes recordings off your Limitless Pendant, turns them into text on this computer, and keeps them here to read, search and ask about. No Limitless account is involved. Where would you like to start?" }),
+        way("pendant", "Connect my pendant", "Pair it with this computer and bring in what it has recorded. Allow ten minutes the first time, mostly for a download.", () => steps.before()),
+        way("import", "Import my Limitless history", "Bring in a data export from Limitless: transcripts, audio and reminders.", () => steps.history()),
+        way("day", "Look around first", "Fill the Lifelog with made-up conversations. You can remove them with one click.", async () => {
+          note.textContent = "Writing the made-up conversations…";
+          try { await post("/api/demo", { action: "load" }); await showDemoBar(); await finish(true); }
+          catch (err) { note.textContent = `Could not load them. ${err.message}`; }
+        }),
+        note,
+        el("p", { className: "small" }, button("Skip, and open the Lifelog", () => finish(), "plain")));
+    },
+
+    before() {
+      const item = (lead, rest) => el("li", {}, el("b", { textContent: lead }), " ", rest);
+      page("before", "Before you connect",
+        el("ol", { className: "prep" },
+          item("Let the Limitless app sync one last time.", "Pairing with this computer resets the pendant, and that erases any audio it has not handed over yet. Skip this if you no longer use the app."),
+          item("Ask Limitless for your data export.", "The service ends on December 1, 2026 and its copy of your history goes with it. You can import the export here whenever it arrives."),
+          item("Turn off Bluetooth on your phone.", "The pendant talks to one device at a time, and the phone usually gets there first. Quitting the Limitless app also works.")),
+        el("p", { className: "small", textContent: "Your computer may ask whether this program can use Bluetooth. Allow it." }),
+        el("div", { className: "row" }, button("I've done these", () => steps.connect(), "main"), button("Back", () => steps.start())));
+    },
+
+    async connect() {
+      const status = el("p", { className: "lede", textContent: "This takes a few seconds over Bluetooth." });
+      const actions = el("div", { className: "row" });
+      page("connect", "Looking for your pendant…", status, actions);
+      const title = main.querySelector("h2");
+      let p;
+      try { p = await post("/api/pendant", { action: "check" }); }
+      catch (err) { p = { error: err.message }; }
+      if (!welcoming || !title.isConnected) return;
+      if (!p.error) {
+        title.textContent = "Found it";
+        const waiting = p.minutes_waiting < 1 ? "nothing waiting to sync" : `about ${lengthOf(p.minutes_waiting * 60000)} of audio waiting`;
+        status.textContent = `Your pendant is already paired with this computer. Battery ${p.battery}%, ${waiting}.`;
+        actions.append(button("Continue", () => steps.sync(), "main"));
+        return;
+      }
+      if (/not paired/.test(p.error)) {
+        title.textContent = "Found it, not yet paired";
+        status.textContent = "The pendant is nearby but has not been paired with this computer.";
+        actions.append(button("Pair it", () => steps.pair(), "main"), button("Back", () => steps.before()));
+        return;
+      }
+      title.textContent = "Could not find your pendant";
+      status.replaceWith(trouble(p.error, p.advice));
+      actions.append(button("Look again", () => steps.connect(), "main"), button("Pair it anyway", () => steps.pair()), button("Back", () => steps.before()));
+    },
+
+    pair() {
+      const { node, glow, halo } = pendantDrawing(150);
+      const light = (colour, pulsing) => {
+        glow.setAttribute("fill", colour);
+        halo.setAttribute("fill", colour);
+        halo.setAttribute("opacity", colour === "#ffffff" ? 0.1 : 0.35);
+        node.classList.toggle("pulsing", Boolean(pulsing));
+      };
+      light("#ffffff");
+      const status = el("p", { className: "status", role: "status" });
+      const start = button("Start pairing", async () => {
+        start.disabled = true;
+        status.replaceChildren("Waiting for the pendant. Do the button press now.");
+        light("#b48cff", true);
+        try { await post("/api/pendant", { action: "pair" }); }
+        catch (err) { status.replaceChildren(trouble(err.message)); light("#ffffff"); start.disabled = false; return; }
+        const began = Date.now();
+        const job = await follow((j) => {
+          const left = Math.max(0, 180 - Math.round((Date.now() - began) / 1000));
+          if (j.running) status.textContent = `Waiting for the pendant. Do the button press now. ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} left.`;
+        });
+        if (job.error) {
+          light("#ffffff");
+          status.replaceChildren(trouble(job.error, job.advice));
+          start.textContent = "Try again";
+          start.disabled = false;
+          return;
+        }
+        light("#3d8bff");
+        status.textContent = "Paired. The pendant accepted this computer.";
+        start.replaceWith(button("Continue", () => steps.sync(), "main"));
+      }, "main");
+      page("connect", "Pair your pendant",
+        el("div", { className: "pairing" }, node,
+          el("ol", { className: "prep" },
+            el("li", { textContent: "Click Start pairing. It waits three minutes." }),
+            el("li", { textContent: "On the pendant, press the side button once and let go, then straight away press and hold it." }),
+            el("li", { textContent: "A purple light comes on. Keep holding until it goes out, then let go." }),
+            el("li", { textContent: "A blue light means it is ready. Accept the connection request your computer shows." }))),
+        el("p", { className: "hold", textContent: "This resets the pendant. Any audio it has not synced yet is erased." }),
+        status,
+        el("div", { className: "row" }, start, button("Back", () => steps.before())));
+    },
+
+    sync() {
+      const status = el("p", { className: "status", role: "status" });
+      const bar = el("i");
+      const meter = el("div", { className: "meter wide", hidden: true }, bar);
+      const skip = button("Skip for now", () => steps.summaries());
+      const start = button("Sync now", async () => {
+        start.disabled = true;
+        skip.hidden = true;
+        status.replaceChildren("Syncing the pendant…");
+        try { await post("/api/pendant", { action: "sync" }); }
+        catch (err) { status.replaceChildren(trouble(err.message)); start.disabled = false; skip.hidden = false; return; }
+        const job = await follow((j) => {
+          if (!j.running) return;
+          meter.hidden = !j.total;
+          bar.style.width = j.total ? `${Math.min(100, 100 * j.done / j.total)}%` : "0";
+          status.textContent = j.total ? `${j.what}: ${j.done.toLocaleString()} of ${j.total.toLocaleString()}` : `${j.what}…`;
+        });
+        meter.hidden = true;
+        skip.hidden = false;
+        if (job.error) {
+          status.replaceChildren(trouble(job.error, job.advice));
+          start.textContent = "Try again";
+          start.disabled = false;
+          return;
+        }
+        status.textContent = job.note || "Synced.";
+        start.replaceWith(button("Continue", () => steps.summaries(), "main"));
+        skip.remove();
+      }, "main");
+      page("sync", "Bring in what it has recorded",
+        el("p", { className: "lede", textContent: "This downloads the audio, frees that space on the pendant, and turns the speech into text on this computer." }),
+        ...(state.model_ready ? [] : [el("p", { className: "small", textContent: "The first time, a 1.6 GB speech model is downloaded. Text appears once it has arrived, and nothing has stalled while the numbers are moving." })]),
+        status, meter,
+        el("div", { className: "row" }, start, skip));
+    },
+
+    summaries() {
+      const key = el("input", { type: "password", autocomplete: "off", spellcheck: false, placeholder: "sk-ant-…", ariaLabel: "Anthropic API key" });
+      const keyBox = el("div", { className: "key", hidden: true }, key,
+        el("small", { textContent: "Optional if you are signed in with the Anthropic command-line tool. Kept on this computer and sent only to Anthropic." }));
+      const pick = (value, title, about) => el("label", { className: "choice" },
+        el("input", { type: "radio", name: "wprovider", value, checked: (state.provider || "") === value }),
+        el("b", { textContent: title }), el("span", { textContent: about }));
+      const options = el("fieldset", {},
+        el("legend", { hidden: true, textContent: "What writes summaries" }),
+        pick("", "Not now", "Conversations keep their opening words as a title. You can choose later under Settings."),
+        pick("claude", "Claude", "Best results. The text of each conversation is sent to Anthropic and billed to your Anthropic account."),
+        keyBox,
+        pick("ollama", "Ollama", "A model running on this computer, so nothing leaves it. Weaker, and Ollama must be running."));
+      const picked = () => options.querySelector("input:checked")?.value ?? "";
+      const showKey = () => { keyBox.hidden = picked() !== "claude"; };
+      options.addEventListener("change", showKey);
+      const status = el("p", { className: "status", role: "status" });
+      const save = button("Save and continue", async () => {
+        save.disabled = true;
+        status.replaceChildren(picked() === "claude" ? "Checking with Anthropic…" : "Saving…");
+        const body = { provider: picked() };
+        if (key.value.trim()) body.api_key = key.value.trim();
+        try { await post("/api/settings", body); }
+        catch (err) { status.replaceChildren(trouble(err.message)); save.disabled = false; return; }
+        if (picked()) { try { await post("/api/digest", {}); } catch { /* nothing to summarise yet, or busy */ } }
+        steps.done(Boolean(picked()));
+      }, "main");
+      page("summaries", "Titles, summaries and reminders",
+        el("p", { className: "lede", textContent: "A language model can give each conversation a title and a short summary, write a recap of each day, and pick out things someone said they would do. Transcription does not need it." }),
+        options, status,
+        el("div", { className: "row" }, save, button("Skip", () => steps.done(false))));
+      showKey();
+    },
+
+    async done(summarising) {
+      try { days = await get("/api/days"); } catch { /* keep what we had */ }
+      const have = days.length
+        ? `Your Lifelog has ${days.length} day${days.length === 1 ? "" : "s"} in it.`
+        : "Nothing has been recorded yet, so the Lifelog is empty for now. Wear the pendant, then sync.";
+      page("", "You're set",
+        el("p", { className: "lede", textContent: `${have}${summarising ? " Summaries are being written in the background and appear as they finish." : ""}` }),
+        el("ul", { className: "prep" },
+          el("li", {}, el("b", { textContent: "To keep syncing, " }), "leave ", el("code", { textContent: "limitful watch" }), " running in a terminal, or use Sync now under Settings."),
+          el("li", {}, el("b", { textContent: "To name people, " }), "click a speaker beside any line."),
+          el("li", {}, el("b", { textContent: "To run this guide again, " }), "open Settings and choose Set up again.")),
+        el("div", { className: "row" }, button("Open your Lifelog", () => finish(), "main")));
+    },
+
+    history() {
+      const status = el("p", { className: "status", role: "status" });
+      const file = el("input", { type: "file", accept: ".zip,application/zip", hidden: true });
+      const choose = button("Choose the export zip", () => file.click(), "main");
+      file.addEventListener("change", async () => {
+        const chosen = file.files[0];
+        file.value = "";
+        if (!chosen) return;
+        choose.disabled = true;
+        status.replaceChildren(`Importing ${chosen.name}. Large exports take a minute; keep this page open.`);
+        try {
+          const res = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/zip" }, body: chosen });
+          if (!res.ok) throw new Error(await res.text());
+          const r = await res.json();
+          status.textContent = r.conversations
+            ? `Imported ${r.conversations.toLocaleString()} conversations, ${r.lines.toLocaleString()} lines and ${r.hours} hours of audio.`
+            : "Nothing new in that export.";
+          choose.replaceWith(button("Continue", () => steps.done(false), "main"));
+        } catch (err) {
+          status.replaceChildren(trouble(`Import failed. ${err.message}`));
+          choose.disabled = false;
+        }
+      });
+      page("", "Import your Limitless history",
+        el("p", { className: "lede", textContent: "Request a data export from Limitless before the service ends on December 1, 2026. It arrives as a .zip file. Choose it here to bring in your conversations, transcripts, audio and reminders." }),
+        el("p", { className: "small", textContent: "The file stays on this computer. You can import more exports later under Settings, and connect a pendant from there too." }),
+        status, file,
+        el("div", { className: "row" }, choose, button("Back", () => steps.start())));
+    },
+  };
+  (steps[step] || steps.start)();
+}
+
+/* A standing notice while the Lifelog holds the made-up conversations. */
+async function showDemoBar() {
+  let state;
+  try { state = await get("/api/welcome"); } catch { return; }
+  const bar = $("demobar");
+  bar.hidden = !state.demo;
+  if (!state.demo) return;
+  const remove = el("button", { textContent: "Remove them and set up" });
+  remove.addEventListener("click", async () => {
+    remove.disabled = true;
+    try { await post("/api/demo", { action: "remove" }); } catch (err) { say(`Could not remove them. ${err.message}`, true); remove.disabled = false; return; }
+    bar.hidden = true;
+    days = await get("/api/days");
+    countReminders();
+    showWelcome();
+  });
+  bar.replaceChildren("These conversations are made up, to show what Limitful does. ", remove);
+}
+
 /* A reminder with the actions that fit its state. `after` runs once it is saved. */
 function todoRow(r, after, source) {
   const row = el("div", { className: `todo ${r.status}` }, el("p", { textContent: r.text }));
@@ -697,6 +1066,7 @@ async function countReminders() {
 
 /* Reminders: suggestions to sort through on the left, your own list on the right. */
 async function showReminders() {
+  leaveWelcome();
   main.classList.remove("wide");
   document.querySelector("header").classList.add("plain");
   reminding = true;
@@ -860,7 +1230,8 @@ function renderDay() {
     drawStrip();
     main.replaceChildren(el("div", { className: "empty" },
       el("p", { textContent: "Nothing was said on this day, or nothing has been synced yet." }),
-      el("p", {}, "To bring in new audio from the pendant, run ", el("code", { textContent: "limitful watch" }), ".")));
+      ...(days.length ? [el("p", {}, "To bring in new audio from the pendant, run ", el("code", { textContent: "limitful watch" }), ", or use Sync now under Settings.")]
+        : [(() => { const b = el("button", { className: "pill main", textContent: "Set up Limitful" }); b.addEventListener("click", () => showWelcome()); return b; })()])));
     return;
   }
   groups = buildGroups();
@@ -1113,6 +1484,7 @@ function reveal(id, mark) {
 }
 
 async function openDay(key, revealId, revealTalk, startPlaying) {
+  leaveWelcome();
   main.classList.remove("wide");
   document.querySelector("header").classList.remove("plain");
   searching = false;
@@ -1144,6 +1516,7 @@ function step(direction) {
 }
 
 async function runSearch(query) {
+  leaveWelcome();
   main.classList.remove("wide");
   document.querySelector("header").classList.add("plain");
   searching = true;
@@ -1377,7 +1750,7 @@ async function watchJob() {
     say(job.error || job.note || "Finished.", Boolean(job.error));
     if (configuring) showSettings();
     days = await get("/api/days");
-    if (!searching && !reminding && !configuring && !asking) openDay(day);
+    if (!searching && !reminding && !configuring && !asking && !welcoming) openDay(day);
   } else if (job.error) {
     say(job.error, true);
   }
@@ -1410,6 +1783,7 @@ $("file").addEventListener("change", async (e) => {
 /* Settings: what writes summaries, the Anthropic key, and importing an export. */
 let settingsPane = "pendant";  // the section last open, kept across saves
 async function showSettings() {
+  leaveWelcome();
   document.querySelector("header").classList.add("plain");
   configuring = true;
   reminding = false;
@@ -1511,20 +1885,7 @@ async function showSettings() {
 
   // A drawing of the pendant, front on: the clip over the top, the arc of microphone
   // holes, the side button, and the light, which follows the brightness slider.
-  const glow = svgEl("circle", { cx: 60, cy: 86, r: 2.7, fill: "#ffffff" });
-  const halo = svgEl("circle", { cx: 60, cy: 86, r: 10, fill: "#ffffff" });
-  const holes = (d) => svgEl("path", { d, fill: "none", stroke: "#131517", "stroke-width": 1.7,
-    "stroke-linecap": "round", "stroke-dasharray": "0.01 3.4" });
-  const drawing = svgEl("svg", { viewBox: "0 0 120 136", width: 108, height: 122, role: "img", "aria-label": "The pendant" });
-  drawing.append(
-    svgEl("path", { d: "M34 60V28a22 22 0 0 1 22-22h8a22 22 0 0 1 22 22v32Z", fill: "#3c4044" }),       // clip
-    svgEl("rect", { x: 104, y: 79, width: 5, height: 20, rx: 2.5, fill: "#1b1d1f" }),                    // side button
-    svgEl("circle", { cx: 60, cy: 86, r: 47, fill: "#26292c" }),                                         // body
-    svgEl("circle", { cx: 60, cy: 86, r: 43.5, fill: "#3a3e42" }),                                       // face
-    holes("M28.7 71.4A34.5 34.5 0 0 1 91.3 71.4"),
-    holes("M31.9 72.9A31 31 0 0 1 88.1 72.9"),
-    holes("M35.1 74.4A27.5 27.5 0 0 1 84.9 74.4"),
-    halo, glow);
+  const { node: drawing, glow, halo } = pendantDrawing();
 
   // Battery: an outline that fills to the level, turning amber then red as it runs down.
   const cell = svgEl("rect", { x: 3.5, y: 8.5, width: 0, height: 7, rx: 1.2, stroke: "none" });
@@ -1754,7 +2115,8 @@ async function showSettings() {
   restate = () => { for (const [id, , , state] of menu) states[id].textContent = state(); };
   main.classList.add("wide");
   main.replaceChildren(el("div", { className: "settings" }, tabs, el("div", {}, ...Object.values(panes),
-    el("p", { className: "about" }, el("b", { textContent: "*" }), " Limitful", el("br"), el("small", { textContent: "limits apply" })))));
+    el("p", { className: "about" }, el("b", { textContent: "*" }), " Limitful", el("br"), el("small", { textContent: "limits apply" })),
+    (() => { const b = el("button", { className: "pill", textContent: "Set up again" }); b.title = "Run the first-time guide: connect a pendant, import history, choose summaries"; b.addEventListener("click", () => showWelcome()); return el("p", { className: "small" }, b); })())));
   open(panes[settingsPane] ? settingsPane : "pendant");
   showKey();
   showDgKey();
@@ -1801,6 +2163,7 @@ function replyNodes(text, cited) {
 }
 
 function showAsk() {
+  leaveWelcome();
   asking = true;
   searching = false; reminding = false; configuring = false;
   history.replaceState(null, "", "#ask");
@@ -2003,7 +2366,7 @@ document.addEventListener("keydown", (e) => {
 /* New lines arrive while `limitful watch` runs; pick them up quietly. */
 setInterval(async () => {
   showPaused();
-  if (searching || reminding || configuring || asking || document.hidden || !day) return;
+  if (searching || reminding || configuring || asking || welcoming || document.hidden || !day) return;
   try {
     days = await get("/api/days");
     const [fresh, freshTalks] = await Promise.all([get(`/api/day/${day}`), get(`/api/conversations/${day}`)]);
@@ -2020,6 +2383,7 @@ window.addEventListener("hashchange", () => {
   else if (where === "reminders") showReminders();
   else if (where === "settings") { if (id) settingsPane = id; showSettings(); }
   else if (where === "ask") showAsk();
+  else if (where === "welcome") showWelcome();
 });
 
 (async () => {
@@ -2036,6 +2400,9 @@ window.addEventListener("hashchange", () => {
   if (hashDay === "reminders") showReminders();
   if (hashDay === "settings") { if (hashId) settingsPane = hashId; showSettings(); }
   if (hashDay === "ask") showAsk();
+  showDemoBar();
+  // An empty Lifelog that has never been set up starts with the guide.
+  if (hashDay === "welcome" || (!days.length && !welcomed() && !hashDay)) showWelcome();
   watchJob();
   countReminders();
   showPaused();
