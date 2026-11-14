@@ -19,7 +19,8 @@ history you export before then stays usable.
 - **Transcribes on your machine** with Whisper. Audio stays on your computer
   unless you choose a hosted service.
 - **Lifelog web app**: each day as a list of conversations, with playback from
-  any line, a timeline of the day, and search across everything.
+  any line, a timeline of the day, and search across everything, by exact
+  words or (once set up) by meaning.
 - **Summaries and reminders**: a title and summary for each conversation, and
   suggested reminders linked to the line they came from. Uses Claude or a local
   Ollama model, and is off until you choose one.
@@ -138,7 +139,13 @@ Lines in a Limitless transcript often sit a few seconds away from where they
 are heard. `uv run limitful retime` listens to the imported audio with Whisper
 and moves each line to where its words are; `--minutes 60` does it in
 stages and `--undo` puts everything back. It takes roughly a fifth of the
-audio's length on a laptop CPU.
+audio's length on a laptop CPU, and nearer a third when the laptop is busy.
+
+The same job runs from Settings, under **Timing of imported lines**, which
+shows how many recordings and hours are left. Progress shows at the top of the
+page, the page stays usable, and nothing else (a sync, an import) can start
+until it finishes. **Stop** lets the recording in hand finish, then stops;
+starting again carries on with the rest.
 
 ### What leaves your computer
 
@@ -153,6 +160,52 @@ Three things send data out, and each is off until you turn it on in Settings:
 
 API keys are kept in `~/.config/limitful/config.json`, readable only by you,
 outside the data folder, and are never sent back to the page.
+
+### Search by meaning
+
+The search box and Ask match words exactly. Search by meaning also finds lines
+that say the same thing in other words: asking about a "massage for the lymph
+system" finds the talk about lymphatic drainage. It is off until you set it
+up, in Settings under **Search by meaning** or with:
+
+```sh
+uv run limitful index                       # build it, or add what is new
+uv run limitful index --find "heat cabin"   # try it from the terminal
+uv run limitful index --remove              # delete it; transcripts are untouched
+```
+
+It runs on this computer. A small model (34 MB, downloaded once and checked
+against a pinned checksum) turns each line, together with the two lines either
+side of it, into a list of numbers; these are kept in `search.db` next to
+`pendant.db`, about 24 MB for 30,000 lines. Building took 9 minutes for 31,750
+lines on a laptop that was busy with other work. It can be stopped and carries
+on where it left off, and once it exists new lines are added as they are
+transcribed. After importing an export, run it again (or press the button) to
+add the imported lines.
+
+Once the index exists:
+
+- **Ask** gets a second way to look things up and is told when to use it.
+- **The search box** lists exact matches first, exactly as before, and under
+  them up to eight moments that are close in meaning.
+
+What was measured, on one person's 31,750 lines, with 15 questions worded to
+avoid the words actually spoken (so this is the case it is meant for, not a
+typical search), counting a hit when a result was on or within three lines of
+the line holding the answer:
+
+| Method | In the top 5 | Top 10 | Top 40 |
+|---|---|---|---|
+| Word matching, as Ask used before | 0 | 2 | 3 |
+| Meaning, each line on its own | 6 | 9 | 12 |
+| Meaning, each line with its neighbours (what is used) | 8 | 9 | 14 |
+
+Limits worth knowing. It always returns its closest lines, related or not, and
+the closeness score does not tell the two apart: right answers scored 0.57 to
+0.79 and the unrelated lines beside them a median of 0.68. That is why the
+search box keeps these results separate and labelled instead of mixing them
+in. For names, numbers and exact phrases, word matching is still better. The
+model is English-only.
 
 ### The pendant, from the app
 
@@ -311,6 +364,8 @@ that your computer holds the only copy, so back up the data folder.
 - `speakers.py`: voice fingerprints for speaker labels.
 - `digest.py`: titles, summaries and reminders from a language model.
 - `ask.py`: question answering over the transcripts, with citations.
+- `search.py`: search by meaning: the local model and its index.
+- `upkeep.py`: long jobs the Lifelog can start and stop (re-timing, indexing).
 - `config.py`: saved settings, including the API key.
 - `importer.py`: import of a Limitless data export.
 - `watch.py`: the background loop.
@@ -424,6 +479,12 @@ uv run pytest
 The pendant's Bluetooth protocol was reverse-engineered by the
 [Omi](https://github.com/BasedHardware/omi) project (MIT licence). This is an
 independent implementation of the same wire format.
+
+Search by meaning uses [bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)
+by the Beijing Academy of Artificial Intelligence (MIT licence), in the 8-bit
+ONNX conversion published as
+[Xenova/bge-small-en-v1.5](https://huggingface.co/Xenova/bge-small-en-v1.5).
+It is downloaded on first use, not shipped with Limitful.
 
 The wordmark is set in [Outfit](https://github.com/Outfitio/Outfit-Fonts) (SIL Open Font
 License), drawn as outlines; `assets/make_logo.py` rebuilds the logo files.
