@@ -477,3 +477,37 @@ def test_usb_readings_reach_the_page_and_correct_the_light(site, monkeypatch):
     monkeypatch.setattr(usb, "read", broken)
     assert json.loads(site("/api/pendant", JSON, b'{"action": "usb"}')[2])["usb"] == {
         "error": "could not open /dev/x: Resource busy"}
+
+
+def test_day_recap_is_offered_written_and_served(site, tmp_path, monkeypatch):
+    from limitful import config, digest
+    from limitful.store import Store
+
+    day = "2026-11-12"
+    base = int(datetime(2026, 11, 12, 9, 0).timestamp() * 1000)
+    store = Store(tmp_path)
+    for n in range(2):
+        store.db.execute(
+            "INSERT INTO conversations (start_ms, end_ms, status, title, summary) VALUES (?, ?, 'done', ?, '[\"A point.\"]')",
+            (base + n * 3600000, base + n * 3600000 + 600000, f"Talk {n + 1}"))
+    store.db.commit()
+    store.close()
+
+    assert json.loads(site(f"/api/recap/{day}")[2]) == {"recap": None, "can_write": False}  # nothing chosen to write it
+    assert site(f"/api/recap/{day}", JSON, b"{}")[0] == 400
+    assert site("/api/recap/yesterday")[0] == 400
+
+    class Engine:
+        name = "fake"
+
+        def recap(self, text):
+            assert "Thursday, November 12, 2026" in text and "09:00, 10 min: Talk 1\n- A point." in text
+            return {"headline": "Two talks", "points": ["One.", "Two."]}
+
+    config.update(provider="ollama")
+    monkeypatch.setattr(digest, "make_summarizer", lambda *a: Engine())
+    assert json.loads(site(f"/api/recap/{day}")[2])["can_write"] is True
+    written = json.loads(site(f"/api/recap/{day}", JSON, b"{}")[2])["recap"]
+    assert (written["headline"], written["points"], written["stale"]) == ("Two talks", ["One.", "Two."], False)
+    assert json.loads(site(f"/api/recap/{day}")[2])["recap"]["headline"] == "Two talks"
+    assert site("/api/recap/2026-11-01", JSON, b"{}")[0] == 400  # an empty day

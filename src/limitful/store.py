@@ -15,7 +15,7 @@ import json
 import sqlite3
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -110,6 +110,14 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_ms INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS chat_messages_chat ON chat_messages (chat_id);
+CREATE TABLE IF NOT EXISTS day_recaps (
+    day       TEXT PRIMARY KEY,            -- local date, YYYY-MM-DD
+    headline  TEXT NOT NULL,
+    points    TEXT NOT NULL,               -- JSON list
+    engine    TEXT NOT NULL,
+    signature TEXT NOT NULL,               -- of the conversations it was written from
+    made_ms   INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reminders (
     id              INTEGER PRIMARY KEY,
     conversation_id INTEGER NOT NULL,
@@ -123,6 +131,8 @@ CREATE TABLE IF NOT EXISTS reminders (
 CONVERSATION_GAP_MS = 5 * 60 * 1000
 # Conversations with fewer words than this are not worth summarising.
 MIN_DIGEST_WORDS = 25
+# A day needs this many summarised conversations before a recap says anything new.
+MIN_RECAP_CONVERSATIONS = 2
 REMINDER_STATUSES = ("suggested", "accepted", "done", "dismissed")
 
 # Columns added after the first release; applied to existing databases on open.
@@ -1008,6 +1018,87 @@ class Store:
             self._rewrite_days("start_ms >= ? AND start_ms <= ?", (start_ms, end_ms))
             if on_progress:
                 on_progress(n, len(pending))
+        if hasattr(summarizer, "recap"):
+            self.recap_pending(summarizer)  # days that have just been completed
+        return done
+
+    # --- the day's recap ---------------------------------------------------------------
+
+    def day_material(self, day: str) -> tuple[str, str, int]:
+        """What a recap of `day` (local, YYYY-MM-DD) is written from.
+
+        Returns the text handed to the model, a signature that changes when the
+        day's conversations do, and how many conversations there are.
+        """
+        start = datetime.strptime(day, "%Y-%m-%d")
+        lo, hi = int(start.timestamp() * 1000), int((start + timedelta(days=1)).timestamp() * 1000)
+        rows = self.db.execute(
+            "SELECT id, start_ms, end_ms, title, summary FROM conversations "
+            "WHERE status = 'done' AND start_ms >= ? AND start_ms < ? ORDER BY start_ms", (lo, hi)).fetchall()
+        parts = []
+        for _cid, start_ms, end_ms, title, summary in rows:
+            at = datetime.fromtimestamp(start_ms / 1000).strftime("%H:%M")
+            minutes = max(1, round((end_ms - start_ms) / 60000))
+            points = json.loads(summary) if summary else []
+            parts.append("\n".join([f"{at}, {minutes} min: {title}", *(f"- {point}" for point in points)]))
+        signature = hashlib.sha256(json.dumps([(r[0], r[3], r[4]) for r in rows]).encode()).hexdigest()[:16]
+        return "\n\n".join(parts), signature, len(rows)
+
+    def day_recap(self, day: str) -> dict | None:
+        """The saved recap of a day, marked stale if the day has changed since."""
+        row = self.db.execute(
+            "SELECT headline, points, signature, made_ms FROM day_recaps WHERE day = ?", (day,)).fetchone()
+        if row is None:
+            return None
+        return {"headline": row[0], "points": json.loads(row[1]), "made": row[3],
+                "stale": row[2] != self.day_material(day)[1]}
+
+    def recap_day(self, day: str, summarizer: Summarizer) -> dict | None:
+        """Write (or rewrite) the recap of one day. None if the day has too little in it."""
+        text, signature, count = self.day_material(day)
+        if count < MIN_RECAP_CONVERSATIONS:
+            return None
+        date = datetime.strptime(day, "%Y-%m-%d")
+        result = summarizer.recap(f"{date:%A, %B} {date.day}, {date.year}\n\n{text}")
+        self.db.execute(
+            "INSERT OR REPLACE INTO day_recaps (day, headline, points, engine, signature, made_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (day, result["headline"], json.dumps(result["points"]), summarizer.name, signature,
+             int(time.time() * 1000)))
+        self.db.commit()
+        return self.day_recap(day)
+
+    def days_to_recap(self, everything: bool = False, today: str | None = None) -> list[str]:
+        """Finished days whose recap is missing or out of date, oldest first.
+
+        By default only days with something recorded from the pendant: sending
+        the whole imported history to a model is a choice, made with `everything`.
+        """
+        today = today or datetime.now().strftime("%Y-%m-%d")
+        ours = "" if everything else "AND engine IS NOT 'limitless' "
+        days = [d for (d,) in self.db.execute(
+            "SELECT DISTINCT strftime('%Y-%m-%d', start_ms / 1000, 'unixepoch', 'localtime') FROM conversations "
+            f"WHERE status = 'done' {ours}ORDER BY 1") if d < today]
+        out = []
+        for day in days:
+            _text, signature, count = self.day_material(day)
+            saved = self.db.execute("SELECT signature FROM day_recaps WHERE day = ?", (day,)).fetchone()
+            if count >= MIN_RECAP_CONVERSATIONS and (saved is None or saved[0] != signature):
+                out.append(day)
+        return out
+
+    def recap_pending(self, summarizer: Summarizer, everything: bool = False,
+                      on_progress: Callable[[int, int], None] | None = None, today: str | None = None) -> int:
+        """Recap the days that need it. Returns how many were written."""
+        days = self.days_to_recap(everything, today)
+        done = 0
+        for n, day in enumerate(days, 1):
+            try:
+                done += self.recap_day(day, summarizer) is not None
+            except DigestDeclined:
+                pass  # left without a recap; the conversations still have theirs
+            if on_progress:
+                on_progress(n, len(days))
         return done
 
     def forget_digests(self) -> None:

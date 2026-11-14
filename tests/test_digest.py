@@ -243,3 +243,70 @@ def test_clean_reads_reminders_as_objects_or_strings():
     assert got["reminders"] == [
         {"text": "Send it", "line": 4}, {"text": "Bare string", "line": None},
         {"text": "No line", "line": None}, {"text": "Bad line", "line": None}]
+
+
+LATER = "2099-01-01"  # a "today" by which every day in these tests is finished
+
+
+class Recapper:
+    """Recaps a day and records what it was shown."""
+
+    name = "recapper"
+
+    def __init__(self):
+        self.days = []
+
+    def recap(self, day):
+        self.days.append(day)
+        return {"headline": f"Recap {len(self.days)}", "points": ["First thread.", "Second thread."]}
+
+
+def test_a_finished_day_gets_a_recap_written_from_its_conversations(tmp_path):
+    store = Store(tmp_path)
+    say(store, 0, LONG)
+    say(store, 30, LONG + " and water the garden")
+    assert store.digest_pending(Canned()) == 2
+    day = datetime.fromtimestamp(T0 / 1000).strftime("%Y-%m-%d")
+    engine = Recapper()
+    assert store.recap_pending(engine, today=day) == 0      # the day is not over yet
+    assert store.recap_pending(engine, today=LATER) == 1
+
+    recap = store.day_recap(day)
+    assert (recap["headline"], recap["points"], recap["stale"]) == ("Recap 1", ["First thread.", "Second thread."], False)
+    (shown,) = engine.days
+    assert "09:00, 1 min: Talk 1" in shown and "09:30, 1 min: Talk 2" in shown and "- One." in shown
+    assert "quarterly report" not in shown  # titles and summaries only, never the transcript
+
+    # Nothing changed, so nothing is written again; a retitled conversation makes it stale.
+    assert store.recap_pending(engine, today=LATER) == 0 and len(engine.days) == 1
+    store.db.execute("UPDATE conversations SET title = 'Renamed' WHERE id = 1")
+    assert store.day_recap(day)["stale"] is True
+    assert store.recap_pending(engine, today=LATER) == 1 and store.day_recap(day)["headline"] == "Recap 2"
+    store.close()
+
+
+def test_days_with_one_conversation_or_only_imported_are_left_alone(tmp_path):
+    store = Store(tmp_path)
+    say(store, 0, LONG)
+    store.digest_pending(Canned())
+    day = datetime.fromtimestamp(T0 / 1000).strftime("%Y-%m-%d")
+    engine = Recapper()
+    assert store.days_to_recap(today=LATER) == [] and store.recap_day(day, engine) is None and engine.days == []
+
+    say(store, 30, LONG + " and water the garden")
+    store.digest_pending(Canned())
+    assert store.days_to_recap(today=LATER) == [day]
+    store.db.execute("UPDATE conversations SET engine = 'limitless'")
+    assert store.days_to_recap(today=LATER) == []                    # imported history is only sent when asked
+    assert store.days_to_recap(everything=True, today=LATER) == [day]
+    store.close()
+
+
+def test_clean_day():
+    from limitful.digest import DigestError, clean_day
+    assert clean_day({"headline": "  A  day ", "points": ["one", "", 3, " two "] + ["x"] * 9}) == {
+        "headline": "A day", "points": ["one", "two", "x", "x", "x"]}
+    assert clean_day({"headline": "Only this", "points": "single"})["points"] == ["single"]
+    for bad in ({}, {"headline": " "}, ["x"], {"headline": 3}):
+        with pytest.raises(DigestError):
+            clean_day(bad)

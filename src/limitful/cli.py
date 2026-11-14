@@ -385,6 +385,17 @@ async def _cmd_digest(args) -> int:
             raise PendantError(f"{err}. Conversations already summarised were kept.") from None
         print(file=sys.stderr)
         print(f"Summarised {done} conversation(s) with {summarizer.name}.")
+        if args.days:
+            def day_progress(n: int, total: int) -> None:
+                print(f"\r  {n}/{total} days", end="", file=sys.stderr, flush=True)
+
+            try:
+                days = await asyncio.to_thread(store.recap_pending, summarizer, True, day_progress)
+            except DigestError as err:
+                print(file=sys.stderr)
+                raise PendantError(f"{err}. Recaps already written were kept.") from None
+            print(file=sys.stderr)
+            print(f"Wrote a recap for {days} day(s).")
         waiting = [r for r in store.reminders() if r["status"] == "suggested"]
         if waiting:
             print(f"{len(waiting)} suggested reminder(s) to review in the Lifelog.")
@@ -642,6 +653,9 @@ def main(argv: list[str] | None = None) -> int:
     llm_args(p)
     p.add_argument("--redo", action="store_true",
                    help="discard existing summaries and reminders and write them again")
+    p.add_argument("--days", action="store_true",
+                   help="also write a recap for every finished day that lacks one, imported history "
+                        "included (sends those days' titles and summaries to the provider)")
     p.set_defaults(func=_cmd_digest)
 
     p = sub.add_parser("import", help="import a data export (.zip) from the Limitless service")

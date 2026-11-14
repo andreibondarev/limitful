@@ -489,6 +489,28 @@ class Library:
         hi = int((start + timedelta(days=1)).timestamp() * 1000)
         return self._with_store(lambda store: store.conversations(lo, hi))
 
+    def recap(self, day: str) -> dict:
+        """The day's recap, and whether one could be written now."""
+        from .store import MIN_RECAP_CONVERSATIONS
+
+        def look(store):
+            enough = store.day_material(day)[2] >= MIN_RECAP_CONVERSATIONS
+            return {"recap": store.day_recap(day), "can_write": enough and bool(config.provider())}
+        return self._with_store(look)
+
+    def write_recap(self, day: str) -> dict:
+        provider = config.provider()
+        if not provider:
+            raise ValueError("choose what writes summaries first, under Settings")
+        summarizer = digest_mod.make_summarizer(provider, None, config.api_key())
+        try:
+            written = self._with_store(lambda store: store.recap_day(day, summarizer))
+        except (digest_mod.DigestError, digest_mod.DigestDeclined) as err:
+            raise ValueError(f"Could not write the recap: {err}") from None
+        if written is None:
+            raise ValueError("this day has too few summarised conversations to recap")
+        return {"recap": written, "can_write": True}
+
     def reminders(self, include_done: bool = False) -> list[dict]:
         return self._with_store(lambda store: store.reminders(include_done))
 
@@ -535,6 +557,11 @@ def make_handler(library: Library):
                     if not _DAY.match(day):
                         return self._text(HTTPStatus.BAD_REQUEST, "Day must be YYYY-MM-DD.")
                     return self._json(library.conversations(day))
+                if path.startswith("/api/recap/"):
+                    day = path.removeprefix("/api/recap/")
+                    if not _DAY.match(day):
+                        return self._text(HTTPStatus.BAD_REQUEST, "Day must be YYYY-MM-DD.")
+                    return self._json(library.recap(day))
                 if path == "/api/reminders":
                     done = parse_qs(url.query).get("done", ["0"])[0] == "1"
                     return self._json(library.reminders(include_done=done))
@@ -627,6 +654,14 @@ def make_handler(library: Library):
                     return self._json({"ok": True})
                 except RuntimeError as err:
                     return self._text(HTTPStatus.CONFLICT, str(err))
+                except ValueError as err:
+                    return self._text(HTTPStatus.BAD_REQUEST, str(err))
+            if path.startswith("/api/recap/"):
+                day = path.removeprefix("/api/recap/")
+                if not _DAY.match(day):
+                    return self._text(HTTPStatus.BAD_REQUEST, "Day must be YYYY-MM-DD.")
+                try:
+                    return self._json(library.write_recap(day))
                 except ValueError as err:
                     return self._text(HTTPStatus.BAD_REQUEST, str(err))
             if path in ("/api/settings", "/api/digest"):

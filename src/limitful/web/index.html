@@ -199,6 +199,13 @@
   .todo .where a { color: var(--accent); text-underline-offset: 3px; }
   .todo .where q { display: block; margin-top: 0.2rem; font-family: var(--voice); font-size: 0.95rem; font-style: italic; }
   .todo .jump { border-style: dashed; }
+  .recap { margin: 0 0 1.8rem; padding: 1.3rem 1.5rem 1.2rem; max-width: 46rem; border-left: 3px solid var(--mark); background: color-mix(in srgb, var(--accent) 5%, transparent); border-radius: 0 14px 14px 0; }
+  .recap.bare { padding: 0; border: 0; background: none; }
+  .recap .headline { margin: 0; font-family: var(--voice); font-size: 1.45rem; line-height: 1.3; text-wrap: balance; }
+  .recap ul { margin: 0.8rem 0 0; padding-left: 1.1rem; color: var(--muted); line-height: 1.55; }
+  .recap li + li { margin-top: 0.3rem; }
+  .recap .stale { margin: 0.9rem 0 0; font-size: 0.88rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+  .recap .oops { margin: 0.6rem 0 0; color: #b3261e; font-size: 0.9rem; }
   .remind { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 3.5rem; align-items: start; }
   .remind h2 { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 0.3rem; font-size: 1.6rem; }
   .remind h2 small { font-family: var(--chrome); font-size: 0.85rem; color: var(--muted); border: 1px solid var(--rule); border-radius: 999px; padding: 0.05rem 0.55rem; }
@@ -810,6 +817,34 @@ function whoRow(speaker) {
   return row;
 }
 
+/* The day's recap sits above its conversations: what the day was about, then its threads. */
+async function showRecap(box, forDay) {
+  let state;
+  try { state = await get(`/api/recap/${forDay}`); } catch { return; }
+  if (forDay !== day || !box.isConnected) return;  // moved on while it loaded
+  const write = (label) => {
+    const b = el("button", { className: "pill" }, ...withIcon("summary", label, 16));
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      b.lastChild.textContent = "Writing…";
+      try { state = await post(`/api/recap/${forDay}`, {}); draw(); }
+      catch (err) { b.disabled = false; b.lastChild.textContent = label; box.append(el("p", { className: "oops", textContent: err.message })); }
+    });
+    return b;
+  };
+  const draw = () => {
+    const r = state.recap;
+    box.hidden = !r && !state.can_write;
+    box.classList.toggle("bare", !r);
+    if (!r) { box.replaceChildren(write("Write a recap of this day")); return; }
+    box.replaceChildren(
+      el("p", { className: "headline", textContent: r.headline }),
+      el("ul", {}, ...r.points.map((point) => el("li", { textContent: point }))));
+    if (r.stale && state.can_write) box.append(el("p", { className: "stale" }, "This day has changed since the recap was written. ", write("Write it again")));
+  };
+  draw();
+}
+
 function renderDay() {
   // The year is in the date field beside it; only spell it out for other years.
   const shown = new Date(dayStart(day));
@@ -837,9 +872,12 @@ function renderDay() {
     toggleAll.textContent = open ? "Close all" : "Open all";
   });
   const count = `${groups.length} conversation${groups.length === 1 ? "" : "s"}`;
+  const recap = el("section", { className: "recap", hidden: true });
   main.replaceChildren(
+    recap,
     el("div", { className: "tools" }, el("span", { textContent: count }), toggleAll),
     ...groups.map(card));
+  showRecap(recap, day);
   if (groups.length === 1) groups[0].setOpen(true);
   markPlaying();
   if (wanted) {
@@ -1675,7 +1713,7 @@ async function showSettings() {
     heardNote),
     summaries: el("section", { className: "setup" },
     el("h2", {}, ...withIcon("summary", "Summaries", 22)),
-    el("p", { textContent: "A title, a short summary and suggested reminders for each conversation recorded from the pendant. Conversations imported from Limitless already have theirs." }),
+    el("p", { textContent: "A title, a short summary and suggested reminders for each conversation recorded from the pendant, and a recap at the top of each day. Conversations imported from Limitless already have their own titles; an imported day gets a recap only when you ask for one on its page." }),
     options,
     el("div", { className: "row" }, save, run, forget),
     note),

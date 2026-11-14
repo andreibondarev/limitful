@@ -107,6 +107,14 @@ what writes them, under Settings, Summaries:
 New conversations are summarised after each sync. `uv run limitful digest`
 does it by hand, and `--redo` writes them all again.
 
+Each day also gets a recap at the top of its page: one sentence on what the
+day was about, then its main threads. It is written from the titles and
+summaries of that day's conversations, not from the transcripts, once the day
+is over and it has at least two summarised conversations. For today, or for
+days imported from Limitless, click "Write a recap of this day"; imported days
+are not sent anywhere until you do. `uv run limitful digest --days` writes a
+recap for every finished day that lacks one, imported history included.
+
 The Reminders page shows suggestions grouped by day, each with a link that
 plays the moment it came up. Keep one and it moves to your to-do list; tick it
 off when it is done.
@@ -154,7 +162,7 @@ Three things send data out, and each is off until you turn it on in Settings:
 
 | If you choose | What is sent | To |
 |---|---|---|
-| Claude for summaries | The text of each conversation | Anthropic |
+| Claude for summaries | The text of each conversation; for a day's recap, that day's titles and summaries | Anthropic |
 | Ask | The lines it looks up to answer | Anthropic |
 | Deepgram for transcription | The audio of new recordings | Deepgram |
 
