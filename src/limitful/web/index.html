@@ -84,19 +84,35 @@
   /* Off the day view there is no day to chart or step through. */
   header.plain #strip, header.plain #hours, header.plain .step { display: none; }
   header.plain { padding-bottom: 1rem; }
-  #strip {
-    position: relative; height: 1.75rem; margin-top: 0.9rem;
-    border-block: 1px solid var(--rule);
-    cursor: pointer;
+  /* The day at a glance: how much was said through the day, and the conversations beneath. */
+  #strip { position: relative; height: 3.6rem; margin-top: 1rem; cursor: pointer; }
+  #strip .tick { position: absolute; top: 0; bottom: 8px; width: 1px; background: var(--rule); }
+  #strip .bar {
+    position: absolute; bottom: 8px; min-width: 2px; border-radius: 2px 2px 0 0;
+    background: var(--accent); opacity: 0.78;
   }
-  #strip i {
-    position: absolute; top: 3px; bottom: 3px; min-width: 2px;
-    background: var(--accent); border-radius: 1px;
+  #strip .talk {
+    position: absolute; bottom: 0; height: 4px; min-width: 3px; border-radius: 2px;
+    background: var(--accent);
   }
-  #strip i.on { background: var(--mark); top: 0; bottom: 0; }
-  #hours { position: relative; height: 1.1rem; color: var(--muted); font-size: 0.75rem; }
-  #hours span { position: absolute; top: 0.15rem; }
-  #hours span:not(:first-child) { transform: translateX(-50%); }
+  #strip .talk.loose { background: var(--muted); opacity: 0.55; }
+  #strip.over .bar { opacity: 0.28; }
+  #strip.over .bar.hot { opacity: 1; }
+  #strip .talk.hot { background: var(--mark); opacity: 1; }
+  #head {
+    position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px;
+    background: var(--mark); box-shadow: 0 0 0 1.5px var(--paper); pointer-events: none;
+  }
+  #tip {
+    position: absolute; bottom: calc(100% + 7px); transform: translateX(-50%); z-index: 4;
+    max-width: 24rem; padding: 0.3rem 0.6rem; border-radius: 7px; pointer-events: none;
+    background: var(--ink); color: var(--paper); font-size: 0.8rem; line-height: 1.3;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #tip b { font-weight: 600; margin-right: 0.5rem; font-variant-numeric: tabular-nums; }
+  #head[hidden], #tip[hidden] { display: none; }
+  #hours { position: relative; height: 1.25rem; color: var(--muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+  #hours span { position: absolute; top: 0.3rem; white-space: nowrap; }
 
   /* Content runs the width of the header above it; lines of text keep their own measure. */
   main { padding: 1.5rem var(--pad) 9rem; max-width: calc(100vw - 2 * var(--shift)); margin-left: var(--shift); }
@@ -667,26 +683,16 @@ function renderDay() {
   $("prev").disabled = !known.some((d) => d < day);
   $("next").disabled = !known.some((d) => d > day);
 
-  const start = dayStart(day);
-  strip.replaceChildren(...lines.map((u) => {
-    const i = el("i", { id: `s${u.id}` });
-    i.style.left = `${((u.start - start) / DAY_MS) * 100}%`;
-    i.style.width = `${(Math.max(u.end - u.start, 1000) / DAY_MS) * 100}%`;
-    return i;
-  }));
-  $("hours").replaceChildren(...[0, 6, 12, 18].map((h) => {
-    const s = el("span", { textContent: new Intl.DateTimeFormat([], { hour: "numeric" }).format(new Date(start + h * 3600000)) });
-    s.style.left = `${(h / 24) * 100}%`;
-    return s;
-  }));
-
   if (!lines.length) {
+    groups = [];
+    drawStrip();
     main.replaceChildren(el("div", { className: "empty" },
       el("p", { textContent: "Nothing was said on this day, or nothing has been synced yet." }),
       el("p", {}, "To bring in new audio from the pendant, run ", el("code", { textContent: "limitful watch" }), ".")));
     return;
   }
   groups = buildGroups();
+  drawStrip();
   const toggleAll = el("button", { id: "all", textContent: "Open all" });
   toggleAll.addEventListener("click", () => {
     const open = toggleAll.textContent === "Open all";
@@ -718,6 +724,95 @@ function renderDay() {
     if (start && from) play(from);
   }
 }
+
+/* The strip under the header: bars for how much was said in each five minutes, a line under
+   each conversation, hour marks, and a playhead. It zooms to the part of the day with speech. */
+const HOUR_MS = 3600000, BUCKET_MS = 300000;
+const hourLabel = new Intl.DateTimeFormat([], { hour: "numeric" });
+let span = { from: 0, to: 1 };  // the stretch of time the strip covers
+const along = (ms) => `${((ms - span.from) / (span.to - span.from)) * 100}%`;
+
+function drawStrip() {
+  const midnight = dayStart(day);
+  let from = midnight + 8 * HOUR_MS, to = midnight + 20 * HOUR_MS;
+  if (lines.length) {
+    from = Math.floor(lines[0].start / HOUR_MS) * HOUR_MS;
+    to = Math.ceil(lines.reduce((m, u) => Math.max(m, u.end), 0) / HOUR_MS) * HOUR_MS;
+    // Keep at least six hours in view so a short day does not become one fat bar.
+    for (let grow = 0; to - from < 6 * HOUR_MS && grow < 12; grow++) { if (grow % 2) from -= HOUR_MS; else to += HOUR_MS; }
+  }
+  span = { from, to };
+
+  const count = Math.round((to - from) / BUCKET_MS);
+  const spoken = new Array(count).fill(0);
+  for (const u of lines) {
+    const end = Math.min(Math.max(u.end, u.start + 1000), to);
+    for (let b = Math.max(0, Math.floor((u.start - from) / BUCKET_MS)); b < count && from + b * BUCKET_MS < end; b++) {
+      spoken[b] += Math.min(end, from + (b + 1) * BUCKET_MS) - Math.max(u.start, from + b * BUCKET_MS);
+    }
+  }
+  const step = (to - from) <= 8 * HOUR_MS ? 1 : (to - from) <= 16 * HOUR_MS ? 2 : 3;
+  const marks = [];
+  for (let t = from; t <= to; t += step * HOUR_MS) marks.push(t);
+
+  const nodes = marks.slice(1, -1).map((t) => { const n = el("s", { className: "tick" }); n.style.left = along(t); return n; });
+  spoken.forEach((ms, b) => {
+    if (!ms) return;
+    const bar = el("i", { className: "bar" });
+    bar.dataset.at = from + b * BUCKET_MS;
+    bar.style.left = `calc(${(b / count) * 100}% + 0.5px)`;
+    bar.style.width = `calc(${100 / count}% - 1px)`;
+    // Square root, so a few words in five minutes still shows.
+    bar.style.height = `calc((100% - 8px) * ${0.12 + 0.88 * Math.sqrt(Math.min(1, ms / BUCKET_MS))})`;
+    nodes.push(bar);
+  });
+  for (const g of groups) {
+    const line = el("b", { className: g.title ? "talk" : "talk loose" });
+    line.dataset.key = g.key;
+    line.style.left = along(g.start);
+    line.style.width = `${((Math.max(g.end, g.start + 60000) - g.start) / (to - from)) * 100}%`;
+    nodes.push(line);
+  }
+  nodes.push(el("u", { id: "head", hidden: true }), el("div", { id: "tip", hidden: true }));
+  strip.replaceChildren(...nodes);
+
+  $("hours").replaceChildren(...marks.map((t, i) => {
+    const label = el("span", { textContent: hourLabel.format(new Date(t)) });
+    label.style.left = along(t);
+    label.style.transform = i === 0 ? "none" : i === marks.length - 1 ? "translateX(-100%)" : "translateX(-50%)";
+    return label;
+  }));
+}
+
+/* Hovering the strip names the conversation under the pointer and lights up its bars. */
+function groupAt(ms) { return groups.find((g) => ms >= g.start && ms <= Math.max(g.end, g.start + 60000)); }
+strip.addEventListener("mousemove", (e) => {
+  const tip = $("tip");
+  if (!tip || !lines.length) return;
+  const box = strip.getBoundingClientRect();
+  const x = Math.min(Math.max(0, e.clientX - box.left), box.width);
+  const at = span.from + (x / box.width) * (span.to - span.from);
+  const g = groupAt(at);
+  strip.classList.toggle("over", Boolean(g));
+  strip.querySelectorAll(".hot").forEach((n) => n.classList.remove("hot"));
+  if (g) {
+    strip.querySelectorAll(".bar").forEach((bar) => {
+      const t = Number(bar.dataset.at);
+      if (t + BUCKET_MS > g.start && t <= g.end) bar.classList.add("hot");
+    });
+    strip.querySelector(`.talk[data-key="${g.key}"]`)?.classList.add("hot");
+  }
+  const first = g ? g.own[0].text : "";
+  const name = g ? (g.title || (first.length > 60 ? `${first.slice(0, 60)}…` : first)) : "quiet";
+  tip.replaceChildren(el("b", { textContent: clock.format(new Date(g ? g.start : at)) }), name);
+  tip.hidden = false;
+  tip.style.left = `${Math.min(Math.max(x, 90), box.width - 90)}px`;
+});
+strip.addEventListener("mouseleave", () => {
+  strip.classList.remove("over");
+  strip.querySelectorAll(".hot").forEach((n) => n.classList.remove("hot"));
+  if ($("tip")) $("tip").hidden = true;
+});
 
 /* The day's conversations: summarised ones, plus runs of lines that have no summary. */
 function buildGroups() {
@@ -981,13 +1076,23 @@ function advance() {
   if (next) play(next); else { playing = null; track = null; markPlaying(); }
 }
 
+/* The amber line on the strip showing where playback is in the day. */
+function movePlayhead() {
+  const head = $("head");
+  if (!head) return;
+  const here = playing && lines.some((u) => u.id === playing.id) && playing.start >= span.from && playing.start <= span.to;
+  head.hidden = !here;
+  if (here) head.style.left = along(playing.start);
+}
+
 function markPlaying() {
   document.querySelectorAll(".on").forEach((n) => n.classList.remove("on"));
   $("player").hidden = !playing;
+  if (!playing) movePlayhead();
   document.body.style.setProperty("--player", playing ? "6.2rem" : "0px");
   if (!playing) return;
   $(`u${playing.id}`)?.classList.add("on");
-  $(`s${playing.id}`)?.classList.add("on");
+  movePlayhead();
   const t = new Date(playing.start);
   $("now").replaceChildren(el("time", { textContent: clockSec.format(t) }), playing.text);
 }
@@ -1039,8 +1144,10 @@ $("ahead").addEventListener("click", () => jumpTo(position() + 10));
 strip.addEventListener("click", (e) => {
   if (!lines.length) return;
   const box = strip.getBoundingClientRect();
-  const at = dayStart(day) + ((e.clientX - box.left) / box.width) * DAY_MS;
-  const nearest = lines.reduce((a, b) => Math.abs(b.start - at) < Math.abs(a.start - at) ? b : a);
+  const at = span.from + ((e.clientX - box.left) / box.width) * (span.to - span.from);
+  // Inside a conversation, go to its start; otherwise to the nearest line.
+  const g = groupAt(at);
+  const nearest = g ? g.own[0] : lines.reduce((a, b) => Math.abs(b.start - at) < Math.abs(a.start - at) ? b : a);
   reveal(nearest.id, false);
 });
 
@@ -1577,6 +1684,15 @@ setInterval(async () => {
     }
   } catch { /* the server is away; try again next time */ }
 }, 30000);
+
+/* Following a link or editing the address goes there without a reload. */
+window.addEventListener("hashchange", () => {
+  const [where, id] = location.hash.slice(1).split("/");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(where)) openDay(where, id && Number(id));
+  else if (where === "reminders") showReminders();
+  else if (where === "settings") showSettings();
+  else if (where === "ask") showAsk();
+});
 
 (async () => {
   try {
