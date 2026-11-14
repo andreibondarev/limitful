@@ -543,6 +543,7 @@ erase`, `ftl clear`, `storage clear`, `storage full-wipe`, `config reset`,
 - Import the chats in a Limitless export.
 - Let Ask search reminders.
 - An MCP server, so other assistants can query the Lifelog.
+- A short promo video of the app, recorded from the demo data.
 - A real pause or power-off command, if the pendant has one. The USB
   shell has no recording setting; its simulated long button push is untried,
   and would only help while plugged in. The firmware update service is
