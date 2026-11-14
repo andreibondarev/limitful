@@ -471,6 +471,23 @@ sample held only four such words, and every setting kept all four.
 
 ### Running in the background
 
+On macOS, Limitful can start when you log in and keep the pendant synced with
+no terminal open. Switch it on under Settings, Pendant, or:
+
+```sh
+uv run limitful autostart on      # off, or status
+```
+
+This adds a login item (`~/Library/LaunchAgents/dev.limitful.app.plist`) that
+runs the Lifelog with `--sync-every 120`: every two minutes it looks for the
+pendant and, when it is in reach, downloads new audio, frees it on the pendant,
+and transcribes and summarises it. A pendant that is away is not an error. Its
+log is `limitful.log` in the data folder. Switched on from the app, it takes
+effect at your next login, and the app you have open starts syncing by itself
+straight away. The first time, macOS may ask whether Python can use Bluetooth.
+
+On other systems, or to do the same by hand:
+
 ```sh
 uv run limitful watch
 ```
@@ -478,7 +495,8 @@ uv run limitful watch
 `watch` checks for the pendant every two minutes. When it is in range it
 downloads new audio, frees that audio on the pendant, and transcribes it. Leave
 it running in a terminal. Use `--keep` to leave audio on the pendant and
-`--no-transcribe` to download only.
+`--no-transcribe` to download only. `limitful serve --sync-every 120` does the
+same from inside the Lifelog.
 
 ### Freeing space on the pendant
 
@@ -512,6 +530,7 @@ that your computer holds the only copy, so back up the data folder.
 - `importer.py`: import of a Limitless data export.
 - `demo.py`: the made-up data folder.
 - `watch.py`: the background loop.
+- `autostart.py`: the macOS login item.
 - `web.py` and `web/index.html`: the Lifelog web app.
 
 ## Using the pendant without the Limitless app
@@ -598,7 +617,7 @@ erase`, `ftl clear`, `storage clear`, `storage full-wipe`, `config reset`,
 
 ## Roadmap
 
-- Run `watch` and the app at login, so syncing needs no terminal.
+- Start at login on Linux and Windows (macOS is done).
 - Import the chats in a Limitless export.
 - Let Ask search reminders.
 - An MCP server, so other assistants can query the Lifelog.
