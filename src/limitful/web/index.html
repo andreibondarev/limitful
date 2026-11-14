@@ -202,14 +202,29 @@
   .setup details.more .row { margin-top: 0.6rem; }
   .pill.danger:hover:not(:disabled) { border-color: #b3261e; color: #b3261e; }
   #ask[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  .chat { max-width: 44rem; }
-  .chat .lead { font-family: var(--voice); font-size: 1.2rem; line-height: 1.5; margin: 0 0 1rem; }
-  .chat .tries { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; }
-  .chat .asked {
-    margin: 1.8rem 0 0.7rem; padding-left: 0.9rem; border-left: 3px solid var(--mark);
-    font-family: var(--voice); font-size: 1.3rem; line-height: 1.35; white-space: pre-wrap;
+  main.wide { max-width: 68rem; }
+  .chat { display: grid; grid-template-columns: minmax(0, 44rem) 15rem; gap: 3rem; align-items: start; }
+  .thread { min-width: 0; }
+  .hero { text-align: center; padding: 2.2rem 0 0.4rem; }
+  .hero .star { display: block; margin: 0 auto 1rem; }
+  .hero h2 { margin: 0 0 0.5rem; font-size: clamp(1.7rem, 3.4vw, 2.3rem); line-height: 1.15; }
+  .hero p { margin: 0 auto 1.6rem; max-width: 32rem; color: var(--muted); line-height: 1.5; }
+  .tries { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; margin-bottom: 1.4rem; text-align: left; }
+  .tries button {
+    display: flex; flex-direction: column; gap: 0.55rem; padding: 0.9rem 1rem; cursor: pointer; text-align: left;
+    border: 1px solid var(--rule); border-radius: 14px; background: transparent;
+    font-family: var(--voice); font-size: 1.02rem; line-height: 1.35;
   }
-  .chat .asked:first-child { margin-top: 0.3rem; }
+  .tries button .icon { color: var(--accent); margin: 0; }
+  .tries button:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  .asked {
+    width: fit-content; max-width: 85%; margin: 1.8rem 0 1rem auto; padding: 0.65rem 1rem;
+    border-radius: 18px 18px 4px 18px; background: color-mix(in srgb, var(--accent) 13%, transparent);
+    font-family: var(--voice); font-size: 1.15rem; line-height: 1.4; white-space: pre-wrap;
+  }
+  .asked:first-child { margin-top: 0.3rem; }
+  .answer { display: grid; grid-template-columns: 2.1rem minmax(0, 1fr); align-items: start; }
+  .answer > .star { margin-top: 0.28rem; }
   .chat .reply { font-family: var(--voice); font-size: 1.12rem; line-height: 1.6; }
   .chat .reply p { margin: 0 0 0.8rem; }
   .chat .reply ul { margin: 0 0 0.8rem; padding-left: 1.2rem; }
@@ -221,27 +236,61 @@
     vertical-align: 0.12em;
   }
   .chat .cite:hover { background: var(--accent); color: var(--paper); }
-  .chat .working { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.8rem; }
-  .chat .working.failed { color: #b3261e; }
-  .chat form { display: flex; gap: 0.6rem; align-items: flex-end; margin-top: 1.6rem; }
-  .chat textarea {
-    flex: 1; min-height: 2.9rem; max-height: 12rem; resize: vertical; font: inherit; color: inherit;
-    font-family: var(--voice); font-size: 1.1rem; line-height: 1.4;
-    border: 1px solid var(--rule); border-radius: 10px; background: transparent; padding: 0.6rem 0.8rem;
+  .working { display: grid; grid-template-columns: 2.1rem minmax(0, 1fr); align-items: center; color: var(--muted); font-size: 0.92rem; margin: 0 0 0.8rem; }
+  .working[hidden] { display: none; }
+  .working.failed { color: #b3261e; }
+  .working.busy .star { animation: turn 2.4s linear infinite; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .working.busy .star { animation: none; } }
+  /* The composer stays in view; the dock behind it hides the thread scrolling underneath. */
+  .dock {
+    position: sticky; bottom: var(--player, 0px); margin-top: 1rem; padding: 0.4rem 0 0.9rem;
+    background: var(--paper);
   }
-  .chat textarea::placeholder { color: var(--muted); }
-  .chat .fine { margin-top: 0.6rem; color: var(--muted); font-size: 0.8rem; }
-  .chat .past { margin-top: 2rem; border-top: 1px solid var(--rule); padding-top: 0.8rem; }
-  .chat .past summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; margin-bottom: 0.4rem; }
-  .chat .past .row { display: flex; align-items: baseline; gap: 0.8rem; padding: 0.35rem 0; }
-  .chat .past .open {
-    border: 0; background: none; padding: 0; cursor: pointer; text-align: left; flex: 1;
-    font-family: var(--voice); font-size: 1.05rem; color: var(--ink);
+  .dock::before {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 1.6rem; pointer-events: none;
+    background: linear-gradient(to top, var(--paper), transparent);
   }
-  .chat .past .open:hover { color: var(--accent); }
-  .chat .past small { color: var(--muted); white-space: nowrap; }
-  .chat .past .remove { border: 0; background: none; padding: 0; cursor: pointer; color: var(--muted); font-size: 0.8rem; }
-  .chat .past .remove:hover { color: #b3261e; }
+  .composer {
+    display: flex; align-items: flex-end; gap: 0.5rem; padding: 0.45rem 0.45rem 0.45rem 1rem;
+    border: 1px solid var(--rule); border-radius: 22px; background: var(--paper);
+    box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 9%, transparent);
+  }
+  .composer:focus-within { border-color: var(--accent); }
+  .composer textarea {
+    flex: 1; min-height: 2.5rem; max-height: 12rem; resize: none; border: 0; background: transparent; outline: 0;
+    font: inherit; color: inherit; font-family: var(--voice); font-size: 1.1rem; line-height: 1.4; padding: 0.45rem 0;
+  }
+  .composer textarea::placeholder { color: var(--muted); }
+  .composer button {
+    flex: none; width: 2.6rem; height: 2.6rem; border: 0; border-radius: 50%; cursor: pointer;
+    display: grid; place-items: center; background: var(--ink); color: var(--paper);
+  }
+  .composer button .icon { margin: 0; }
+  .composer button:hover:not(:disabled) { background: var(--accent); }
+  .composer button:disabled { opacity: 0.4; cursor: default; }
+  .chat .fine { margin: 0.55rem 0 0; color: var(--muted); font-size: 0.78rem; text-align: center; }
+  .side { position: sticky; top: 9.5rem; padding-left: 1.4rem; border-left: 1px solid var(--rule); }
+  .side h3 { margin: 0 0 0.7rem; font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; gap: 0.45rem; }
+  .side .new { width: 100%; justify-content: center; display: flex; align-items: center; margin-bottom: 0.9rem; }
+  .side .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0.4rem; padding: 0.45rem 0.55rem; margin: 0 -0.55rem; border-radius: 8px; }
+  .side .row.now { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+  .side .open {
+    border: 0; background: none; padding: 0; cursor: pointer; text-align: left;
+    font-family: var(--voice); font-size: 0.98rem; line-height: 1.3; color: var(--ink);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .side .open:hover { color: var(--accent); }
+  .side small { grid-column: 1; color: var(--muted); font-size: 0.76rem; }
+  .side .remove { grid-row: 1; grid-column: 2; border: 0; background: none; padding: 0; cursor: pointer; color: var(--muted); font-size: 0.76rem; opacity: 0; }
+  .side .row:hover .remove, .side .remove:focus-visible, .side .remove.sure { opacity: 1; }
+  .side .remove:hover, .side .remove.sure { color: #b3261e; }
+  .side .none { color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+  @media (max-width: 900px) {
+    .chat { grid-template-columns: 1fr; gap: 2rem; }
+    .side { position: static; padding: 1rem 0 0; border-left: 0; border-top: 1px solid var(--rule); }
+    .tries { grid-template-columns: 1fr; }
+  }
   .pill:disabled { opacity: 0.5; cursor: default; }
   .pill.main { background: var(--ink); color: var(--paper); border-color: var(--ink); }
   .pill.main:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--paper); }
@@ -424,6 +473,11 @@ const ICONS = {
   import: "M12 3v11 M7.5 9.5 12 14l4.5-4.5 M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3",
   pendant: "M9 4.5h6v4H9Z M12 21a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Z",
   key: "M14.5 9.5a4 4 0 1 0-3.6 4l1.6 1.5h2v2h2v2h3v-3l-5.2-5.2c.1-.4.2-.9.2-1.3Z",
+  send: "M12 19V5 M6 11l6-6 6 6",
+  plus: "M12 5v14 M5 12h14",
+  chats: "M4 6h16 M4 12h16 M4 18h10",
+  people: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z M3.5 19a5.5 5.5 0 0 1 11 0 M16 11a2.5 2.5 0 1 0 0-5 M17.5 14.2A4.8 4.8 0 0 1 20.5 19",
+  day: "M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z M4 10h16 M8 4v4 M16 4v4",
   pause: "M9 5v14 M15 5v14",
   play: "M8 5v14l11-7Z",
   link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
@@ -439,6 +493,15 @@ function icon(name, size = 18) {
   const svg = svgEl("svg", { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor",
     "stroke-width": 1.7, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true", class: "icon" });
   svg.append(svgEl("path", { d: ICONS[name] }));
+  return svg;
+}
+/* The Limitful asterisk, as the answering voice in Ask. */
+function star(size) {
+  const svg = svgEl("svg", { viewBox: "-42 -42 84 84", width: size, height: size, "aria-hidden": "true", class: "star" });
+  for (let i = 0; i < 6; i++) {
+    svg.append(svgEl("path", { d: "M-2.6 0L-6.4 -33.6A6.4 6.4 0 0 1 6.4 -33.6L2.6 0Z", fill: "var(--mark)", transform: `rotate(${i * 60})` }));
+  }
+  svg.append(svgEl("circle", { r: 4.2, fill: "var(--mark)" }));
   return svg;
 }
 /* A heading or button label with its icon in front. */
@@ -515,6 +578,7 @@ async function countReminders() {
 }
 
 async function showReminders() {
+  main.classList.remove("wide");
   reminding = true;
   configuring = false;
   asking = false;
@@ -767,6 +831,7 @@ function reveal(id, mark) {
 }
 
 async function openDay(key, revealId, revealTalk, startPlaying) {
+  main.classList.remove("wide");
   searching = false;
   reminding = false;
   configuring = false;
@@ -796,6 +861,7 @@ function step(direction) {
 }
 
 async function runSearch(query) {
+  main.classList.remove("wide");
   searching = true;
   reminding = false;
   configuring = false;
@@ -904,6 +970,7 @@ function advance() {
 function markPlaying() {
   document.querySelectorAll(".on").forEach((n) => n.classList.remove("on"));
   $("player").hidden = !playing;
+  document.body.style.setProperty("--player", playing ? "6.2rem" : "0px");
   if (!playing) return;
   $(`u${playing.id}`)?.classList.add("on");
   $(`s${playing.id}`)?.classList.add("on");
@@ -1019,6 +1086,7 @@ $("file").addEventListener("change", async (e) => {
 
 /* Settings: what writes summaries, the Anthropic key, and importing an export. */
 async function showSettings() {
+  main.classList.remove("wide");
   configuring = true;
   reminding = false;
   searching = false;
@@ -1289,53 +1357,80 @@ function showAsk() {
   for (const [id, on] of [["ask", true], ["remind", false], ["settings", false]]) $(id).setAttribute("aria-pressed", String(on));
   $("title").textContent = "Ask";
   strip.replaceChildren();
+  main.classList.add("wide");
 
-  const box = el("div", { className: "chat" });
-  const working = el("p", { className: "working", role: "status" });
+  const thread = el("div", { className: "thread" });
+  const side = el("aside", { className: "side", ariaLabel: "Your chats" });
+  const box = el("div", { className: "chat" }, thread, side);
+  // What Claude is doing right now, with the mark turning while it works.
+  const workingText = el("span");
+  const working = el("p", { className: "working", role: "status", hidden: true }, star(20), workingText);
+  const tell = (text, { busy = false, failed = false } = {}) => {
+    workingText.textContent = text;
+    working.hidden = !text;
+    working.classList.toggle("busy", busy);
+    working.classList.toggle("failed", failed);
+  };
   const field = el("textarea", { rows: 1, placeholder: "Ask about anything you've said or heard", ariaLabel: "Your question" });
-  const go = el("button", { className: "pill main", textContent: "Ask", type: "submit" });
-  const form = el("form", {}, field, go);
-  const fresh = el("button", { className: "pill", textContent: "New chat", type: "button", hidden: !chat.length });
+  const go = el("button", { type: "submit", ariaLabel: "Ask", title: "Ask" }, icon("send", 20));
+  const form = el("form", { className: "composer" }, field, go);
+  const grow = () => { field.style.height = "auto"; field.style.height = `${Math.min(field.scrollHeight, 192)}px`; };
+
+  const paintSide = () => {
+    const fresh = el("button", { className: "pill new", type: "button" }, ...withIcon("plus", "New chat", 16));
+    fresh.addEventListener("click", () => { if (!chatBusy) { chat = []; chatId = null; paint(); field.focus(); } });
+    const rows = threads.map((t) => {
+      const open = el("button", { className: "open", type: "button", textContent: t.title, title: t.title });
+      open.addEventListener("click", () => loadThread(t.id));
+      const remove = el("button", { className: "remove", type: "button", textContent: "Delete", ariaLabel: `Delete the chat “${t.title}”` });
+      remove.addEventListener("click", async () => {
+        if (!remove.classList.contains("sure")) { remove.classList.add("sure"); remove.textContent = "Really?"; return; }
+        try {
+          await post(`/api/chats/${t.id}/delete`, {});
+          threads = await get("/api/chats");
+          if (t.id === chatId) { chat = []; chatId = null; }
+          paint();
+        } catch (err) { remove.textContent = "Failed"; }
+      });
+      const when = `${shortWhen.format(new Date(t.updated))}, ${t.questions} question${t.questions === 1 ? "" : "s"}`;
+      return el("div", { className: t.id === chatId ? "row now" : "row" }, open, remove, el("small", { textContent: when }));
+    });
+    side.replaceChildren(
+      el("h3", {}, ...withIcon("chats", "Chats", 16)),
+      fresh,
+      ...(rows.length ? rows : [el("p", { className: "none", textContent: "Your chats are saved here, on this computer." })]));
+  };
 
   const paint = () => {
-    const thread = [];
+    const turns = [];
     for (const turn of chat) {
-      if (turn.role === "user") thread.push(el("p", { className: "asked", textContent: turn.content }));
-      else thread.push(el("div", { className: "reply" }, ...replyNodes(turn.content, turn.lines || {})));
+      if (turn.role === "user") turns.push(el("p", { className: "asked", textContent: turn.content }));
+      else turns.push(el("div", { className: "answer" }, star(20), el("div", { className: "reply" }, ...replyNodes(turn.content, turn.lines || {}))));
     }
-    const lead = chat.length ? [] : [
-      el("p", { className: "lead", textContent: "Ask what was said, what you agreed to, or when something came up. Answers link to the lines they come from, so you can hear the moment." }),
-      el("div", { className: "tries" }, ...[
-        "What did I agree to do this week?",
-        "Who did I talk to most recently, and about what?",
-        "What were the main things discussed on my busiest day?",
-      ].map((q) => { const b = el("button", { className: "pill", textContent: q, type: "button" }); b.addEventListener("click", () => send(q)); return b; })),
-    ];
-    fresh.hidden = !chat.length;
-    const others = threads.filter((t) => t.id !== chatId);
-    const past = el("details", { className: "past", open: !chat.length, hidden: !others.length },
-      el("summary", { textContent: `Earlier chats (${others.length})` }),
-      ...others.map((t) => {
-        const open = el("button", { className: "open", type: "button", textContent: t.title });
-        open.addEventListener("click", () => loadThread(t.id));
-        const remove = el("button", { className: "remove", type: "button", textContent: "Delete", ariaLabel: `Delete the chat “${t.title}”` });
-        remove.addEventListener("click", async () => {
-          if (remove.textContent === "Delete") { remove.textContent = "Really delete?"; return; }
-          try { await post(`/api/chats/${t.id}/delete`, {}); threads = await get("/api/chats"); paint(); }
-          catch (err) { remove.textContent = "Could not delete"; }
-        });
-        const when = `${shortWhen.format(new Date(t.updated))}, ${t.questions} question${t.questions === 1 ? "" : "s"}`;
-        return el("div", { className: "row" }, open, el("small", { textContent: when }), remove);
-      }));
-    box.replaceChildren(...lead, ...thread, working, form,
-      el("p", { className: "fine" }, "Your questions and the transcript lines Claude reads are sent to Anthropic. Chats are saved on this computer. ", fresh),
-      past);
+    const tries = [
+      ["reminders", "What did I agree to do this week?"],
+      ["people", "Who did I talk to most recently, and about what?"],
+      ["day", "What were the main things discussed on my busiest day?"],
+    ].map(([name, q]) => {
+      const b = el("button", { type: "button" }, icon(name, 20), el("span", { textContent: q }));
+      b.addEventListener("click", () => send(q));
+      return b;
+    });
+    const hero = chat.length ? [] : [el("div", { className: "hero" },
+      star(64),
+      el("h2", { textContent: "What do you want to find?" }),
+      el("p", { textContent: "Ask what was said, what you agreed to, or when something came up. Every answer links to the lines it came from, so you can hear the moment." }),
+      el("div", { className: "tries" }, ...tries))];
+    thread.replaceChildren(...hero, ...turns, working, el("div", { className: "dock" }, form,
+      el("p", { className: "fine", textContent: "Your questions and the transcript lines Claude reads are sent to Anthropic." })));
+    paintSide();
+    grow();
   };
 
   const loadThread = async (id) => {
     if (chatBusy) return;
-    try { chat = await get(`/api/chats/${id}`); chatId = id; paint(); field.focus(); }
-    catch (err) { working.textContent = `Could not open that chat. ${err.message}`; working.classList.add("failed"); }
+    try { chat = await get(`/api/chats/${id}`); chatId = id; tell(""); paint(); field.focus(); }
+    catch (err) { tell(`Could not open that chat. ${err.message}`, { failed: true }); }
   };
 
   const send = async (question) => {
@@ -1346,18 +1441,18 @@ function showAsk() {
     field.value = "";
     paint();
     go.disabled = true;
-    working.classList.remove("failed");
-    working.textContent = "Thinking…";
+    tell("Thinking…", { busy: true });
     working.scrollIntoView({ block: "nearest" });
     let failure = null;
     // The answer appears as it is written. Citations become links once it is complete.
     let draft = "";
-    const live = el("div", { className: "reply" });
+    const liveBody = el("div", { className: "reply" });
+    const live = el("div", { className: "answer" }, star(20), liveBody);
     const drawDraft = () => {
       const shown = draft.replace(/\[L\d+\]/g, "").replace(/\[L?\d*$/, "").replace(/\*\*?$/, "");
-      live.replaceChildren(...replyNodes(shown, {}));
+      liveBody.replaceChildren(...replyNodes(shown, {}));
       if (!live.isConnected && shown.trim()) working.before(live);
-      if (asking) working.scrollIntoView({ block: "nearest" });
+      if (asking) form.scrollIntoView({ block: "nearest" });
     };
     try {
       const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -1368,10 +1463,10 @@ function showAsk() {
       const take = (line) => {
         if (!line.trim()) return;
         const item = JSON.parse(line);
-        if (item.step) working.textContent = `${item.step}…`;
+        if (item.step) tell(`${item.step}…`, { busy: true });
         else if (item.text === null) { draft = ""; live.remove(); }
         else if (typeof item.text === "string") {
-          if (!draft) working.textContent = "";
+          if (!draft) tell("");
           draft += item.text;
           drawDraft();
         }
@@ -1399,23 +1494,22 @@ function showAsk() {
     if (!failure) { try { threads = await get("/api/chats"); } catch { /* the list catches up next time */ } }
     if (failure) {
       chat.pop();  // the question was not answered; put it back in the box to retry
-      if (asking) { paint(); field.value = question; }
+      if (asking) { paint(); field.value = question; grow(); }
     } else if (asking) paint();
     go.disabled = false;
-    working.textContent = failure ? `No answer. ${failure}` : "";
-    working.classList.toggle("failed", Boolean(failure));
+    tell(failure ? `No answer. ${failure}` : "", { failed: Boolean(failure) });
     if (asking) { (failure ? working : form).scrollIntoView({ block: "nearest" }); field.focus(); }
   };
 
   form.addEventListener("submit", (e) => { e.preventDefault(); send(field.value); });
+  field.addEventListener("input", grow);
   field.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(field.value); }
   });
-  fresh.addEventListener("click", () => { if (!chatBusy) { chat = []; chatId = null; paint(); field.focus(); } });
   paint();
   main.replaceChildren(box);
   get("/api/chats").then((list) => { threads = list; if (asking && !chatBusy) paint(); }).catch(() => {});
-  if (chatBusy) { go.disabled = true; working.textContent = "Still working on the last question…"; }
+  if (chatBusy) { go.disabled = true; tell("Still working on the last question…", { busy: true }); }
   field.focus();
 }
 $("ask").addEventListener("click", () => asking ? openDay(day) : showAsk());
