@@ -520,11 +520,16 @@ class Library:
         db = self._db()
         try:
             counts = Counter(_day_of(ms) for (ms,) in db.execute("SELECT start_ms FROM utterances"))
+            talks = Counter(_day_of(ms) for (ms,) in db.execute(
+                "SELECT start_ms FROM conversations WHERE status = 'done'"))
+            headlines = dict(db.execute("SELECT day, headline FROM day_recaps"))
         except sqlite3.OperationalError:
-            counts = Counter()  # no recordings yet
+            counts, talks, headlines = Counter(), Counter(), {}  # no recordings yet
         finally:
             db.close()
-        return [{"day": day, "lines": n} for day, n in sorted(counts.items())]
+        # Enough for a calendar: how much was said, in how many conversations, and the recap's headline.
+        return [{"day": day, "lines": n, "talks": talks.get(day, 0), "headline": headlines.get(day)}
+                for day, n in sorted(counts.items())]
 
     def day(self, day: str) -> list[dict]:
         start = datetime.strptime(day, "%Y-%m-%d")

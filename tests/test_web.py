@@ -64,7 +64,7 @@ def site(tmp_path):
 def test_page_and_days(site):
     status, headers, body = site("/")
     assert status == 200 and b"Lifelog" in body and "text/html" in headers["Content-Type"]
-    assert json.loads(site("/api/days")[2]) == [{"day": "2026-11-13", "lines": 4}]
+    assert json.loads(site("/api/days")[2]) == [{"day": "2026-11-13", "lines": 4, "talks": 1, "headline": None}]
 
 
 def test_day_lists_lines_with_audio_offsets(site):
@@ -618,3 +618,13 @@ def test_pairing_clears_an_earlier_not_paired_failure(site, monkeypatch):
     assert job["note"].startswith("Paired")
     after = json.loads(site("/api/pendant")[2])
     assert (after["error"], after["checked"], after["advice"]) == (None, None, None)
+
+
+def test_days_carry_what_the_calendar_shows(site, tmp_path):
+    store = Store(tmp_path)
+    store.db.execute("INSERT INTO day_recaps (day, headline, points, engine, signature, made_ms) "
+                     "VALUES ('2026-11-13', 'Shopping, then a call', '[]', 'x', 's', 1)")
+    store.db.commit()
+    store.close()
+    (only,) = json.loads(site("/api/days")[2])
+    assert (only["talks"], only["headline"]) == (1, "Shopping, then a call")

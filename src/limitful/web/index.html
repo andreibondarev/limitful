@@ -75,6 +75,39 @@
   }
   .step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .step:disabled { opacity: 0.35; cursor: default; }
+  #when { position: relative; }
+  #pick { cursor: pointer; display: inline-flex; align-items: center; font-variant-numeric: tabular-nums; }
+  #pick:hover, #pick[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+  #calendar {
+    position: absolute; top: calc(100% + 0.5rem); left: 0; z-index: 5; width: 20.5rem; padding: 0.9rem 1rem 1rem;
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 14px;
+    box-shadow: 0 12px 32px color-mix(in srgb, var(--ink) 18%, transparent);
+  }
+  #calendar[hidden] { display: none; }
+  #calendar .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+  #calendar .top b { font-family: var(--voice); font-size: 1.15rem; font-weight: 400; }
+  #calendar .month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  #calendar .dow { text-align: center; font-size: 0.72rem; color: var(--muted); padding-bottom: 0.2rem; }
+  #calendar .month button {
+    aspect-ratio: 1; border: 0; border-radius: 8px; background: transparent; cursor: pointer;
+    font-size: 0.85rem; font-variant-numeric: tabular-nums; color: var(--ink);
+  }
+  #calendar .month button:disabled { color: color-mix(in srgb, var(--muted) 55%, transparent); cursor: default; }
+  #calendar .month button.l1, #calendar .key .l1 { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  #calendar .month button.l2, #calendar .key .l2 { background: color-mix(in srgb, var(--accent) 32%, transparent); }
+  #calendar .month button.l3, #calendar .key .l3 { background: color-mix(in srgb, var(--accent) 58%, transparent); }
+  #calendar .month button.l4, #calendar .key .l4 { background: var(--accent); }
+  #calendar .month button.l3, #calendar .month button.l4 { color: var(--paper); }
+  #calendar .month button:not(:disabled):hover { box-shadow: 0 0 0 2px var(--ink); }
+  #calendar .month .picked { box-shadow: 0 0 0 2px var(--mark); }
+  #calendar .month .today { text-decoration: underline; text-underline-offset: 3px; }
+  #calendar .key { display: flex; align-items: center; justify-content: flex-end; gap: 0.25rem; margin-top: 0.55rem; font-size: 0.72rem; color: var(--muted); }
+  #calendar .key i { width: 0.8rem; height: 0.8rem; border-radius: 3px; }
+  #calendar .detail { margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid var(--rule); min-height: 5.6rem; font-size: 0.88rem; line-height: 1.4; }
+  #calendar .detail b { display: block; font-weight: 600; }
+  #calendar .detail small { color: var(--muted); }
+  #calendar .detail p { margin: 0.3rem 0 0; color: var(--muted); }
+  #calendar .detail p.said { font-family: var(--voice); font-size: 1rem; color: var(--ink); }
   #pick, #search {
     border: 1px solid var(--rule); border-radius: 999px;
     background: transparent; padding: 0.4rem 0.85rem;
@@ -172,7 +205,7 @@
   .daygrid { display: grid; grid-template-columns: minmax(0, 1fr) 21rem; gap: 3.5rem; align-items: start; }
   .daygrid.solo { grid-template-columns: minmax(0, 1fr); }
   .daygrid.solo .glance { display: none; }
-  .glance { position: sticky; top: calc(var(--head, 10rem) + 1.5rem); max-height: calc(100vh - var(--head, 10rem) - 8rem); overflow-y: auto; padding-bottom: 0.5rem; }
+  .glance { position: sticky; top: calc(var(--head, 10rem) + 1.5rem); max-height: calc(100vh - var(--head, 10rem) - 4.5rem); overflow-y: auto; padding-bottom: 0.5rem; }
   .glance > section { margin: 0 0 1.6rem; }
   .glance h3 { margin: 0 0 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
   .glance .recap { margin: 0 0 1.6rem; padding: 1rem 1.1rem; max-width: none; }
@@ -607,7 +640,10 @@
     <h1 id="title">Lifelog</h1>
     <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
     <button class="step" id="next" aria-label="Next day with recordings">›</button>
-    <input type="date" id="pick" aria-label="Go to a date">
+    <div id="when">
+      <button id="pick" aria-haspopup="dialog" aria-expanded="false" title="Open the calendar"></button>
+      <div id="calendar" role="dialog" aria-label="Calendar" hidden></div>
+    </div>
     <button id="paused" hidden title="Audio is not being kept. Click to open Settings."><span>Paused</span></button>
     <button id="ask" aria-pressed="false"><span>Ask</span></button>
     <button id="remind" aria-pressed="false"><span id="remindLabel">Reminders</span></button>
@@ -1315,6 +1351,88 @@ new ResizeObserver(([entry]) => {
   document.documentElement.style.setProperty("--head", `${Math.round(entry.target.offsetHeight)}px`);
 }).observe(document.querySelector("header"));
 
+/* The calendar: a month at a time, each day shaded by how much was said, with the day's
+   recap shown as you point at it. */
+const shortDay = new Intl.DateTimeFormat([], { day: "numeric", month: "short", year: "numeric" });
+const monthName = new Intl.DateTimeFormat([], { month: "long", year: "numeric" });
+const weekdayName = new Intl.DateTimeFormat([], { weekday: "narrow" });
+let calendarMonth = null;  // first day of the month on show
+function showPicked() {
+  $("pick").replaceChildren(icon("day", 16), day ? shortDay.format(new Date(dayStart(day))) : "Calendar");
+}
+function closeCalendar() {
+  $("calendar").hidden = true;
+  $("pick").setAttribute("aria-expanded", "false");
+}
+function openCalendar() {
+  const at = new Date(dayStart(day || dayKey(new Date())));
+  calendarMonth = new Date(at.getFullYear(), at.getMonth(), 1);
+  drawCalendar();
+  $("calendar").hidden = false;
+  $("pick").setAttribute("aria-expanded", "true");
+  ($("calendar").querySelector(".picked") || $("calendar").querySelector("button"))?.focus();
+}
+function drawCalendar() {
+  const known = new Map(days.map((d) => [d.day, d]));
+  // Shade against a busy day, not the single busiest, so one marathon does not flatten the rest.
+  const sizes = days.map((d) => d.lines).sort((a, b) => a - b);
+  const busy = sizes.length ? Math.max(1, sizes[Math.floor(0.9 * (sizes.length - 1))]) : 1;
+  const year = calendarMonth.getFullYear(), month = calendarMonth.getMonth();
+  let firstDay = 7;  // Sunday, unless the reader's locale says otherwise
+  try { firstDay = new Intl.Locale(navigator.language).weekInfo?.firstDay ?? 7; } catch { /* keep Sunday */ }
+  const lead = (new Date(year, month, 1).getDay() - (firstDay % 7) + 7) % 7;
+  const count = new Date(year, month + 1, 0).getDate();
+  const today = dayKey(new Date());
+
+  const detail = el("div", { className: "detail" });
+  const describe = (key) => {
+    const d = known.get(key), date = new Date(dayStart(key));
+    const head = el("b", { textContent: longDay.format(date) });
+    if (!d) { detail.replaceChildren(head, el("p", { textContent: "Nothing recorded." })); return; }
+    const what = d.talks ? `${d.talks} conversation${d.talks === 1 ? "" : "s"}` : `${d.lines} line${d.lines === 1 ? "" : "s"}`;
+    detail.replaceChildren(head, el("small", { textContent: what }),
+      el("p", { className: d.headline ? "said" : "", textContent: d.headline || "No recap written for this day." }));
+  };
+  const idle = () => {
+    if (day && new Date(dayStart(day)).getFullYear() === year && new Date(dayStart(day)).getMonth() === month) describe(day);
+    else detail.replaceChildren(el("p", { textContent: "Point at a day to see what it was about." }));
+  };
+
+  const grid = el("div", { className: "month", role: "grid" });
+  for (let n = 0; n < 7; n++) grid.append(el("span", { className: "dow", textContent: weekdayName.format(new Date(2023, 0, 1 + ((firstDay % 7) + n) % 7)) }));
+  for (let n = 0; n < lead; n++) grid.append(el("span"));
+  for (let n = 1; n <= count; n++) {
+    const key = `${year}-${pad(month + 1)}-${pad(n)}`, d = known.get(key);
+    const level = d ? Math.max(1, Math.min(4, Math.ceil(4 * d.lines / busy))) : 0;
+    const cell = el("button", { textContent: String(n), className: `l${level}${key === day ? " picked" : ""}${key === today ? " today" : ""}`, disabled: !d });
+    cell.setAttribute("aria-label", `${longDay.format(new Date(year, month, n))}${d ? `, ${d.lines} lines` : ", nothing recorded"}`);
+    if (d) {
+      cell.addEventListener("click", () => { closeCalendar(); openDay(key); });
+      cell.addEventListener("mouseenter", () => describe(key));
+      cell.addEventListener("focus", () => describe(key));
+    }
+    grid.append(cell);
+  }
+  grid.addEventListener("mouseleave", idle);
+
+  const turn = (by, label, text) => {
+    const b = el("button", { className: "step", textContent: text, ariaLabel: label });
+    b.addEventListener("click", (e) => { e.stopPropagation(); calendarMonth = new Date(year, month + by, 1); drawCalendar(); });
+    return b;
+  };
+  const months = days.map((d) => d.day.slice(0, 7));
+  const here = `${year}-${pad(month + 1)}`;
+  const earlier = turn(-1, "Previous month", "‹"), later = turn(1, "Next month", "›");
+  earlier.disabled = !months.some((m) => m < here);
+  later.disabled = !months.some((m) => m > here);
+  $("calendar").replaceChildren(
+    el("div", { className: "top" }, earlier, el("b", { textContent: monthName.format(calendarMonth) }), later),
+    grid,
+    el("div", { className: "key", ariaHidden: "true" }, "less", ...[1, 2, 3, 4].map((l) => el("i", { className: `l${l}` })), "more said"),
+    detail);
+  idle();
+}
+
 /* A run of stray moments, folded into one row that opens to show them. */
 function scraps(run) {
   const cards = run.map((g) => card(g));
@@ -1386,7 +1504,7 @@ function renderDay() {
   const shown = new Date(dayStart(day));
   $("title").textContent = (shown.getFullYear() === new Date().getFullYear() ? thisYearDay : longDay).format(shown);
   document.title = `Lifelog, ${day}`;
-  $("pick").value = day;
+  showPicked();
   const known = days.map((d) => d.day);
   $("prev").disabled = !known.some((d) => d < day);
   $("next").disabled = !known.some((d) => d > day);
@@ -2539,7 +2657,9 @@ $("home").addEventListener("click", (e) => {
 });
 $("prev").addEventListener("click", () => step(-1));
 $("next").addEventListener("click", () => step(1));
-$("pick").addEventListener("change", (e) => e.target.value && openDay(e.target.value));
+$("pick").addEventListener("click", () => ($("calendar").hidden ? openCalendar() : closeCalendar()));
+document.addEventListener("click", (e) => { if (!$("calendar").hidden && !$("when").contains(e.target)) closeCalendar(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("calendar").hidden) { closeCalendar(); $("pick").focus(); } });
 
 let timer;
 $("search").addEventListener("input", (e) => {

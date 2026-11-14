@@ -127,7 +127,8 @@ carries on through the conversation, with a timeline to jump around in), or
 copy it as Markdown. Each speaker in a conversation has a colour, stray
 words with no conversation around them fold into one quiet row, and on a wide
 screen the day's recap, open reminders and named people sit beside the list.
-Search covers every day. The page only answers on
+The date in the header opens a calendar, with each day shaded by how much
+was said and its recap shown as you point at it. Search covers every day. The page only answers on
 your own machine. Recordings are Ogg Opus, which Chrome and Firefox play;
 older versions of Safari do not.
 
