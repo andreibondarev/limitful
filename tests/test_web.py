@@ -592,3 +592,28 @@ def test_speech_model_download_is_reported_while_it_loads(tmp_path, monkeypatch)
     library.job.update(what="Syncing the pendant")
     library._transcriber()
     assert library.job["what"] == "Syncing the pendant"
+
+
+def test_pairing_clears_an_earlier_not_paired_failure(site, monkeypatch):
+    import time
+
+    from limitful import client
+
+    async def refused(timeout=8.0):
+        raise client.PendantError(client._NOT_PAIRED)
+
+    async def pair(timeout=180.0, log=print):
+        return object()
+
+    monkeypatch.setattr(client, "read_state", refused)
+    monkeypatch.setattr(client, "pair", pair)
+    assert "not paired" in json.loads(site("/api/pendant", JSON, b'{"action": "check"}')[2])["error"]
+    assert site("/api/pendant", JSON, b'{"action": "pair"}')[0] == 200
+    for _ in range(100):
+        job = json.loads(site("/api/status")[2])
+        if not job["running"]:
+            break
+        time.sleep(0.05)
+    assert job["note"].startswith("Paired")
+    after = json.loads(site("/api/pendant")[2])
+    assert (after["error"], after["checked"], after["advice"]) == (None, None, None)

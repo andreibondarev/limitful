@@ -252,6 +252,8 @@ class Library:
             if state is None:
                 raise RuntimeError("the pendant never accepted this computer. Check it showed "
                                    "a blue light, and that you accepted the connection request")
+            # A check made before pairing will have failed with "not paired"; that is over now.
+            self._pendant = {"checked": None, "error": None}
             self.job["note"] = "Paired. The pendant accepted this computer."
         except Exception as err:  # shown in the page
             self.job["error"] = f"Pairing stopped: {err}"
