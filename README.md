@@ -410,6 +410,52 @@ So the default stays on the CPU, and `--device mps` stays available on
 fails, run the command again. The cause was not found. The laptop's GPU was
 shared with other programs during the test, which may matter.
 
+### Keeping "mhm" and "uh": tried, nothing adopted
+
+Local Whisper leaves out most filler words that Limitless's transcripts keep.
+Seven combinations of Whisper settings were tried to get them back, scored
+against Limitless's own text for the same audio. The rule was to adopt a
+setting only if it kept more fillers without inventing lines on silent audio,
+which is the fault the current settings were chosen to stop.
+
+First, on five imported recordings picked for having the most fillers (14
+minutes, 67 filler words in Limitless's text) and twelve pendant recordings
+with nobody speaking (3 minutes):
+
+| Setting | Fillers kept, of 67 | Lines invented on the silent recordings |
+|---|---|---|
+| As shipped | 22 | 0 |
+| Start each file with a prompt full of fillers | 30 | 1 ("Mm-hmm.") |
+| Suppress no tokens | 22 | 0 |
+| Looser speech detector | 33 | 3 ("Thank you." twice, and a line of Russian) |
+| Carry the previous text forward | 50 | 0 |
+| Prompt and looser detector | 29 | 3 |
+| Prompt and carry the previous text | 62 | 1 ("Mm-hmm.") |
+
+Loosening or removing the confidence filter kept no more fillers under any
+setting and let a "Thank you." through on silence. The prompt and the looser
+detector both bring invented lines back, so they are out.
+
+Carrying the previous text forward looked like the answer, so it was run again
+on recordings not chosen for their fillers. It did not hold up:
+
+| | As shipped | Carrying text forward |
+|---|---|---|
+| Nine other imported recordings (22 minutes): fillers kept, of 30 | 8 | 8 |
+| 21 of the pendant's own recordings with speech (12 minutes) | 374 words, no fillers | the same text in 20 of them, no fillers |
+| 60 pendant recordings with nobody speaking (28 minutes): lines invented | 0 | 0 |
+
+It did no harm in that run, but it gained nothing either, and the pendant's
+own recordings are mostly under half a minute, where this setting cannot act
+at all. One good result on hand-picked recordings is not enough to change a
+setting that was turned off for making wrong guesses repeat, so the settings
+are unchanged.
+
+Caveats: fillers were counted, not matched one by one in time; the samples are
+small and from one person's recordings; and Limitless's text is not a perfect
+reference. One-word lines such as "Mhm." or "Yeah." could not be judged: the
+sample held only four such words, and every setting kept all four.
+
 ### Running in the background
 
 ```sh
