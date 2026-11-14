@@ -272,11 +272,17 @@ class OllamaSummarizer:
                 reply = json.loads(response.read())
         except urllib.error.HTTPError as err:
             detail = err.read().decode(errors="replace")[:200]
-            hint = f" Run `ollama pull {self._model}`." if err.code == 404 else ""
-            raise DigestError(f"Ollama error {err.code}: {detail}.{hint}") from None
+            try:  # Ollama answers {"error": "..."}; say what it said, not the wrapping
+                detail = json.loads(detail)["error"]
+            except (ValueError, KeyError, TypeError):
+                pass
+            if err.code == 404:
+                raise DigestError(
+                    f"Ollama does not have the model {self._model}. Run `ollama pull {self._model}`") from None
+            raise DigestError(f"Ollama error {err.code}: {detail}".rstrip(". ")) from None
         except (urllib.error.URLError, TimeoutError, ConnectionError):
             raise DigestError(
-                f"could not reach Ollama at {self._host}. Start it with `ollama serve`."
+                f"could not reach Ollama at {self._host}. Start it with `ollama serve`"
             ) from None
         except json.JSONDecodeError:
             raise DigestError("Ollama's reply was not valid JSON") from None
@@ -288,6 +294,19 @@ class OllamaSummarizer:
             return json.loads(content)
         except json.JSONDecodeError:
             raise DigestError("the local model's reply was not valid JSON") from None
+
+
+def check_ollama(model: str = OLLAMA_MODEL, host: str = OLLAMA_HOST) -> None:
+    """Confirm Ollama is running here and has the model. Raises DigestError if not."""
+    try:
+        with urllib.request.urlopen(f"{host.rstrip('/')}/api/tags", timeout=5) as response:
+            listed = json.loads(response.read())
+        names = {m.get("name", "") for m in listed.get("models", [])}
+    except (urllib.error.URLError, TimeoutError, ConnectionError, ValueError, AttributeError):
+        raise DigestError(f"could not reach Ollama at {host}. Start it with `ollama serve`") from None
+    wanted = model if ":" in model else f"{model}:latest"
+    if model not in names and wanted not in names:
+        raise DigestError(f"Ollama does not have the model {model}. Run `ollama pull {model}`")
 
 
 def check_claude(api_key: str | None = None, model: str = CLAUDE_MODEL) -> None:

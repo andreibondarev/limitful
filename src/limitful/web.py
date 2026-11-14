@@ -476,6 +476,11 @@ class Library:
                 digest_mod.check_claude(candidate or None)
             except digest_mod.DigestError as err:
                 raise ValueError(f"{err}. Nothing was saved.") from None
+        if provider == "ollama":
+            try:  # the same early check: is it running, and does it have the model
+                digest_mod.check_ollama()
+            except digest_mod.DigestError as err:
+                raise ValueError(f"{err}. Nothing was saved.") from None
         if key is None:
             config.update(provider=provider)
         else:

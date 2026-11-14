@@ -239,6 +239,7 @@ def test_settings_save_a_key_without_ever_returning_it(site, monkeypatch, tmp_pa
 
     checked = []
     monkeypatch.setattr(digest, "check_claude", lambda key=None, model=None: checked.append(key))
+    monkeypatch.setattr(digest, "check_ollama", lambda: checked.append("ollama"))
     assert json.loads(site("/api/settings")[2])["provider"] is None
 
     status, _h, body = site("/api/settings", JSON, b'{"provider": "claude", "api_key": " sk-ant-api03-SECRETSECRET1234 "}')
@@ -253,6 +254,7 @@ def test_settings_save_a_key_without_ever_returning_it(site, monkeypatch, tmp_pa
 
     # Changing the provider alone keeps the key; an empty key removes it.
     assert json.loads(site("/api/settings", JSON, b'{"provider": "ollama"}')[2])["has_key"] is True
+    assert checked[-1] == "ollama"
     after = json.loads(site("/api/settings", JSON, b'{"provider": "", "api_key": ""}')[2])
     assert (after["provider"], after["has_key"]) == (None, False)
 
@@ -266,6 +268,14 @@ def test_settings_reject_a_key_anthropic_refuses(site, monkeypatch):
     monkeypatch.setattr(digest, "check_claude", refuse)
     status, _h, body = site("/api/settings", JSON, b'{"provider": "claude", "api_key": "sk-ant-wrong-000000"}')
     assert status == 400 and b"Nothing was saved" in body
+    assert config.load() == {}
+
+    def absent():
+        raise digest.DigestError("could not reach Ollama at http://localhost:11434. Start it with `ollama serve`")
+
+    monkeypatch.setattr(digest, "check_ollama", absent)
+    status, _h, body = site("/api/settings", JSON, b'{"provider": "ollama"}')
+    assert status == 400 and b"ollama serve" in body and b"Nothing was saved" in body
     assert config.load() == {}
     assert site("/api/settings", JSON, b'{"provider": "gpt"}')[0] == 400
     assert site("/api/settings", {"Content-Type": "text/plain"}, b'{}')[0] == 415

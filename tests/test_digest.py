@@ -156,6 +156,13 @@ def ollama():
         def log_message(self, format, *args):
             pass
 
+        def do_GET(self):
+            body = json.dumps({"models": [{"name": "tiny:latest"}, {"name": "other:7b"}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         def do_POST(self):
             state["path"] = self.path
             state["request"] = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -193,6 +200,15 @@ def test_ollama_failures_are_explained(ollama):
         engine.summarize("x")
     with pytest.raises(digest.DigestError, match="ollama serve"):
         digest.OllamaSummarizer("tiny", "http://127.0.0.1:9").summarize("x")
+
+
+def test_checking_ollama_before_it_is_chosen(ollama):
+    digest.check_ollama("tiny", ollama["host"])
+    digest.check_ollama("other:7b", ollama["host"])
+    with pytest.raises(digest.DigestError, match="ollama pull llama3.1"):
+        digest.check_ollama("llama3.1", ollama["host"])
+    with pytest.raises(digest.DigestError, match="ollama serve"):
+        digest.check_ollama("tiny", "http://127.0.0.1:9")
 
 
 def test_unknown_provider():

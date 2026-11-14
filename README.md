@@ -90,7 +90,6 @@ Early, but working: it runs daily against one real pendant on macOS. Not yet
 verified:
 
 - Linux and Windows.
-- Summaries from Ollama.
 - Unpair over Bluetooth, and the pairing buttons in the app (run against a
   simulated pendant only).
 - Any pendant other than the one it was built on.

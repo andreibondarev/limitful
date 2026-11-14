@@ -70,7 +70,11 @@ what writes them, under Settings, Summaries:
   `ANTHROPIC_API_KEY` environment variable or an `ant auth login` sign-in.
   The text of each conversation is sent to Anthropic; audio is not.
 - **Ollama**: a model running on your own machine (`llama3.1` by default), so
-  nothing leaves it.
+  nothing leaves it. Run `ollama pull llama3.1` first; Settings checks that
+  Ollama is running and has the model before saving the choice. Tried on the
+  made-up demo conversations, it took about seven seconds each and wrote
+  usable titles and summaries, but suggested three times as many reminders as
+  Claude and got some details wrong.
 
 New conversations are summarised after each sync. `uv run limitful digest`
 does it by hand, and `--redo` writes them again for conversations recorded

@@ -394,6 +394,8 @@ async def _cmd_digest(args) -> int:
         def progress(done: int, total: int) -> None:
             print(f"\r  {done}/{total} conversations", end="", file=sys.stderr, flush=True)
 
+        recaps = "SELECT day, signature FROM day_recaps"
+        before = set(store.db.execute(recaps))
         try:
             done = await asyncio.to_thread(store.digest_pending, summarizer, progress)
         except DigestError as err:
@@ -406,12 +408,14 @@ async def _cmd_digest(args) -> int:
                 print(f"\r  {n}/{total} days", end="", file=sys.stderr, flush=True)
 
             try:
-                days = await asyncio.to_thread(store.recap_pending, summarizer, True, day_progress)
+                await asyncio.to_thread(store.recap_pending, summarizer, True, day_progress)
             except DigestError as err:
                 print(file=sys.stderr)
                 raise PendantError(f"{err}. Recaps already written were kept.") from None
             print(file=sys.stderr)
-            print(f"Wrote a recap for {days} day(s).")
+        written = len(set(store.db.execute(recaps)) - before)
+        if written or args.days:
+            print(f"Wrote a recap for {written} day(s).")
         waiting = [r for r in store.reminders() if r["status"] == "suggested"]
         if waiting:
             print(f"{len(waiting)} suggested reminder(s) to review in the Lifelog.")
