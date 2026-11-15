@@ -91,10 +91,7 @@
   }
   #home { display: flex; align-items: center; border-radius: 9px; flex: none; color: var(--ink); }
   #home svg { display: block; }
-  #home .name { display: none; margin-right: 0.6rem; }
-  #home:hover { color: var(--accent); }
-  /* The name joins the mark only where the header has room to spare. */
-  @media (min-width: 1500px) { #home .star { display: none; } #home .name { display: block; } }
+  #home:hover { filter: brightness(1.12); }
   .wordmark { display: block; color: var(--ink); }
   .step {
     width: 2.25rem; height: 2.25rem;
@@ -709,7 +706,7 @@
 <svg width="0" height="0" style="position: absolute" aria-hidden="true"><defs><g id="wordmark"><g transform="translate(65.6 70.0)" fill="var(--star)"><path d="M -3.74 0 L -9.22 -48.38 A 9.22 9.22 0 0 1 9.22 -48.38 L 3.74 0 Z" transform="rotate(0)"/><path d="M -3.74 0 L -9.22 -48.38 A 9.22 9.22 0 0 1 9.22 -48.38 L 3.74 0 Z" transform="rotate(60)"/><path d="M -3.74 0 L -9.22 -48.38 A 9.22 9.22 0 0 1 9.22 -48.38 L 3.74 0 Z" transform="rotate(120)"/><path d="M -3.74 0 L -9.22 -48.38 A 9.22 9.22 0 0 1 9.22 -48.38 L 3.74 0 Z" transform="rotate(180)"/><path d="M -3.74 0 L -9.22 -48.38 A 9.22 9.22 0 0 1 9.22 -48.38 L 3.74 0 Z" transform="rotate(240)"/><path d="M -3.74 0 L -9.22 -48.38 A 9.22 9.22 0 0 1 9.22 -48.38 L 3.74 0 Z" transform="rotate(300)"/><circle r="6.05"/></g><path d="M155.1 118V22H173.7V118ZM168.7 118V101.4H217.6V118Z M229.1 118V52H247.1V118ZM238.1 41.5Q233.8 41.5 230.9 38.5Q228 35.6 228 31.2Q228 26.9 230.9 23.9Q233.8 21 238.1 21Q242.6 21 245.4 23.9Q248.2 26.9 248.2 31.2Q248.2 35.6 245.4 38.5Q242.6 41.5 238.1 41.5Z M262.9 118V52H280.9V118ZM305.9 118V79.1Q305.9 73.3 302.4 70.1Q298.8 66.9 293.5 66.9Q289.9 66.9 287 68.3Q284.2 69.8 282.5 72.5Q280.9 75.2 280.9 79.1L273.9 75.7Q273.9 68 277.2 62.4Q280.6 56.9 286.3 53.8Q292.1 50.7 299.2 50.7Q306.2 50.7 311.8 53.7Q317.3 56.8 320.6 62.4Q323.9 67.9 323.9 75.6V118ZM349 118V79.1Q349 73.3 345.4 70.1Q341.8 66.9 336.5 66.9Q333 66.9 330.1 68.3Q327.2 69.8 325.6 72.5Q323.9 75.2 323.9 79.1L313.6 76.7Q314.1 68.7 317.8 62.9Q321.5 57.1 327.6 53.9Q333.6 50.7 341 50.7Q348.3 50.7 354.2 53.8Q360 56.9 363.5 62.6Q366.9 68.3 366.9 76.3V118Z M381.4 118V52H399.3V118ZM390.4 41.5Q386 41.5 383.2 38.5Q380.3 35.6 380.3 31.2Q380.3 26.9 383.2 23.9Q386 21 390.4 21Q394.8 21 397.6 23.9Q400.4 26.9 400.4 31.2Q400.4 35.6 397.6 38.5Q394.8 41.5 390.4 41.5Z M424.9 118V24.7H442.8V118ZM409.5 67.7V52H458.2V67.7Z M477 118V44.9Q477 37.1 480.5 31Q484 24.9 490.2 21.4Q496.5 17.8 504.9 17.8Q511.3 17.8 516 20Q520.6 22.1 524.4 26L513 37.4Q511.5 35.9 509.7 35.1Q507.9 34.3 505.2 34.3Q500.4 34.3 497.7 36.9Q495 39.6 495 44.5V118ZM461.9 67.7V52H514.5V67.7Z M553.7 119.4Q545 119.4 538.2 115.7Q531.5 112 527.7 105.4Q523.9 98.9 523.9 90.3V52H541.8V89.9Q541.8 94 543.2 96.9Q544.6 99.8 547.3 101.4Q550 102.9 553.7 102.9Q559.3 102.9 562.4 99.5Q565.5 96.1 565.5 89.9V52H583.5V90.3Q583.5 99 579.7 105.5Q575.9 112.1 569.2 115.8Q562.5 119.4 553.7 119.4Z M597.6 118V19.3H615.6V118Z" fill="currentColor"/></g></defs></svg>
 <header>
   <div class="bar">
-    <a id="home" href="#" aria-label="Limitful: go to the latest day" title="Limitful (*limits apply)"><svg class="star" viewBox="4 8 124 124" width="34" height="34" aria-hidden="true"><use href="#wordmark"/></svg><svg class="name" viewBox="4 8 624 124" height="27" aria-hidden="true"><use href="#wordmark"/></svg></a>
+    <a id="home" href="#" aria-label="Limitful: go to the latest day" title="Limitful (*limits apply)"><svg class="star" viewBox="4 8 124 124" width="34" height="34" aria-hidden="true"><use href="#wordmark"/></svg></a>
     <h1 id="title">Lifelog</h1>
     <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
     <button class="step" id="next" aria-label="Next day with recordings">›</button>
