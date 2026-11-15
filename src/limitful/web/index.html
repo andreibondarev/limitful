@@ -699,6 +699,27 @@
     .line.tinted { background-position-x: calc(var(--gutter) - 0.45rem); }
     #calendar { position: fixed; top: 4.5rem; left: 1rem; right: 1rem; width: auto; }
   }
+  /* Quick find (⌘K): one box over the page that goes to a day or a page, or finds what was said. */
+  #quick {
+    width: min(40rem, calc(100vw - 2rem)); margin-top: 12vh; padding: 0; overflow: hidden;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--rule); border-radius: 16px;
+    box-shadow: 0 24px 60px color-mix(in srgb, #000 28%, transparent);
+  }
+  #quick::backdrop { background: color-mix(in srgb, var(--paper) 72%, transparent); }
+  #quick .in { display: flex; align-items: center; gap: 0.7rem; padding: 0.9rem 1.2rem; border-bottom: 1px solid var(--rule); color: var(--muted); }
+  #quickIn { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-family: var(--voice); font-size: 1.35rem; color: var(--ink); }
+  #quickIn::placeholder { color: var(--muted); }
+  #quick kbd { font: inherit; font-size: 0.75rem; color: var(--muted); border: 1px solid var(--rule); border-radius: 5px; padding: 0 0.35rem; }
+  #quickList { max-height: min(26rem, 56vh); overflow-y: auto; padding-bottom: 0.5rem; }
+  #quickList h3 { margin: 0.8rem 1.2rem 0.2rem; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+  #quickList .row { display: grid; grid-template-columns: 7.2rem minmax(0, 1fr); align-items: baseline; padding: 0.45rem 1.2rem; cursor: pointer; }
+  #quickList .row.wide { grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; }
+  #quickList .row.on { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  #quickList .row time, #quickList .row small { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #quickList .row p { margin: 0; font-family: var(--voice); font-size: 1.05rem; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #quickList mark { background: var(--mark); color: var(--mark-ink); border-radius: 3px; padding: 0 0.15em; }
+  #quick .foot { display: flex; gap: 1.2rem; flex-wrap: wrap; padding: 0.55rem 1.2rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.8rem; }
+  @media (max-width: 620px) { #quick { margin-top: 1rem; } #quick .foot { display: none; } #quickList .row { grid-template-columns: 5.6rem minmax(0, 1fr); } }
 </style>
 </head>
 <body>
@@ -719,7 +740,7 @@
     <button id="remind" aria-pressed="false"><span id="remindLabel">Reminders</span></button>
     <button id="settings" aria-pressed="false" aria-label="Settings" title="Settings"></button>
     <input type="file" id="file" accept=".zip,application/zip" hidden>
-    <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said">
+    <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said" title="Search what was said. For quick find, press ⌘K or Ctrl+K.">
   </div>
   <p id="status" role="status" hidden></p>
   <p id="demobar" hidden></p>
@@ -739,6 +760,15 @@
   </div>
 </div>
 <audio id="audio" preload="auto"></audio>
+<dialog id="quick" aria-label="Quick find">
+  <div class="in">
+    <input id="quickIn" type="text" role="combobox" aria-expanded="true" aria-controls="quickList" aria-autocomplete="list"
+      autocomplete="off" spellcheck="false" placeholder="Go to a day, or find what was said" aria-label="Go to a day, or find what was said">
+    <kbd>esc</kbd>
+  </div>
+  <div id="quickList" role="listbox" aria-label="Places and results"></div>
+  <div class="foot"><span>↑↓ to move</span><span>↵ to open</span><span>Try “yesterday”, “12 nov” or “thursday”</span></div>
+</dialog>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -2772,7 +2802,7 @@ function replyNodes(text, cited) {
   return nodes;
 }
 
-function showAsk() {
+function showAsk(question) {
   leaveWelcome();
   document.title = "Lifelog, ask";
   asking = true;
@@ -2941,6 +2971,8 @@ function showAsk() {
   main.replaceChildren(box);
   get("/api/chats").then((list) => { threads = list; if (asking && !chatBusy) paint(); }).catch(() => {});
   if (chatBusy) { go.disabled = true; tell("Still working on the last question…", { busy: true }); }
+  // A question handed over from quick find waits in the box: sending it is the reader's choice.
+  else if (typeof question === "string" && question) { field.value = question; grow(); }
   field.focus();
 }
 $("ask").addEventListener("click", () => asking ? openDay(day) : showAsk());
@@ -2966,6 +2998,171 @@ document.addEventListener("keydown", (e) => {
   // While the calendar is open its keys are its own: Escape closes it and nothing else.
   if (e.key === "Escape") { closeCalendar(); $("pick").focus(); }
   if (e.key === "Escape" || e.key.startsWith("Arrow")) e.stopImmediatePropagation();
+});
+
+/* Quick find (⌘K or Ctrl+K): one box that goes to a day or a page, or finds what was said. */
+const quick = $("quick"), quickIn = $("quickIn"), quickList = $("quickList");
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const briefDay = new Intl.DateTimeFormat([], { day: "numeric", month: "short" });
+const briefDayYear = new Intl.DateTimeFormat([], { day: "numeric", month: "short", year: "numeric" });
+let quickRows = [];    // [{ key, node, run }], in the order shown
+let quickOn = null;    // key of the row Enter would open
+let quickFound = { query: null, words: [], near: [] };
+let quickTimer, quickSeq = 0;
+
+/* Recorded days that fit a typed date, newest first: "today", "12 nov", "thursday",
+   "march 2025", "2026-11-12". `sure` when it can hardly be anything but a date. */
+function daysLike(query) {
+  const none = { days: [], sure: false };
+  const known = days.map((d) => d.day);
+  const q = query.toLowerCase().replace(/,/g, " ").trim();
+  const back = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return dayKey(d); };
+  const exact = q === "today" ? back(0) : q === "yesterday" ? back(1) : /^\d{4}-\d{2}-\d{2}$/.test(q) ? q : null;
+  if (exact) return { days: known.includes(exact) ? [exact] : [], sure: true };
+  const want = {};
+  for (const word of q.split(/\s+/)) {
+    const n = word.match(/^(\d{1,2})(st|nd|rd|th)?$/);
+    const named = (names) => word.length >= 3 ? names.findIndex((name) => name.startsWith(word)) : -1;
+    if (/^(19|20)\d{2}$/.test(word)) want.year = Number(word);
+    else if (n && Number(n[1]) >= 1 && Number(n[1]) <= 31) want.date = Number(n[1]);
+    else if (named(MONTHS) >= 0) want.month = named(MONTHS);
+    else if (named(WEEKDAYS) >= 0) want.weekday = named(WEEKDAYS);
+    else return none;
+  }
+  const parts = Object.keys(want).length;
+  // A number alone is more likely something that was said than a day of the month.
+  if (!parts || (parts === 1 && want.date !== undefined)) return none;
+  const fits = known.filter((key) => {
+    const d = new Date(dayStart(key));
+    return (want.year === undefined || d.getFullYear() === want.year)
+      && (want.month === undefined || d.getMonth() === want.month)
+      && (want.date === undefined || d.getDate() === want.date)
+      && (want.weekday === undefined || d.getDay() === want.weekday);
+  });
+  return { days: fits.reverse().slice(0, 5), sure: parts >= 2 };
+}
+
+function quickDraw() {
+  const query = quickIn.value.trim();
+  const rows = [];
+  const add = (group, key, node, run) => rows.push({ group, key, node, run });
+  const wide = (text, note) => el("div", { className: "row wide" }, el("p", { textContent: text }), el("small", { textContent: note || "" }));
+  const latest = days.length ? days[days.length - 1].day : dayKey(new Date());
+  const dayName = (key) => (key.slice(0, 4) === String(new Date().getFullYear()) ? thisYearDay : longDay).format(new Date(dayStart(key)));
+  const pages = [
+    ["Latest day", dayName(latest), () => openDay(latest)],
+    ["Reminders", "", () => showReminders()],
+    ["Ask", "", () => showAsk()],
+    ["Settings", "", () => showSettings()],
+  ];
+  const addPages = (list) => list.forEach(([name, note, run]) => add("Go to", `page ${name}`, wide(name, note), run));
+  const addDays = (list) => list.forEach((key) => {
+    const said = days.find((d) => d.day === key);
+    add("Go to", `day ${key}`, wide(dayName(key), said ? count(said.lines, "line") : ""), () => openDay(key));
+  });
+  if (!query) addPages(pages);
+  else {
+    const low = query.toLowerCase();
+    const like = daysLike(query);
+    addPages(pages.filter(([name]) => low.length >= 2 && name.toLowerCase().startsWith(low)));
+    if (like.sure) addDays(like.days);
+    const fresh = quickFound.query === query;
+    add("Find", "find", wide(`Search everything for “${query}”`, fresh && quickFound.words.length ? count(quickFound.words.length, "line") : ""),
+      () => { $("search").value = query; runSearch(query); });
+    if (!like.sure) addDays(like.days);
+    if (fresh) {
+      const words = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig");
+      const when = (u) => `${(u.day.slice(0, 4) === String(new Date().getFullYear()) ? briefDay : briefDayYear).format(new Date(dayStart(u.day)))}, ${clock.format(new Date(u.start))}`;
+      const hit = (group, u, mark) => {
+        // Long lines start a little before the words, so the match is in view.
+        const at = mark ? u.text.toLowerCase().indexOf(low) : 0;
+        const text = at > 50 ? `…${u.text.slice(at - 35)}` : u.text;
+        const said = el("p", { title: u.text }, ...(mark ? text.split(words).map((part, n) => n % 2 ? el("mark", { textContent: part }) : part) : [text]));
+        add(group, `line ${u.id}`, el("div", { className: "row" }, el("time", { textContent: when(u) }), said), () => openDay(u.day, u.id));
+      };
+      quickFound.words.slice(0, 5).forEach((u) => hit("Said in these words", u, true));
+      const exact = new Set(quickFound.words.map((u) => u.id));
+      quickFound.near.filter((u) => !exact.has(u.id)).slice(0, 3).forEach((u) => hit("Close in meaning", u, false));
+    }
+    add("Ask", "ask", wide(`Ask: ${query}`, "Opens Ask with this question"), () => showAsk(query));
+  }
+  if (!rows.some((r) => r.key === quickOn)) quickOn = rows[0].key;
+  const nodes = [];
+  let group = null;
+  rows.forEach((r, n) => {
+    if (r.group !== group) { group = r.group; nodes.push(el("h3", { textContent: group })); }
+    r.node.id = `quick${n}`;
+    r.node.setAttribute("role", "option");
+    r.node.addEventListener("click", () => quickRun(r));
+    r.node.addEventListener("mousemove", () => { if (quickOn !== r.key) { quickOn = r.key; quickMark(); } });
+    nodes.push(r.node);
+  });
+  quickRows = rows;
+  quickList.replaceChildren(...nodes);
+  quickMark();
+}
+
+function quickMark(scroll) {
+  for (const r of quickRows) {
+    const on = r.key === quickOn;
+    r.node.classList.toggle("on", on);
+    r.node.setAttribute("aria-selected", String(on));
+    if (on) { quickIn.setAttribute("aria-activedescendant", r.node.id); if (scroll) r.node.scrollIntoView({ block: "nearest" }); }
+  }
+}
+
+function quickRun(row) {
+  quick.close();
+  row.run();
+}
+
+function openQuick() {
+  if (quick.open) { quick.close(); return; }
+  closeCalendar();
+  quickIn.value = "";
+  quickOn = null;
+  quickFound = { query: null, words: [], near: [] };
+  quickDraw();
+  quick.showModal();
+  quickIn.focus();
+}
+
+quickIn.addEventListener("input", () => {
+  quickOn = null;
+  quickDraw();
+  quickList.scrollTop = 0;
+  clearTimeout(quickTimer);
+  const query = quickIn.value.trim(), seq = ++quickSeq;
+  if (!query) return;
+  quickTimer = setTimeout(async () => {
+    try {
+      const words = await get(`/api/search?q=${encodeURIComponent(query)}`);
+      if (seq !== quickSeq || !quick.open) return;
+      quickFound = { query, words, near: [] };
+      quickDraw();
+      // Lines that say it in other words, if the index has been built (Settings).
+      const near = await get(`/api/search/meaning?q=${encodeURIComponent(query)}`);
+      if (seq !== quickSeq || !quick.open) return;
+      quickFound = { query, words, near: near.lines };
+      quickDraw();
+    } catch { /* going to a day and the full search still work */ }
+  }, 180);
+});
+quickIn.addEventListener("keydown", (e) => {
+  const at = quickRows.findIndex((r) => r.key === quickOn);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const to = (at + (e.key === "ArrowDown" ? 1 : quickRows.length - 1)) % quickRows.length;
+    quickOn = quickRows[to].key;
+    quickMark(true);
+  } else if (e.key === "Enter" && !e.isComposing && at >= 0) { e.preventDefault(); quickRun(quickRows[at]); }
+});
+// A click outside the box lands on the dialog itself, which fills the window behind it.
+quick.addEventListener("click", (e) => { if (e.target === quick) quick.close(); });
+quick.addEventListener("close", () => { clearTimeout(quickTimer); quickSeq++; });
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") { e.preventDefault(); openQuick(); }
 });
 
 let timer;

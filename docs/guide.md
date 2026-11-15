@@ -53,6 +53,13 @@ by how much was said, with its recap shown as you point at it. Search covers
 every day and shows each hit with the words marked, the line before and
 after, and the conversation it is from.
 
+**Quick find.** Press ⌘K (Ctrl+K on Linux and Windows) anywhere for one box
+that goes places. Type a date ("yesterday", "12 nov", "thursday", "march
+2025") to open that day, the start of "reminders", "ask" or "settings" to go
+there, or any words to see the first lines that contain them, with lines
+close in meaning underneath if that index is built. Arrow keys move, Enter
+opens, and the last row hands what you typed to Ask as a question, unsent.
+
 **Appearance.** Light or dark follows your computer, or choose one under
 Settings, Appearance. The layout adapts to a phone-sized window.
 
