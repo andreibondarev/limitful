@@ -129,6 +129,13 @@ const overlay = `
       .promo-launch #promo-card { background: #13201a; color: #eef2ef; transition: opacity 0.35s; }
       .promo-launch #promo-card h1 { max-width: 1060px; margin-bottom: 0; font: 600 78px/1.08 "Avenir Next", "Segoe UI", system-ui, sans-serif; letter-spacing: -0.03em; }
       .promo-launch #promo-card h1.gold { color: #f4c63a; }
+      /* The opening line: light, so Limitless's own mark and the black pendant both read. */
+      .promo-launch #promo-card:has(.hook) { background: #eef2ef; color: #13201a; }
+      .promo-launch #promo-card .hook { display: flex; align-items: center; gap: 76px; text-align: left; }
+      .promo-launch #promo-card .hook h1 { max-width: none; margin: 0; white-space: nowrap; }
+      .promo-launch #promo-card .hook .theirs img { height: 0.92em; margin-right: 0.16em; vertical-align: -0.1em; }
+      /* The photo is a square with the pendant inside it; the margins take the empty edges back. */
+      .promo-launch #promo-card .hook .promo-pendant { height: 580px; margin: -30px -130px -30px -85px; filter: drop-shadow(0 26px 34px rgba(19, 32, 26, 0.3)); }
       .promo-launch #promo-card h1 + p { margin-top: 30px; }
       .promo-launch #promo-card p { color: #a9b8b0; font-size: 27px; max-width: 980px; }
       .promo-launch #promo-card p.where { color: #f4c63a; }
@@ -193,7 +200,10 @@ const lastCard = `<div>${lockup}<h1>Keep the pendant. Keep your recordings.</h1>
   <small>Limits apply. Not affiliated with Limitless or Meta.</small></div>`;
 
 // The launch cut's cards: one line each, big.
-const hook1 = `<div><h1>Limitless shuts down on December 1.</h1></div>`;
+// The first one names Limitless with its own mark and shows the pendant, so nobody has to work out what this is about.
+const inline = (file, type) => `data:${type};base64,${readFileSync(join(here, file)).toString("base64")}`;
+const hook1 = `<div class="hook"><h1><span class="theirs"><img src="${inline("limitless-mark.svg", "image/svg+xml")}" alt="">Limitless</span><br>shuts down on<br>December 1.</h1>
+  <img class="promo-pendant" src="${inline("limitless-pendant.webp", "image/webp")}" alt="The Limitless Pendant"></div>`;
 const hook2 = `<div><h1 class="gold">Your pendant doesn’t have to.</h1></div>`;
 const mineCard = `<div><h1>It runs on your computer.</h1><p>No account. No subscription. Nothing leaves it unless you say so.</p></div>`;
 const launchLast = `<div>${lockup}<h1>Keep the pendant. Keep your recordings.</h1>

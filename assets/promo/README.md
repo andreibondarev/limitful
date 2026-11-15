@@ -14,6 +14,11 @@ download and Ask, so making the video touches no real pendant, sends nothing to
 a hosted model and never opens your own data folder. The line that "plays" at
 the end has a silent recording behind it.
 
+The launch cut opens on Limitless's own mark and a photo of the pendant, so it
+is plain what the video is about. `limitless-mark.svg` and
+`limitless-pendant.webp` are Limitless's, taken from limitless.ai, and are not
+covered by this project's licence.
+
 ## Making it again
 
 When the app's look changes, record it again:
