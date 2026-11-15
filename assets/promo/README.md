@@ -4,9 +4,9 @@
 the setup guide, a day in the Lifelog, search, reminders, Settings and Ask.
 `poster.jpg` is a still from it. The main README plays the video from a copy uploaded to GitHub (a `user-attachments` link); after re-recording, drop the new file into any GitHub comment box and put the link it gives on its own line in the README.
 
-`limitful-launch.mp4` is a 44-second cut for social media: a few big lines, the
+`limitful-launch.mp4` is a 46-second cut for social media: a few big lines, the
 pendant being checked and the app's best moments, with no setup guide, over the
-same music. One line of a conversation is played aloud in it. Make it again with
+same music. A short exchange between two people is played aloud in it. Make it again with
 `node assets/promo/make_promo.mjs --short`.
 
 Everything in it is made up. The conversations are the ones `limitful demo`
@@ -14,9 +14,9 @@ writes, two days at a trade show spent meeting possible customers, and `pretend_
 download and Ask, so making the video touches no real pendant, sends nothing to
 a hosted model and never opens your own data folder.
 
-The line that is played back comes from `featured-talk.ogg`: the opening of one
+What is played back comes from `featured-talk.ogg`: the opening of one
 made-up conversation, read by synthetic voices from ElevenLabs over generated
-hall noise. `featured-talk.json` says when each line is spoken in it. Nobody
+hall noise. `featured-talk.json` says when each line is spoken in it and which lines the launch cut plays. Nobody
 real is heard. Only the launch cut lets it be heard; in the tour it plays silently.
 
 The launch cut opens on Limitless's own mark and a photo of the pendant, so it

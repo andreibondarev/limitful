@@ -34,10 +34,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The launch cut plays 1.25 times faster than it is filmed, over music at 117.5 beats a minute.
 const SPEED = Number(process.env.PROMO_SPEED || (SHORT ? 1.25 : 1.12));
 const BEAT = (60000 / 117.5) * SPEED;  // one beat of the music, in filming time
-// The launch cut plays one line of the featured conversation aloud: featured-talk.ogg, synthetic voices over hall noise.
+// The launch cut plays a short exchange from the featured conversation aloud: featured-talk.ogg, synthetic voices over hall noise.
 // That stretch is shown at the speed it was filmed, so the voice is not hurried. { from, to } in filming seconds, at = place in the recording.
 const spoken = JSON.parse(readFileSync(join(here, "featured-talk.json"), "utf8"));
-const HEARD_TO = spoken.lines[5][0] + 4.3;  // the end of "…with real numbers at the end."
+// heard = the first and last line played aloud: her answer, his question back and her reply.
+const HEARD_FROM = spoken.lines[spoken.heard[0]][0], HEARD_TO = spoken.lines[spoken.heard[1]][1] + 0.35;
 let voice = null;
 
 for (const dir of ["data", "frames", "chrome"]) rmSync(join(work, dir), { recursive: true, force: true });
@@ -513,9 +514,9 @@ const music = process.env.PROMO_SILENT ? null : join(here, "launch-music.ogg");
 const levelled = `loudnorm=I=-18:TP=-2:LRA=11,afade=t=in:d=0.25,afade=t=out:st=${Math.max(0, total - 2.2).toFixed(2)}:d=2.2`;
 let sound = ["-an"];
 if (music && voice) {
-  // The music drops to a fifth while the line is heard, and the line is laid over it where the video plays it.
-  // Playback starts a moment before the line, part-way through the one before; the sound starts at the line itself.
-  const skip = Math.max(0, spoken.lines[5][0] - 0.15 - voice.at);
+  // The music drops to a fifth while the exchange is heard, and the recording is laid over it where the video plays it.
+  // Playback starts a moment before the first line, part-way through the one before; the sound starts at the line itself.
+  const skip = Math.max(0, HEARD_FROM - 0.15 - voice.at);
   const at = lands(voice.from) + skip, lasts = voice.to - voice.from - skip, begins = voice.at + skip;
   const duck = `volume='1-0.8*min(1\\,max(0\\,min((t-${(at - 0.5).toFixed(2)})/0.5\\,(${(at + lasts + 0.6).toFixed(2)}-t)/0.6)))':eval=frame`;
   sound = ["-filter_complex",
@@ -534,6 +535,6 @@ const made = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-
   "-t", total.toFixed(3),  // the list has to name the last frame twice, which would otherwise hold it twice as long
   out], { stdio: "inherit" });
 if (made.status !== 0) throw new Error("ffmpeg failed");
-if (voice) console.log(`the line is heard from ${lands(voice.from).toFixed(1)} s for ${(voice.to - voice.from).toFixed(1)} s (recording at ${voice.at.toFixed(2)} s)`);
+if (voice) console.log(`the exchange is heard from ${lands(voice.from).toFixed(1)} s for ${(voice.to - voice.from).toFixed(1)} s (recording at ${voice.at.toFixed(2)} s)`);
 console.log(`${frames.length} frames, filmed in ${length.toFixed(1)} s, played in ${total.toFixed(1)} s -> ${out}`);
 process.exit(0);
