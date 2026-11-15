@@ -117,7 +117,8 @@
   th { font-family: var(--chrome); font-weight: 500; font-size: 0.92rem; color: var(--muted); text-align: left; padding: 0 1.2rem 0.6rem 0; }
   td { border-top: 1px solid var(--rule); padding: 1rem 1.2rem 1rem 0; vertical-align: top; }
   td:first-child { font-family: var(--chrome); font-weight: 500; min-width: 11rem; }
-  tr.none td { color: var(--accent); }
+  td:nth-child(2) { color: var(--accent); min-width: 9rem; }
+  td.no { color: var(--muted); }
 
   /* Before December 1 */
   .deadline { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: clamp(2rem, 5vw, 5rem); align-items: start; }
@@ -172,6 +173,10 @@
     .hero .wrap, .feature, .feature.flip, .leaves, .deadline, .install, .fine .cols { grid-template-columns: minmax(0, 1fr); }
     .feature.flip > .words { order: 0; }
     .also { grid-template-columns: minmax(0, 1fr); }
+    table { font-size: 0.92rem; }
+    td, th { padding-right: 0.8rem; }
+    td:first-child { min-width: 0; width: 28%; }
+    td:nth-child(2) { min-width: 0; width: 26%; }
     .fine ul { columns: 1; }
     footer .wrap { grid-template-columns: minmax(0, 1fr); }
     .shot { border-radius: 9px; }
@@ -270,16 +275,16 @@
     <div class="wrap leaves">
       <div>
         <h2>What leaves your computer? Nothing, unless you say so.</h2>
-        <p class="lede">Everything runs on your machine. Two optional settings send data out, and both start off.</p>
+        <p class="lede">Everything runs on your machine. Sending anything out is a choice you make in Settings, and it starts off.</p>
       </div>
       <div class="table">
         <table>
-          <thead><tr><th>If you choose</th><th>What is sent</th><th>To</th></tr></thead>
+          <thead><tr><th></th><th>Stays on your computer</th><th>Sent to a provider you choose</th></tr></thead>
           <tbody>
-            <tr class="none"><td>Nothing (the default)</td><td>Nothing</td><td>No one</td></tr>
-            <tr><td>Claude for summaries and Ask</td><td>Conversation text and your questions</td><td>Anthropic</td></tr>
-            <tr><td>Deepgram for transcription</td><td>The audio of new recordings</td><td>Deepgram</td></tr>
-            <tr><td>Ollama for summaries</td><td>Nothing</td><td>No one</td></tr>
+            <tr><td>Syncing, search, playback</td><td>Always</td><td>Never</td></tr>
+            <tr><td>Transcription</td><td>Whisper (the default)</td><td>Deepgram: the audio of new recordings</td></tr>
+            <tr><td>Summaries and reminders</td><td>Ollama</td><td>Claude: conversation text, to Anthropic</td></tr>
+            <tr><td>Ask</td><td class="no">Not yet</td><td>Claude: your questions and conversation text, to Anthropic</td></tr>
           </tbody>
         </table>
       </div>
@@ -338,7 +343,7 @@
       <ul>
         <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>It runs on a computer, not a phone.</b>Installed from a terminal, used in a browser.</div></li>
         <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>macOS is the tested path.</b>Linux and Windows are not yet verified.</div></li>
-        <li id="fine-model"><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>Summaries and Ask need a model.</b>Claude with your own API key, or Ollama on your computer. Everything else works without one.</div></li>
+        <li id="fine-model"><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>Summaries and Ask need a model.</b>Summaries: Claude with your own API key, or Ollama on your computer. Ask: Claude only, for now. Everything else works without one.</div></li>
         <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>Pairing by the button erases the pendant.</b>Sync with Limitless first, or pair over USB.</div></li>
         <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>One connection at a time.</b>While your phone holds the pendant, your computer cannot see it.</div></li>
         <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>The first sync is a big download.</b>The speech model is 1.6 GB, fetched once.</div></li>
