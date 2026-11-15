@@ -1,6 +1,6 @@
 # The promo video
 
-`limitful-promo.mp4` is a walk through the app of about 75 seconds, with captions and music:
+`limitful-promo.mp4` is a walk through the app of about 78 seconds, with captions and music:
 the setup guide, a day in the Lifelog, search, reminders, Settings and Ask.
 `poster.jpg` is a still from it. The main README plays the video from a copy uploaded to GitHub (a `user-attachments` link); after re-recording, drop the new file into any GitHub comment box and put the link it gives on its own line in the README.
 
@@ -19,7 +19,7 @@ made-up conversation, read by synthetic voices from ElevenLabs over generated
 hall noise. `featured-talk.json` says when each line is spoken in it and which lines the launch cut plays. Nobody
 real is heard. Only the launch cut lets it be heard; in the tour it plays silently.
 
-The launch cut opens on Limitless's own mark and a photo of the pendant, so it
+Both open on Limitless's own mark and a photo of the pendant, so it
 is plain what the video is about. `limitless-mark.svg` and
 `limitless-pendant.webp` are Limitless's, taken from limitless.ai, and are not
 covered by this project's licence.

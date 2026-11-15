@@ -2,7 +2,7 @@
 // Records the promo video: drives the Lifelog in headless Chrome and films it.
 //
 //   node assets/promo/make_promo.mjs           the full walk-through, limitful-promo.mp4
-//   node assets/promo/make_promo.mjs --short   the 44-second launch cut, limitful-launch.mp4
+//   node assets/promo/make_promo.mjs --short   the 46-second launch cut, limitful-launch.mp4
 //
 // Both have music under them (launch-music.ogg); the launch cut's opening cards are timed to its beat.
 // Needs node 22+, uv, ffmpeg and Google Chrome. Everything on screen is made up:
@@ -100,8 +100,8 @@ const until = async (expression, timeout = 20000) => {
 };
 
 // --- what is drawn over the app: a pointer, captions and title cards ---------------
-// The real wordmark, as drawn by assets/make_logo.py: dark ink on the light cards, cream on the dark ones.
-const logo = readFileSync(join(repo, SHORT ? "assets/wordmark-dark.svg" : "assets/wordmark.svg"), "utf8").replace(/<title[^>]*>.*?<\/title>/, "").replace(/\s*aria-labelledby="t"/, "");
+// The real wordmark, as drawn by assets/make_logo.py, in cream for the dark cards.
+const logo = readFileSync(join(repo, "assets/wordmark-dark.svg"), "utf8").replace(/<title[^>]*>.*?<\/title>/, "").replace(/\s*aria-labelledby="t"/, "");
 const overlay = `
 (() => {
   const build = () => {
@@ -135,26 +135,27 @@ const overlay = `
       #promo-card p { margin: 0 auto; max-width: 760px; font: 400 23px/1.5 "Avenir Next", "Segoe UI", system-ui, sans-serif; color: #5e6e66; }
       #promo-card p.where { margin-top: 26px; color: #0b6b58; font-weight: 600; font-size: 27px; }
       #promo-card small { display: block; margin-top: 44px; font: 400 16px/1.4 "Avenir Next", "Segoe UI", system-ui, sans-serif; color: #5e6e66; }
-      /* The launch cut: dark cards with big type, bigger captions, and no pointer. */
-      .promo-launch #promo-card { background: #13201a; color: #eef2ef; transition: opacity 0.35s; }
-      .promo-launch #promo-card h1 { max-width: 1060px; margin-bottom: 0; font: 600 78px/1.08 "Avenir Next", "Segoe UI", system-ui, sans-serif; letter-spacing: -0.03em; }
-      .promo-launch #promo-card h1.gold { color: #f4c63a; }
+      /* Dark cards with big type, in both cuts. */
+      #promo-card { background: #13201a; color: #eef2ef; transition: opacity 0.35s; }
+      #promo-card h1 { max-width: 1060px; margin-bottom: 0; font: 600 78px/1.08 "Avenir Next", "Segoe UI", system-ui, sans-serif; letter-spacing: -0.03em; }
+      #promo-card h1.gold { color: #f4c63a; }
       /* The opening line: light, so Limitless's own mark and the black pendant both read. */
-      .promo-launch #promo-card:has(.hook) { background: #eef2ef; color: #13201a; }
-      .promo-launch #promo-card .hook { display: flex; align-items: center; gap: 76px; text-align: left; }
-      .promo-launch #promo-card .hook h1 { max-width: none; margin: 0; white-space: nowrap; }
-      .promo-launch #promo-card .hook .theirs img { height: 0.92em; margin-right: 0.16em; vertical-align: -0.1em; }
+      #promo-card:has(.hook) { background: #eef2ef; color: #13201a; }
+      #promo-card .hook { display: flex; align-items: center; gap: 76px; text-align: left; }
+      #promo-card .hook h1 { max-width: none; margin: 0; white-space: nowrap; }
+      #promo-card .hook .theirs img { height: 0.92em; margin-right: 0.16em; vertical-align: -0.1em; }
       /* The photo is a square with the pendant inside it; the margins take the empty edges back. */
-      .promo-launch #promo-card .hook .promo-pendant { height: 580px; margin: -30px -130px -30px -85px; filter: drop-shadow(0 26px 34px rgba(19, 32, 26, 0.3)); }
-      .promo-launch #promo-card h1 + p { margin-top: 30px; }
-      .promo-launch #promo-card p { color: #a9b8b0; font-size: 27px; max-width: 980px; }
-      .promo-launch #promo-card p.where { color: #f4c63a; }
-      .promo-launch #promo-card small { color: #7d8d85; }
-      .promo-launch #promo-card .lockup { margin-bottom: 44px; }
-      .promo-launch #promo-card.closing h1 { font-size: 58px; }
-      .promo-launch #promo-card p.intro { margin-bottom: 30px; color: #f4c63a; font-weight: 600; font-size: 38px; letter-spacing: -0.01em; }
-      .promo-launch #promo-card .late { opacity: 0; transition: opacity 0.4s; }
-      .promo-launch #promo-card.more .late { opacity: 1; }
+      #promo-card .hook .promo-pendant { height: 580px; margin: -30px -130px -30px -85px; filter: drop-shadow(0 26px 34px rgba(19, 32, 26, 0.3)); }
+      #promo-card h1 + p { margin-top: 30px; }
+      #promo-card p { color: #a9b8b0; font-size: 27px; max-width: 980px; }
+      #promo-card p.where { color: #f4c63a; }
+      #promo-card small { color: #7d8d85; }
+      #promo-card .lockup { margin-bottom: 44px; }
+      #promo-card.closing h1 { font-size: 58px; }
+      #promo-card p.intro { margin-bottom: 30px; color: #f4c63a; font-weight: 600; font-size: 38px; letter-spacing: -0.01em; }
+      #promo-card .late { opacity: 0; transition: opacity 0.4s; }
+      #promo-card.more .late { opacity: 1; }
+      /* The launch cut: bigger captions, and no pointer. */
       .promo-launch #promo-caption { bottom: 46px; max-width: 1100px; background: #13201a; font: 600 36px/1.2 "Avenir Next", "Segoe UI", system-ui, sans-serif;
         letter-spacing: -0.015em; padding: 20px 38px; border-radius: 20px; box-shadow: 0 18px 50px rgba(19, 32, 26, 0.45); }
       .promo-launch #promo-caption.lift { bottom: 140px; }
@@ -205,14 +206,11 @@ const overlay = `
 })();`;
 
 const lockup = `<div class="lockup">${logo}</div>`;
-const firstCard = `<div>${lockup}<h1>Your Limitless Pendant, still working after December 1, 2026</h1>
-  <p>An open-source replacement for the Limitless app. It runs on your own computer.</p>
-  <small>The conversations in this video are made up.</small></div>`;
 const lastCard = `<div>${lockup}<h1>Keep the pendant. Keep your recordings.</h1>
   <p>Free and open source, under the MIT licence.</p><p class="where">github.com/andreibondarev/limitful</p>
   <small>Limits apply. Not affiliated with Limitless or Meta.</small></div>`;
 
-// The launch cut's cards: one line each, big.
+// The opening cards, the same in both cuts: one line each, big.
 // The first one names Limitless with its own mark and shows the pendant, so nobody has to work out what this is about.
 const inline = (file, type) => `data:${type};base64,${readFileSync(join(here, file)).toString("base64")}`;
 const hook1 = `<div class="hook"><h1><span class="theirs"><img src="${inline("limitless-mark.svg", "image/svg+xml")}" alt="">Limitless</span><br>shuts down on<br>December 1.</h1>
@@ -266,7 +264,7 @@ const scene = (name) => console.log(`${((Date.now() - began) / 1000).toFixed(1).
 await send("Page.enable");
 await send("Emulation.setDeviceMetricsOverride", { width: WIDTH, height: HEIGHT, deviceScaleFactor: SCALE, mobile: false });
 await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
-await send("Page.addScriptToEvaluateOnNewDocument", { source: overlay.replace("__SHORT__", String(SHORT)).replace(JSON.stringify("__FIRST_CARD__"), JSON.stringify(SHORT ? hook1 : firstCard)) });
+await send("Page.addScriptToEvaluateOnNewDocument", { source: overlay.replace("__SHORT__", String(SHORT)).replace(JSON.stringify("__FIRST_CARD__"), JSON.stringify(hook1)) });
 const yesterday = new Date(Date.now() - 86400000);
 const dayKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
 await send("Page.navigate", { url: `http://127.0.0.1:${port}/${SHORT ? "#" + dayKey : ""}` });
@@ -278,11 +276,23 @@ const OUT_W = Math.round(WIDTH * SCALE), OUT_H = Math.round(HEIGHT * SCALE);
 await send("Page.startScreencast", { format: "jpeg", quality: 92, maxWidth: OUT_W, maxHeight: OUT_H, everyNthFrame: 1 });
 const began = Date.now();
 
+// The opening cards change on the music's beat: four beats, four, then two and five.
+// The tour's last one also says the conversations are made up.
+const opening = async () => {
+  await sleep(4 * BEAT);
+  await card(hook2);
+  await sleep(4 * BEAT);
+  await card(SHORT ? introCard : introCard.replace(/<\/div>$/, '<small class="late">The conversations in this video are made up.</small></div>'), "closing");
+  await sleep(2 * BEAT);
+  await run("document.getElementById('promo-card').classList.add('more'); true");
+  await sleep(5 * BEAT);
+};
+
 // A caption belongs to the view it describes: it is taken down before the click that
 // leaves that view, and the next one goes up once the new view is showing.
 if (!SHORT) {
-scene("title card");
-await sleep(3800);
+scene("hook");
+await opening();
 
 scene("setup guide");
 await caption("The first time you open it, a setup guide gets you going", "side");
@@ -387,18 +397,11 @@ if (await run("audio.paused")) console.warn("warning: playback had stopped by th
 
 scene("closing card");
 await caption(null);
-await card(lastCard);
+await card(lastCard, "closing");
 await sleep(4600);
 } else {
 scene("hook");
-// The opening cards change on the music's beat: four beats, four, then two and six.
-await sleep(4 * BEAT);
-await card(hook2);
-await sleep(4 * BEAT);
-await card(introCard, "closing");
-await sleep(2 * BEAT);
-await run("document.getElementById('promo-card').classList.add('more'); true");
-await sleep(5 * BEAT);
+await opening();
 // Behind the card, turn to Settings, so the pendant is the first thing seen of the app.
 await run("location.hash = 'settings'; true");
 await until("document.querySelector('.sections')");
