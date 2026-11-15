@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/andreibondarev/limitful/security/advisories/new
+    about: Anything that could expose someone's recordings, transcripts or API keys. Please do not open a public issue.

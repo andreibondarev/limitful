@@ -9,3 +9,6 @@ dist/
 
 # Recordings pulled off the pendant. Never commit these.
 /data/
+
+# Personal workspace scripts.
+.paradev/
