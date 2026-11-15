@@ -10,6 +10,7 @@ cp -R site/index.html site/img site/fonts _site/
 cp assets/wordmark.svg assets/wordmark-dark.svg _site/
 cp assets/logo.svg _site/favicon.svg
 cp assets/promo/limitful-promo.mp4 assets/promo/poster.jpg _site/
+cp assets/promo/limitless-mark.svg assets/promo/limitless-pendant.webp _site/img/
 printf 'limitful.ai\n' > _site/CNAME
 printf 'User-agent: *\nAllow: /\n' > _site/robots.txt
 echo "Built _site/"

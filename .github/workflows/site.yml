@@ -11,6 +11,8 @@ on:
       - "assets/logo.svg"
       - "assets/promo/limitful-promo.mp4"
       - "assets/promo/poster.jpg"
+      - "assets/promo/limitless-mark.svg"
+      - "assets/promo/limitless-pendant.webp"
       - ".github/workflows/site.yml"
   workflow_dispatch:
 
