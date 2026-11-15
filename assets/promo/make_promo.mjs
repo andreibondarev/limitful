@@ -34,6 +34,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The launch cut plays 1.25 times faster than it is filmed, over music at 117.5 beats a minute.
 const SPEED = Number(process.env.PROMO_SPEED || (SHORT ? 1.25 : 1.12));
 const BEAT = (60000 / 117.5) * SPEED;  // one beat of the music, in filming time
+// The launch cut plays one line of the featured conversation aloud: featured-talk.ogg, synthetic voices over hall noise.
+// That stretch is shown at the speed it was filmed, so the voice is not hurried. { from, to } in filming seconds, at = place in the recording.
+const spoken = JSON.parse(readFileSync(join(here, "featured-talk.json"), "utf8"));
+const HEARD_TO = spoken.lines[5][0] + 4.3;  // the end of "…with real numbers at the end."
+let voice = null;
 
 for (const dir of ["data", "frames", "chrome"]) rmSync(join(work, dir), { recursive: true, force: true });
 mkdirSync(join(work, "data"), { recursive: true });
@@ -220,7 +225,7 @@ const introCard = `<div><p class="intro">Introducing</p>${lockup}
 const mineCard = `<div><h1>It runs on your computer.</h1><p>No account. No subscription. Nothing leaves it unless you say so.</p></div>`;
 const launchLast = `<div>${lockup}<h1>Keep the pendant. Keep your recordings.</h1>
   <p>Free and open source.</p><p class="where">github.com/andreibondarev/limitful</p>
-  <small>The conversations in this video are made up. Not affiliated with Limitless or Meta.</small></div>`;
+  <small>The conversations in this video are made up and the voices are synthetic. Not affiliated with Limitless or Meta.</small></div>`;
 
 // --- directing: captions, pointing, clicking, typing --------------------------------
 const promo = (call) => run(`window.__promo.${call}`);
@@ -441,6 +446,17 @@ await until("document.querySelectorAll('.answer a.cite').length >= 4 && document
 await caption("Every answer points to the moment it was said");
 await sleep(2600);
 
+scene("the moment");
+await caption(null);
+await click("document.querySelector('.answer a.cite')");
+await until("!document.getElementById('player').hidden && !audio.paused && audio.currentTime > 0.05");
+const heard = await run("audio.currentTime");
+const heardAt = (Date.now() - began) / 1000;
+await caption("…and plays it back", "lift");
+await until(`audio.currentTime >= ${HEARD_TO}`);
+voice = { from: heardAt, to: (Date.now() - began) / 1000, at: heard };
+await run("audio.pause(); document.getElementById('player').hidden = true; true");
+
 scene("reminders");
 await caption(null);
 await click("document.getElementById('remind')");
@@ -477,9 +493,15 @@ stop();
 const speed = SPEED;
 const list = [];
 let total = 0;
+// Where a moment of filming lands in the finished video: everything is sped up but the stretch with the voice.
+const lands = (t) => !voice ? t / speed
+  : t <= voice.from ? t / speed
+  : t <= voice.to ? voice.from / speed + (t - voice.from)
+  : voice.from / speed + (voice.to - voice.from) + (t - voice.to) / speed;
 frames.forEach((frame, n) => {
   const next = frames[n + 1];
-  const hold = (next ? Math.max(0.001, next.at - frame.at) : Math.max(0.1, length - (frame.at - frames[0].at))) / speed;
+  const from = frame.at - frames[0].at;
+  const hold = Math.max(0.001, lands(next ? next.at - frames[0].at : Math.max(from + 0.1, length)) - lands(from));
   total += hold;
   list.push(`file '${frame.file}'`, `duration ${hold.toFixed(4)}`);
 });
@@ -488,15 +510,30 @@ writeFileSync(join(work, "frames.txt"), list.join("\n") + "\n");
 const out = join(here, SHORT ? "limitful-launch.mp4" : "limitful-promo.mp4");
 // Music under both: the start of a CC0 track, levelled, fading out under the last card.
 const music = process.env.PROMO_SILENT ? null : join(here, "launch-music.ogg");
-const sound = music
-  ? ["-af", `loudnorm=I=-18:TP=-2:LRA=11,afade=t=in:d=0.25,afade=t=out:st=${Math.max(0, total - 2.2).toFixed(2)}:d=2.2`, "-c:a", "aac", "-b:a", "160k"]
-  : ["-an"];
-const made = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", join(work, "frames.txt"), ...(music ? ["-i", music] : []),
+const levelled = `loudnorm=I=-18:TP=-2:LRA=11,afade=t=in:d=0.25,afade=t=out:st=${Math.max(0, total - 2.2).toFixed(2)}:d=2.2`;
+let sound = ["-an"];
+if (music && voice) {
+  // The music drops to a fifth while the line is heard, and the line is laid over it where the video plays it.
+  // Playback starts a moment before the line, part-way through the one before; the sound starts at the line itself.
+  const skip = Math.max(0, spoken.lines[5][0] - 0.15 - voice.at);
+  const at = lands(voice.from) + skip, lasts = voice.to - voice.from - skip, begins = voice.at + skip;
+  const duck = `volume='1-0.8*min(1\\,max(0\\,min((t-${(at - 0.5).toFixed(2)})/0.5\\,(${(at + lasts + 0.6).toFixed(2)}-t)/0.6)))':eval=frame`;
+  sound = ["-filter_complex",
+    `[1:a]${levelled},${duck}[music];` +
+    `[2:a]atrim=start=${begins.toFixed(2)}:duration=${lasts.toFixed(2)},asetpts=PTS-STARTPTS,afade=t=in:d=0.04,afade=t=out:st=${(lasts - 0.3).toFixed(2)}:d=0.3,` +
+    `volume=4dB,adelay=${Math.round(at * 1000)}:all=1[line];[music][line]amix=inputs=2:normalize=0:duration=first[sound]`,
+    "-map", "0:v", "-map", "[sound]", "-c:a", "aac", "-b:a", "160k"];
+} else if (music) {
+  sound = ["-af", levelled, "-c:a", "aac", "-b:a", "160k"];
+}
+const made = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", join(work, "frames.txt"),
+  ...(music ? ["-i", music] : []), ...(music && voice ? ["-i", join(here, "featured-talk.ogg")] : []),
   // JPEG frames are full-range; players expect video range, so convert rather than relabel.
   "-vf", `fps=30,scale=${OUT_W}:${OUT_H}:flags=lanczos:in_range=full:out_range=tv,format=yuv420p`,
   "-c:v", "libx264", "-preset", "slow", "-crf", process.env.PROMO_CRF || "25", "-color_range", "tv", "-movflags", "+faststart", ...sound,
   "-t", total.toFixed(3),  // the list has to name the last frame twice, which would otherwise hold it twice as long
   out], { stdio: "inherit" });
 if (made.status !== 0) throw new Error("ffmpeg failed");
-console.log(`${frames.length} frames, filmed in ${length.toFixed(1)} s, played in ${(length / speed).toFixed(1)} s -> ${out}`);
+if (voice) console.log(`the line is heard from ${lands(voice.from).toFixed(1)} s for ${(voice.to - voice.from).toFixed(1)} s (recording at ${voice.at.toFixed(2)} s)`);
+console.log(`${frames.length} frames, filmed in ${length.toFixed(1)} s, played in ${total.toFixed(1)} s -> ${out}`);
 process.exit(0);

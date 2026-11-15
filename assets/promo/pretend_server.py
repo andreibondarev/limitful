@@ -13,8 +13,9 @@ With `ready`, the conversations are there from the start and the setup guide nev
 from __future__ import annotations
 
 import asyncio
+import json
 import re
-import subprocess
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -69,28 +70,31 @@ def downloaded_bytes(model: str | None = None) -> int:
 
 
 def add_stand_in_audio() -> None:
-    """Give one conversation a silent recording, so its lines can be 'played' on screen."""
+    """Give one conversation a recording, so its lines can be played on screen.
+
+    featured-talk.ogg is the opening of that conversation read by synthetic voices over
+    the noise of a hall, and featured-talk.json says when each line is spoken in it.
+    """
+    here = Path(__file__).parent
+    spoken = json.loads((here / "featured-talk.json").read_text())
     store = Store(DATA_DIR)
     try:
         cid, start, end = store.db.execute(
             "SELECT id, start_ms, end_ms FROM conversations WHERE title = ?", (demo.FEATURED,)).fetchone()
-        # Only its first minutes, where the lines the video plays are: a recording of the whole
-        # conversation takes long enough to make that the setup guide stalls on film.
-        end = min(end, start + 240_000)
-        (last,) = store.db.execute(
-            "SELECT MAX(end_ms) FROM utterances WHERE end_ms BETWEEN ? AND ?", (start, end)).fetchone()
-        began = start - 500
-        seconds = (last - began) / 1000 + 1.0
         day = datetime.fromtimestamp(start / 1000)
         path = f"audio/{day:%Y-%m-%d}/{day:%H-%M-%S}_stand-in.ogg"
         (DATA_DIR / path).parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            ["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=mono",
-             "-t", f"{seconds:.2f}", "-c:a", "libopus", "-b:a", "16k", str(DATA_DIR / path)], check=True)
+        shutil.copyfile(here / "featured-talk.ogg", DATA_DIR / path)
         store.db.execute(
             "INSERT INTO segments (path, start_ms, duration_ms, first_page, last_page, retimed) VALUES (?, ?, ?, 0, 0, 1)",
-            (path, began, int(seconds * 1000)))
-        store.db.execute("UPDATE utterances SET segment = ? WHERE start_ms BETWEEN ? AND ?", (path, start, last))
+            (path, start, int(spoken["seconds"] * 1000)))
+        # The written lines come first; each moves to where it is heard in the recording.
+        ids = [uid for (uid,) in store.db.execute(
+            "SELECT id FROM utterances WHERE start_ms BETWEEN ? AND ? ORDER BY start_ms LIMIT ?",
+            (start, end, len(spoken["lines"])))]
+        for uid, (begins, ends) in zip(ids, spoken["lines"]):
+            store.db.execute("UPDATE utterances SET segment = ?, start_ms = ?, end_ms = ? WHERE id = ?",
+                             (path, start + int(begins * 1000), start + int(ends * 1000), uid))
         # The demo folder comes with this question already asked; the video asks it live.
         store.db.execute("DELETE FROM chat_messages")
         store.db.execute("DELETE FROM chats")
