@@ -5,7 +5,9 @@ anyone's own data folder: Bluetooth, USB, the speech model, summaries and Ask
 are all replaced with stand-ins, and the conversations are the ones
 `limitful demo` writes.
 
-    python pretend_server.py <empty data folder> <port>
+    python pretend_server.py <empty data folder> <port> [ready]
+
+With `ready`, the conversations are there from the start and the setup guide never opens.
 """
 
 from __future__ import annotations
@@ -141,6 +143,11 @@ speech_model.downloaded_bytes = downloaded_bytes
 digest.make_summarizer = lambda *args, **kwargs: None
 demo.present = lambda data_dir: False  # the video says the conversations are made up on its own cards
 ask.answer = answer
+
+if sys.argv[3:] == ["ready"]:
+    demo.build(DATA_DIR)
+    add_stand_in_audio()
+    state.update(paired=True, model_ready=True)
 
 server = make_server(DATA_DIR, PORT)
 print(f"pretend Lifelog on http://127.0.0.1:{PORT}", flush=True)

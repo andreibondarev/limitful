@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Records the promo video: drives the Lifelog in headless Chrome and films it.
 //
-//   node assets/promo/make_promo.mjs
+//   node assets/promo/make_promo.mjs           the full walk-through, limitful-promo.mp4
+//   node assets/promo/make_promo.mjs --short   the half-minute launch cut, limitful-launch.mp4
 //
 // Needs node 22+, uv, ffmpeg and Google Chrome. Everything on screen is made up:
 // the app is served by pretend_server.py, which stands in for the pendant, the
@@ -26,6 +27,7 @@ const work = process.env.PROMO_WORK ? resolve(process.env.PROMO_WORK) : mkdtempS
 const port = Number(process.env.PROMO_PORT || 4811);
 const chromePort = Number(process.env.PROMO_CHROME_PORT || 9344);
 const chrome = process.env.CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const SHORT = process.argv.includes("--short");
 const WIDTH = 1280, HEIGHT = 720, SCALE = 1.5;  // filmed at 1920 x 1080; any narrower and the app's header wraps
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -33,14 +35,15 @@ for (const dir of ["data", "frames", "chrome"]) rmSync(join(work, dir), { recurs
 mkdirSync(join(work, "data"), { recursive: true });
 mkdirSync(join(work, "frames"), { recursive: true });
 // Its own settings file, so no saved key or choice of the person running this is read or shown.
-writeFileSync(join(work, "config.json"), "{}");
+// The short cut goes straight to Ask, which needs Claude chosen; the answer comes from pretend_server.py.
+writeFileSync(join(work, "config.json"), SHORT ? JSON.stringify({ provider: "claude" }) : "{}");
 
 const children = [];
 const stop = () => { for (const child of children) { try { child.kill(); } catch { /* already gone */ } } };
 process.on("exit", stop);
 process.on("SIGINT", () => process.exit(1));
 
-const server = spawn("uv", ["run", "python", join(here, "pretend_server.py"), join(work, "data"), String(port)], {
+const server = spawn("uv", ["run", "python", join(here, "pretend_server.py"), join(work, "data"), String(port), ...(SHORT ? ["ready"] : [])], {
   cwd: repo, env: { ...process.env, LIMITFUL_CONFIG: join(work, "config.json") }, stdio: ["ignore", "inherit", "inherit"],
 });
 children.push(server);
@@ -92,6 +95,7 @@ const overlay = `
 (() => {
   const build = () => {
     if (window.__promo) return;
+    document.documentElement.classList.toggle("promo-launch", __SHORT__);
     const style = document.createElement("style");
     style.textContent = \`
       #promo-cursor { position: fixed; left: 0; top: 0; z-index: 100000; pointer-events: none; width: 26px; height: 26px;
@@ -120,6 +124,20 @@ const overlay = `
       #promo-card p { margin: 0 auto; max-width: 760px; font: 400 23px/1.5 "Avenir Next", "Segoe UI", system-ui, sans-serif; color: #5e6e66; }
       #promo-card p.where { margin-top: 26px; color: #0b6b58; font-weight: 600; font-size: 27px; }
       #promo-card small { display: block; margin-top: 44px; font: 400 16px/1.4 "Avenir Next", "Segoe UI", system-ui, sans-serif; color: #5e6e66; }
+      /* The launch cut: dark cards with big type, bigger captions, and no pointer. */
+      .promo-launch #promo-card { background: #13201a; color: #eef2ef; transition: opacity 0.35s; }
+      .promo-launch #promo-card h1 { max-width: 1060px; margin-bottom: 0; font: 600 78px/1.08 "Avenir Next", "Segoe UI", system-ui, sans-serif; letter-spacing: -0.03em; }
+      .promo-launch #promo-card h1.gold { color: #f4c63a; }
+      .promo-launch #promo-card h1 + p { margin-top: 30px; }
+      .promo-launch #promo-card p { color: #a9b8b0; font-size: 27px; max-width: 980px; }
+      .promo-launch #promo-card p.where { color: #f4c63a; }
+      .promo-launch #promo-card small { color: #7d8d85; }
+      .promo-launch #promo-card .lockup { margin-bottom: 44px; }
+      .promo-launch #promo-card.closing h1 { font-size: 58px; }
+      .promo-launch #promo-caption { bottom: 46px; max-width: 1100px; background: #13201a; font: 600 36px/1.2 "Avenir Next", "Segoe UI", system-ui, sans-serif;
+        letter-spacing: -0.015em; padding: 20px 38px; border-radius: 20px; box-shadow: 0 18px 50px rgba(19, 32, 26, 0.45); }
+      .promo-launch #promo-caption.lift { bottom: 140px; }
+      .promo-launch #promo-cursor, .promo-launch #promo-ring { display: none; }
       #promo-play { position: fixed; left: 50%; top: 50%; z-index: 100002; width: 132px; height: 132px; margin: -66px 0 0 -66px; border-radius: 50%;
         background: rgba(19, 32, 26, 0.86); display: grid; place-items: center; box-shadow: 0 14px 40px rgba(19, 32, 26, 0.35); }
       #promo-play::after { content: ""; margin-left: 10px; border-left: 44px solid #f4c63a; border-top: 27px solid transparent; border-bottom: 27px solid transparent; }
@@ -142,7 +160,7 @@ const overlay = `
         caption.textContent = text;
         caption.classList.add("on");
       },
-      card(html) { if (html) { card.innerHTML = html; card.classList.remove("off"); } else card.classList.add("off"); },
+      card(html, look) { if (html) { card.innerHTML = html; card.className = look || ""; } else card.classList.add("off"); },
       playBadge() { make("promo-play"); },
       // The visible button whose label is, or contains, this text.
       button(text, exact, scope) {
@@ -173,10 +191,18 @@ const lastCard = `<div>${lockup}<h1>Keep the pendant. Keep your recordings.</h1>
   <p>Free and open source, under the MIT licence.</p><p class="where">github.com/andreibondarev/limitful</p>
   <small>Limits apply. Not affiliated with Limitless or Meta.</small></div>`;
 
+// The launch cut's cards: one line each, big.
+const hook1 = `<div><h1>Limitless shuts down on December 1.</h1></div>`;
+const hook2 = `<div><h1 class="gold">Your pendant doesn’t have to.</h1></div>`;
+const mineCard = `<div><h1>It runs on your computer.</h1><p>No account. No subscription. Nothing leaves it unless you say so.</p></div>`;
+const launchLast = `<div>${lockup}<h1>Keep the pendant. Keep your recordings.</h1>
+  <p>Free and open source.</p><p class="where">github.com/andreibondarev/limitful</p>
+  <small>The conversations in this video are made up. Not affiliated with Limitless or Meta.</small></div>`;
+
 // --- directing: captions, pointing, clicking, typing --------------------------------
 const promo = (call) => run(`window.__promo.${call}`);
 const caption = (text, where = "") => promo(`caption(${JSON.stringify(text)}, ${JSON.stringify(where)})`);
-const card = (html) => promo(`card(${JSON.stringify(html)})`);
+const card = (html, look = "") => promo(`card(${JSON.stringify(html)}, ${JSON.stringify(look)})`);
 const button = (text, { exact = false, scope = "main" } = {}) => `__promo.button(${JSON.stringify(text)}, ${exact}, ${JSON.stringify(scope)})`;
 const moveTo = async (element) => {
   await until(element);
@@ -211,9 +237,11 @@ const scene = (name) => console.log(`${((Date.now() - began) / 1000).toFixed(1).
 await send("Page.enable");
 await send("Emulation.setDeviceMetricsOverride", { width: WIDTH, height: HEIGHT, deviceScaleFactor: SCALE, mobile: false });
 await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
-await send("Page.addScriptToEvaluateOnNewDocument", { source: overlay.replace(JSON.stringify("__FIRST_CARD__"), JSON.stringify(firstCard)) });
-await send("Page.navigate", { url: `http://127.0.0.1:${port}/` });
-await until("window.__promo && document.querySelector('.welcome .way')");
+await send("Page.addScriptToEvaluateOnNewDocument", { source: overlay.replace("__SHORT__", String(SHORT)).replace(JSON.stringify("__FIRST_CARD__"), JSON.stringify(SHORT ? hook1 : firstCard)) });
+const yesterday = new Date(Date.now() - 86400000);
+const dayKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+await send("Page.navigate", { url: `http://127.0.0.1:${port}/${SHORT ? "#" + dayKey : ""}` });
+await until(SHORT ? "window.__promo && document.querySelector('.recap .headline')" : "window.__promo && document.querySelector('.welcome .way')");
 await document_fonts();
 async function document_fonts() { await run("document.fonts.ready.then(() => true)"); }
 
@@ -223,6 +251,7 @@ const began = Date.now();
 
 // A caption belongs to the view it describes: it is taken down before the click that
 // leaves that view, and the next one goes up once the new view is showing.
+if (!SHORT) {
 scene("title card");
 await sleep(3800);
 
@@ -331,11 +360,66 @@ scene("closing card");
 await caption(null);
 await card(lastCard);
 await sleep(4600);
+} else {
+scene("hook");
+await sleep(2300);
+await card(hook2);
+await sleep(2400);
+
+scene("a day");
+await card(null);
+await caption("Every day, recapped");
+await sleep(2700);
+const talk = "[...document.querySelectorAll('details.card summary')].find((s) => s.textContent.includes('Supplier call'))";
+await click(`${talk}.querySelector('h2')`);
+await caption("Every conversation, transcribed on your computer");
+await run(`window.scrollBy({ top: ${talk}.getBoundingClientRect().top - 190, behavior: "smooth" })`);
+await sleep(2900);
+
+scene("search");
+await caption(null);
+await run("window.scrollTo({ top: 0, behavior: 'smooth' })");
+await click("document.getElementById('search')");
+await caption("Search everything that was said");
+await type("tracking number", 48);
+await until("document.getElementById('title').textContent === 'Search' && document.querySelectorAll('main .hit, main .line').length > 0");
+await sleep(1700);
+await caption(null);
+await press("Escape", "Escape", 27);
+await sleep(250);
+
+scene("ask");
+await click("document.getElementById('ask')");
+await until("document.querySelector('.composer textarea')");
+await caption("Ask it anything");
+await click("document.querySelector('.composer textarea')");
+await type("When are the wheels arriving, and what did Marco offer?", 24);
+await sleep(200);
+await click("document.querySelector('.composer button[type=submit]')");
+await until("document.querySelectorAll('.answer a.cite').length >= 5 && document.querySelector('.working')?.hidden !== false", 30000);
+await caption("Every answer points to the moment it was said");
+await sleep(2600);
+
+scene("reminders");
+await caption(null);
+await click("document.getElementById('remind')");
+await until("document.querySelector('.idea')");
+await caption("It catches what you said you’d do");
+await sleep(2600);
+
+scene("cards");
+await caption(null);
+await card(mineCard);
+await sleep(3300);
+await card(launchLast, "closing");
+await sleep(4300);
+}
 await send("Page.stopScreencast");
 const length = (Date.now() - began) / 1000;
 await sleep(400);
 
 // --- the poster: the recap page with a play mark over it ----------------------------
+if (!SHORT) {
 await run("audio.pause(); document.getElementById('player').hidden = true; __promo.hideCursor(); window.scrollTo(0, 0); true");
 await card(null);
 await sleep(700);
@@ -343,12 +427,13 @@ await run("__promo.playBadge(); true");
 await sleep(200);
 const shot = await send("Page.captureScreenshot", { format: "jpeg", quality: 88 });
 writeFileSync(join(here, "poster.jpg"), Buffer.from(shot.result.data, "base64"));
+}
 ws.close();
 stop();
 
 // --- assemble: each frame is held until the next one arrived ------------------------
 // Played a little faster than it was filmed: the app's own waits (polling, page loads) drag on film.
-const speed = Number(process.env.PROMO_SPEED || 1.12);
+const speed = Number(process.env.PROMO_SPEED || (SHORT ? 1.25 : 1.12));
 const list = [];
 let total = 0;
 frames.forEach((frame, n) => {
@@ -359,7 +444,7 @@ frames.forEach((frame, n) => {
 });
 list.push(`file '${frames[frames.length - 1].file}'`);
 writeFileSync(join(work, "frames.txt"), list.join("\n") + "\n");
-const out = join(here, "limitful-promo.mp4");
+const out = join(here, SHORT ? "limitful-launch.mp4" : "limitful-promo.mp4");
 const made = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", join(work, "frames.txt"),
   // JPEG frames are full-range; players expect video range, so convert rather than relabel.
   "-vf", `fps=30,scale=${OUT_W}:${OUT_H}:flags=lanczos:in_range=full:out_range=tv,format=yuv420p`,

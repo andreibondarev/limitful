@@ -4,6 +4,10 @@
 the setup guide, a day in the Lifelog, search, reminders, Settings and Ask.
 `poster.jpg` is the still the main README links from.
 
+`limitful-launch.mp4` is a 30-second cut for social media: a few big lines and
+the app's best moments, with no setup guide. Make it again with
+`node assets/promo/make_promo.mjs --short`.
+
 Everything in it is made up. The conversations are the ones `limitful demo`
 writes, and `pretend_server.py` stands in for the pendant, the speech model
 download and Ask, so making the video touches no real pendant, sends nothing to
