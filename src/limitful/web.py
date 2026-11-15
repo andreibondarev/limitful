@@ -22,6 +22,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import asyncio
 
+from . import __version__
 from . import ask as ask_mod
 from . import client as client_mod
 from . import config
@@ -436,6 +437,7 @@ class Library:
         """What the Settings page shows. The key itself never leaves the server."""
         key = config.api_key()
         return {
+            "version": __version__,
             "provider": config.load().get("provider") or None,
             "has_key": bool(key),
             "key_hint": self._hint(key),
