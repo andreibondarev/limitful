@@ -90,7 +90,8 @@ const until = async (expression, timeout = 20000) => {
 };
 
 // --- what is drawn over the app: a pointer, captions and title cards ---------------
-const logo = readFileSync(join(repo, "assets/logo.svg"), "utf8").replace(/<title[^>]*>.*?<\/title>/, "").replace(/\s*aria-labelledby="t"/, "");
+// The real wordmark, as drawn by assets/make_logo.py: dark ink on the light cards, cream on the dark ones.
+const logo = readFileSync(join(repo, SHORT ? "assets/wordmark-dark.svg" : "assets/wordmark.svg"), "utf8").replace(/<title[^>]*>.*?<\/title>/, "").replace(/\s*aria-labelledby="t"/, "");
 const overlay = `
 (() => {
   const build = () => {
@@ -119,7 +120,7 @@ const overlay = `
       #promo-card.off { opacity: 0; pointer-events: none; }
       #promo-card .lockup { display: flex; align-items: center; justify-content: center; gap: 22px; margin-bottom: 38px;
         font: 600 70px/1 "Avenir Next", "Segoe UI", system-ui, sans-serif; letter-spacing: -0.02em; }
-      #promo-card .lockup svg { width: 92px; height: 92px; }
+      #promo-card .lockup svg { height: 112px; width: auto; }
       #promo-card h1 { margin: 0 auto 20px; max-width: 900px; font: 400 44px/1.2 "Charter", "Iowan Old Style", Georgia, serif; text-wrap: balance; }
       #promo-card p { margin: 0 auto; max-width: 760px; font: 400 23px/1.5 "Avenir Next", "Segoe UI", system-ui, sans-serif; color: #5e6e66; }
       #promo-card p.where { margin-top: 26px; color: #0b6b58; font-weight: 600; font-size: 27px; }
@@ -183,7 +184,7 @@ const overlay = `
   if (document.body) build(); else document.addEventListener("DOMContentLoaded", build);
 })();`;
 
-const lockup = `<div class="lockup">${logo}<span>Limitful</span></div>`;
+const lockup = `<div class="lockup">${logo}</div>`;
 const firstCard = `<div>${lockup}<h1>Your Limitless Pendant, still working after December 1, 2026</h1>
   <p>An open-source replacement for the Limitless app. It runs on your own computer.</p>
   <small>The conversations in this video are made up.</small></div>`;

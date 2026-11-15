@@ -42,11 +42,12 @@ def asterisk(cx, cy, length, fill, indent="  "):
 
 def lockup(x, baseline, cap_height, ink, star):
     """The mark, then the name: returns (svg, total width)."""
-    radius = cap_height * 0.74
+    # The mark stands a little taller than the capitals and sits close, so it reads as part of the name.
+    radius, gap = cap_height * 0.6, cap_height * 0.23
     centre_y = baseline - cap_height / 2
-    path, width = word("Limitful", x + radius * 2 + cap_height * 0.34, baseline, cap_height)
+    path, width = word("Limitful", x + radius * 2 + gap, baseline, cap_height)
     body = asterisk(x + radius, centre_y, radius, star) + f'\n  <path d="{path}" fill="{ink}"/>'
-    return body, radius * 2 + cap_height * 0.34 + width
+    return body, radius * 2 + gap + width
 
 TITLE = '  <title id="t">Limitful</title>\n'
 # --- the lockup on its own, for light and dark pages
