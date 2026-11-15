@@ -205,6 +205,9 @@ const inline = (file, type) => `data:${type};base64,${readFileSync(join(here, fi
 const hook1 = `<div class="hook"><h1><span class="theirs"><img src="${inline("limitless-mark.svg", "image/svg+xml")}" alt="">Limitless</span><br>shuts down on<br>December 1.</h1>
   <img class="promo-pendant" src="${inline("limitless-pendant.webp", "image/webp")}" alt="The Limitless Pendant"></div>`;
 const hook2 = `<div><h1 class="gold">Your pendant doesn’t have to.</h1></div>`;
+// What this is, said once before the app appears.
+const whyCard = `<div>${lockup}<h1>Keep using your pendant, without the Limitless cloud or phone app.</h1>
+  <p>Limitful syncs it to your own computer instead. Free and open source.</p></div>`;
 const mineCard = `<div><h1>It runs on your computer.</h1><p>No account. No subscription. Nothing leaves it unless you say so.</p></div>`;
 const launchLast = `<div>${lockup}<h1>Keep the pendant. Keep your recordings.</h1>
   <p>Free and open source.</p><p class="where">github.com/andreibondarev/limitful</p>
@@ -376,6 +379,8 @@ scene("hook");
 await sleep(2300);
 await card(hook2);
 await sleep(2400);
+await card(whyCard, "closing");
+await sleep(3400);
 
 scene("a day");
 await card(null);
@@ -421,9 +426,9 @@ await sleep(2600);
 scene("cards");
 await caption(null);
 await card(mineCard);
-await sleep(3300);
+await sleep(2900);
 await card(launchLast, "closing");
-await sleep(4300);
+await sleep(4000);
 }
 await send("Page.stopScreencast");
 const length = (Date.now() - began) / 1000;
