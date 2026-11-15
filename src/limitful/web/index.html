@@ -409,7 +409,7 @@
   .welcome .prep { margin: 0 0 1.2rem; padding-left: 1.3rem; line-height: 1.55; color: var(--muted); }
   .welcome .prep li { margin-bottom: 0.75rem; padding-left: 0.2rem; }
   .welcome .prep b { color: var(--ink); font-weight: 600; }
-  .welcome .small { margin: 0 0 1.2rem; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+  .welcome .small { margin: 0 0 1.2rem; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
   .welcome .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 1.4rem; }
   .welcome .pill { padding: 0.55rem 1.1rem; }
   .welcome .pill.plain { border: 0; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
@@ -427,12 +427,6 @@
   @media (prefers-reduced-motion: reduce) { .welcome .pulsing circle { animation: none; } }
   .welcome .meter.wide { width: 100%; height: 6px; margin-top: 0.7rem; }
   .welcome fieldset { border: 0; margin: 0; padding: 0; }
-  .welcome label.choice { display: grid; grid-template-columns: 1.8rem 1fr; padding: 0.8rem 0; border-top: 1px solid var(--rule); cursor: pointer; }
-  .welcome label.choice b { font-weight: 600; }
-  .welcome label.choice span { grid-column: 2; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
-  .welcome .key { margin: 0 0 1rem 1.8rem; }
-  .welcome .key input { width: 100%; max-width: 26rem; padding: 0.45rem 0.6rem; font: inherit; border: 1px solid var(--rule); border-radius: 8px; background: transparent; color: var(--ink); }
-  .welcome .key small { display: block; margin-top: 0.35rem; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
   @media (max-width: 560px) { .welcome .pairing { grid-template-columns: 1fr; justify-items: center; } .welcome h2 { font-size: 1.8rem; } }
   #status.failed { border-left-color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
   .todo button, #remind, #settings, #ask, .pill {
@@ -580,19 +574,20 @@
   .setup h2:not(:first-child) { margin-top: 2.4rem; }
   .setup > p { margin: 0 0 1rem; color: var(--muted); line-height: 1.5; }
   .setup fieldset { border: 0; margin: 0 0 1rem; padding: 0; }
-  .setup label.choice {
+  /* One choice among several, and the key it may need: drawn the same in the setup guide and in Settings. */
+  :is(.welcome, .setup) label.choice {
     display: grid; grid-template-columns: 1.4rem 1fr; gap: 0 0.4rem; align-items: baseline;
     padding: 0.7rem 0; border-top: 1px solid var(--rule); cursor: pointer;
   }
-  .setup label.choice b { font-weight: 600; }
-  .setup label.choice span { grid-column: 2; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
-  .setup .key { margin: 0 0 1rem 1.8rem; }
-  .setup .key label { display: block; font-size: 0.9rem; margin-bottom: 0.25rem; }
-  .setup .key input {
-    width: min(100%, 24rem); border: 1px solid var(--rule); border-radius: 6px;
+  :is(.welcome, .setup) label.choice b { font-weight: 600; }
+  :is(.welcome, .setup) label.choice span { grid-column: 2; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+  :is(.welcome, .setup) .key { margin: 0 0 1rem 1.8rem; }
+  :is(.welcome, .setup) .key label { display: block; font-size: 0.9rem; margin-bottom: 0.25rem; }
+  :is(.welcome, .setup) .key input {
+    width: min(100%, 24rem); border: 1px solid var(--rule); border-radius: 6px; color: var(--ink);
     background: transparent; padding: 0.45rem 0.6rem; font-family: ui-monospace, monospace; font-size: 0.85rem;
   }
-  .setup .key small { display: block; margin-top: 0.35rem; color: var(--muted); line-height: 1.45; }
+  :is(.welcome, .setup) .key small { display: block; margin-top: 0.35rem; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
   .setup .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
   .setup .note { margin: 0.7rem 0 0; font-size: 0.9rem; }
   .setup .note.failed { color: var(--bad); }
@@ -1205,8 +1200,8 @@ async function showWelcome(step = "start", fromSettings = false) {
     },
 
     summaries() {
-      const key = el("input", { type: "password", autocomplete: "off", spellcheck: false, placeholder: "sk-ant-…", ariaLabel: "Anthropic API key" });
-      const keyBox = el("div", { className: "key", hidden: true }, key,
+      const key = el("input", { type: "password", autocomplete: "off", spellcheck: false, placeholder: "sk-ant-…", id: "wkey" });
+      const keyBox = el("div", { className: "key", hidden: true }, el("label", { htmlFor: "wkey", textContent: "Anthropic API key" }), key,
         el("small", { textContent: "Optional if you are signed in with the Anthropic command-line tool. Kept on this computer and sent only to Anthropic." }));
       const pick = (value, title, about) => el("label", { className: "choice" },
         el("input", { type: "radio", name: "wprovider", value, checked: (state.provider || "") === value }),
