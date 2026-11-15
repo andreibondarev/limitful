@@ -1,12 +1,12 @@
 # The promo video
 
-`limitful-promo.mp4` is a silent walk through the app of about 75 seconds, with captions:
+`limitful-promo.mp4` is a walk through the app of about 75 seconds, with captions and music:
 the setup guide, a day in the Lifelog, search, reminders, Settings and Ask.
 `poster.jpg` is a still from it. The main README plays the video from a copy uploaded to GitHub (a `user-attachments` link); after re-recording, drop the new file into any GitHub comment box and put the link it gives on its own line in the README.
 
 `limitful-launch.mp4` is a 37-second cut for social media: a few big lines, the
-pendant being checked and the app's best moments, with no setup guide, and music
-under it. Make it again with
+pendant being checked and the app's best moments, with no setup guide, over the
+same music. Make it again with
 `node assets/promo/make_promo.mjs --short`.
 
 Everything in it is made up. The conversations are the ones `limitful demo`
@@ -22,7 +22,7 @@ covered by this project's licence.
 
 The music is the start of "One Cool Minute" by Loyalty Freak Music, which the
 artist released into the public domain (CC0). `launch-music.ogg` is its first
-45 seconds, from
+82 seconds, from
 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Loyalty_Freak_Music_-_02_-_One_Cool_Minute.ogg).
 
 ## Making it again
@@ -42,7 +42,8 @@ Settings, from the environment: `PROMO_WORK` (folder for frames and the
 scratch data; a temporary folder by default), `PROMO_PORT`,
 `PROMO_CHROME_PORT`, `CHROME` (path to the browser), `PROMO_SPEED` (playback
 speed against filming speed, 1.12 by default) and `PROMO_CRF` (ffmpeg quality,
-25 by default; lower is better and bigger).
+25 by default; lower is better and bigger) and `PROMO_SILENT` (set it to leave
+the music out).
 
 The scenes are the lines after `scene("…")` in `make_promo.mjs`: each is a
 caption, some clicks and a pause. If a button is renamed in the app, the script

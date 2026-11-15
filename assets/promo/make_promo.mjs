@@ -4,7 +4,7 @@
 //   node assets/promo/make_promo.mjs           the full walk-through, limitful-promo.mp4
 //   node assets/promo/make_promo.mjs --short   the 37-second launch cut, limitful-launch.mp4
 //
-// The launch cut has music under it (launch-music.ogg); the walk-through is silent.
+// Both have music under them (launch-music.ogg); the launch cut's opening cards are timed to its beat.
 // Needs node 22+, uv, ffmpeg and Google Chrome. Everything on screen is made up:
 // the app is served by pretend_server.py, which stands in for the pendant, the
 // speech model and Ask, and fills the Lifelog with the `limitful demo` conversations.
@@ -486,8 +486,8 @@ frames.forEach((frame, n) => {
 list.push(`file '${frames[frames.length - 1].file}'`);
 writeFileSync(join(work, "frames.txt"), list.join("\n") + "\n");
 const out = join(here, SHORT ? "limitful-launch.mp4" : "limitful-promo.mp4");
-// The launch cut has music under it: the start of a CC0 track, levelled, fading out under the last card.
-const music = SHORT ? join(here, "launch-music.ogg") : null;
+// Music under both: the start of a CC0 track, levelled, fading out under the last card.
+const music = process.env.PROMO_SILENT ? null : join(here, "launch-music.ogg");
 const sound = music
   ? ["-af", `loudnorm=I=-18:TP=-2:LRA=11,afade=t=in:d=0.25,afade=t=out:st=${Math.max(0, total - 2.2).toFixed(2)}:d=2.2`, "-c:a", "aac", "-b:a", "160k"]
   : ["-an"];
