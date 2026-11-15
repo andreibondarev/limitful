@@ -146,6 +146,29 @@ def test_index_job_builds_and_can_be_stopped(imported, monkeypatch):
     assert library.job["note"].endswith("for search by meaning. All done.")
 
 
+def test_an_import_adds_its_lines_to_an_index_that_exists(tmp_path, monkeypatch):
+    monkeypatch.setattr(search, "make_embedder", lambda: Topics())
+    export = make_zip(tmp_path / "export.zip")
+
+    # No index: nothing is started, and nobody is made to download the model.
+    plain = Library(tmp_path / "plain")
+    with open(export, "rb") as stream:
+        assert plain.import_export(stream, export.stat().st_size)["indexing"] is False
+    assert not search.Index(tmp_path / "plain").exists() and not plain.job["running"]
+
+    # An index the user built: the imported lines go into it by themselves.
+    data = tmp_path / "data"
+    store = Store(data)
+    search.Index(data).build(store, Topics())
+    store.close()
+    library = Library(data)
+    with open(export, "rb") as stream:
+        assert library.import_export(stream, export.stat().st_size)["indexing"] is True
+    wait_until(lambda: not library.job["running"])
+    assert upkeep.status(library)["index"] == {"indexed": 3, "total": 3, "left": 0}
+    assert library.job["note"].endswith("All done.")
+
+
 def test_upkeep_over_http(imported, whisper):
     server = make_server(imported, 0, link_speakers=False)
     threading.Thread(target=server.serve_forever, daemon=True).start()

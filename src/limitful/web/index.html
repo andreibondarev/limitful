@@ -2277,7 +2277,7 @@ strip.addEventListener("click", (e) => {
 });
 
 const count = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
-const imported = (r) => `Imported ${count(r.conversations, "conversation")}, ${count(r.lines, "line")} and ${count(r.hours, "hour")} of audio.`;
+const imported = (r) => `Imported ${count(r.conversations, "conversation")}, ${count(r.lines, "line")} and ${count(r.hours, "hour")} of audio.${r.indexing ? " Now adding the new lines to search by meaning." : ""}`;
 
 /* A notice that something is done, which clears itself. */
 function sayDone(text) {

@@ -144,15 +144,34 @@ class Library:
             raise
         finally:
             upload.unlink(missing_ok=True)
+        indexing = False
         if self._link_speakers and result.lines:
             threading.Thread(target=self._link_job, daemon=True).start()
         else:
             self.job.update(running=False, what="")
+            indexing = bool(result.lines) and self._index_new_lines()
         return {
             "conversations": result.conversations, "lines": result.lines,
             "recordings": result.audio_files, "hours": round(result.audio_hours, 1),
             "reminders": result.reminders, "skipped": result.skipped_existing,
+            "indexing": indexing,
         }
+
+    def _index_new_lines(self) -> bool:
+        """Start adding new lines to search by meaning, if the user has set it up.
+
+        A big import can take minutes to index, so it runs as the usual background
+        job, with progress and a Stop button, and not inside the import itself.
+        """
+        from . import search as search_mod
+
+        if not search_mod.index_for(self.data_dir).exists():
+            return False
+        try:
+            upkeep.start_index(self)
+        except RuntimeError:
+            return False  # something else took the job slot; Settings still offers "Index the rest"
+        return True
 
     # --- first run -------------------------------------------------------------------
 

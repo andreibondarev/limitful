@@ -337,6 +337,27 @@ async def _cmd_demo(args) -> int:
     return 0
 
 
+def _index_imported(store: Store) -> None:
+    """Add freshly imported lines to search by meaning, if the user has set it up."""
+    from . import search
+
+    index = search.Index(store.data_dir)
+    if not index.exists():
+        return
+
+    def progress(done: int, total: int) -> None:
+        print(f"\r  {done}/{total} lines added to search by meaning", end="", file=sys.stderr, flush=True)
+
+    try:
+        added = index.build(store, search.make_embedder(), progress)
+    except Exception as err:  # the import itself is already saved
+        print(f"\nSearch by meaning was not updated ({err}). Run `limitful index` to add the new lines.")
+        return
+    if added:
+        print(file=sys.stderr)
+        print(f"Added {added} line(s) to search by meaning.")
+
+
 async def _cmd_import(args) -> int:
     from .importer import import_limitless
 
@@ -358,6 +379,8 @@ async def _cmd_import(args) -> int:
             print(f"Audio file names were read as UTC{hours:+g}h, the best fit to the transcripts.")
         for item in result.not_imported:
             print(f"Not imported yet: {item}")
+        if result.lines:
+            await asyncio.to_thread(_index_imported, store)
         return 0
     finally:
         store.close()

@@ -156,8 +156,8 @@ side of it, into a list of numbers; these are kept in `search.db` next to
 minutes on one run and 23 on another, on a laptop busy with other work both
 times; a search then takes about a fiftieth of a second. It can be stopped and carries
 on where it left off, and once it exists new lines are added as they are
-transcribed. After importing an export, run it again (or press the button) to
-add the imported lines.
+transcribed or imported. A big import takes a few minutes to add; in the app
+it shows as a job at the top of the page and can be stopped.
 
 Once the index exists:
 
