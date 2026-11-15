@@ -1,8 +1,9 @@
 """A data folder of made-up conversations, for trying the Lifelog without a pendant.
 
-Everything here is invented: the people, the bike shop and what they say. The
-lines have no audio behind them, so they can be read, searched and asked about
-but not played.
+Everything here is invented: the people, the companies, the conference and
+what they say. Sam sells route-planning software and spends two days at a
+trade show meeting people who might buy it. The lines have no audio behind
+them, so they can be read, searched and asked about but not played.
 """
 
 from __future__ import annotations
@@ -17,149 +18,178 @@ ME = "Sam"
 
 # (days before today, start time, title, summary points, [(heading or None, [(speaker, line), ...])])
 TALKS = [
-    (2, "09:10", "Quote for the school bike fleet", [
-        "The school wants twelve bikes serviced before term starts on the 2nd.",
-        "Sam will quote per bike, with new tyres priced as an extra.",
+    (2, "08:20", "Setting up the booth and who to find", [
+        "The goal for the summit is ten conversations worth a follow-up.",
+        "Castellan Foods and Nordvik Cold Chain are the two companies to find in person.",
     ], [
         (None, [
-            ("Priya", "The school rang again about their fleet. Twelve bikes, and they want them back before term starts on the second."),
-            (ME, "Twelve is fine if they drop them off this week. I'll quote per bike so they can leave out the ones that are past saving."),
-            ("Priya", "Half of them need tyres. Do we fold that into the price?"),
-            (ME, "No, keep tyres as an extra line. I'll send the quote to the bursar by Friday."),
+            ("Nadia", "Screen's up and the demo is running. What are we actually trying to leave with?"),
+            (ME, "Ten conversations worth a follow-up. A badge scan doesn't count unless they run a fleet."),
+            ("Nadia", "Anyone in particular?"),
+            (ME, "Castellan Foods and Nordvik Cold Chain. Both have people speaking tomorrow, so I'll catch them after their sessions."),
         ]),
     ]),
-    (2, "16:30", "Choosing a new card reader", [
-        "The current card reader drops its connection most afternoons.",
-        "They will try the reader that works offline for a month before deciding.",
+    (2, "14:15", "Booth chat with a bike courier startup", [
+        "Grace runs Pedalpost: forty riders across two cities, planned in a spreadsheet.",
+        "Sam will send her the starter-plan pricing, which charges per route.",
     ], [
         (None, [
-            ("Priya", "The card reader dropped out three times this afternoon. Somebody walked out without paying because it took so long."),
-            (ME, "That's the third week running. What was the one that keeps taking payments when the wifi goes?"),
-            ("Priya", "It stores them and sends them later. Costs a bit more each month."),
-            (ME, "Let's take the month's trial and see whether it actually behaves before we commit."),
+            ("Grace", "We're forty riders across two cities. Everything I've looked at is priced for companies ten times our size."),
+            (ME, "How are you planning the routes today?"),
+            ("Grace", "A spreadsheet and a group chat. It falls over every time it rains."),
+            (ME, "We have a starter plan that charges per route instead of per seat. I'll send you the pricing tonight so you can run the numbers."),
         ]),
     ]),
-    (1, "08:40", "Morning plan: deliveries and the Saturday workshop", [
-        "The wheel order is a week late, which holds up three customer repairs.",
-        "Saturday's puncture workshop has nine people signed up; the limit stays at ten.",
-        "Priya opens on Saturday so Sam can set up the workshop.",
-    ], [
-        ("Deliveries", [
-            (ME, "Morning. Did the wheels turn up yesterday after I left?"),
-            ("Priya", "No, nothing. That's a week late now, and three repairs are waiting on them."),
-            (ME, "I'll call Marco at ten and find out where they are. If it's another week we should tell those three customers today."),
-            ("Priya", "The Hendersons' one is the urgent one. They leave on Friday."),
-        ]),
-        ("Saturday workshop", [
-            (ME, "How many have we got for the puncture workshop on Saturday?"),
-            ("Priya", "Nine signed up. Someone asked if they could bring a friend."),
-            (ME, "Ten is the limit, we only have ten stands. So one friend, and then it's full."),
-            ("Priya", "I can open up on Saturday if you want to set the stands out first."),
-            (ME, "Yes please. I'll bring the spare tubes from the lock-up on Friday night."),
-        ]),
-    ]),
-    (1, "10:05", "Supplier call about the late wheel order", [
-        "The wheels were held at the port and are now due on Thursday.",
-        "Marco will send a tracking number today and take 10% off the invoice.",
-        "Sam will lend the Hendersons a wheel so they can leave on Friday.",
+    (2, "17:40", "End of day one: what worked at the booth", [
+        "Fourteen badges scanned, five of them worth a follow-up.",
+        "The cold-chain demo replaces the parcel one tomorrow, with the fuel saving on the first screen.",
     ], [
         (None, [
-            (ME, "Marco, it's Sam from the shop. I'm chasing the wheel order, it was due last Tuesday."),
-            ("Marco", "I know, I'm sorry. The container sat at the port for five days. They cleared it yesterday."),
-            (ME, "So when do I actually have them in my hands?"),
-            ("Marco", "Thursday. I'll send you the tracking number this afternoon so you can see it moving."),
-            (ME, "I've got a customer leaving on Friday who needs one of those wheels. Thursday is cutting it close."),
-            ("Marco", "Understood. Take ten percent off the invoice for the trouble, I'll put it in writing."),
-            (ME, "Thank you. If it slips past Thursday I'll lend them a wheel off the hire bike."),
+            ("Nadia", "Fourteen scans today. I'd call five of them real."),
+            (ME, "That's about what I counted. The parcel demo isn't landing, though. Everyone who stopped ships food."),
+            ("Nadia", "I can swap it for the cold-chain dataset tonight. It takes twenty minutes."),
+            (ME, "Do that. And put the fuel saving on the first screen, it's the number they all ask about."),
         ]),
     ]),
-    (1, "12:35", "Lunch: planning the Lisbon trip", [
-        "Flights are cheapest leaving on the 14th and coming back on the 21st.",
-        "Dana will book the flights tonight; Sam will find someone to cover the shop that week.",
-        "They want two days of riding along the coast, so the bikes get hired there.",
+    (1, "08:30", "Breakfast: the plan for day two", [
+        "Sam meets Elena Ruiz of Castellan Foods after her nine o'clock panel, and looks for Tobias of Nordvik at eleven.",
+        "Hiro from Tracewell asked for lunch about connecting their trackers.",
+        "Anyone with under thirty vans sees the starter plan first.",
     ], [
-        ("Dates and flights", [
-            ("Dana", "I looked at flights. Leaving on the fourteenth and back on the twenty-first is about half the price of the week after."),
-            (ME, "The fourteenth works if I can get cover for the shop. Priya can't do the whole week on her own."),
-            ("Dana", "Ask your cousin? He did it in the spring."),
-            (ME, "I'll ask him tonight. You book the flights and I'll sort the cover."),
+        ("Who to find", [
+            (ME, "Elena Ruiz from Castellan Foods is on the nine o'clock panel. I've got coffee with her straight after."),
+            ("Nadia", "And Nordvik?"),
+            (ME, "Tobias is in the cold-chain session at eleven. I'll wait for him in the hallway."),
+            ("Nadia", "Hiro from Tracewell asked for lunch. He wants to talk about plugging their trackers into our planner."),
+            (ME, "Good, book it for one. That's a partnership rather than a sale, but it could bring us more leads than the booth does."),
         ]),
-        ("What to do there", [
-            ("Dana", "I'd like two days riding the coast road, the rest just wandering about."),
-            (ME, "Then we hire bikes there. I'm not boxing ours up for two days of riding."),
-            ("Dana", "Fine by me. There's a place by the river that rents proper road bikes."),
+        ("The demo", [
+            ("Nadia", "The cold-chain dataset is loaded, and the fuel saving is on the first screen like you asked."),
+            (ME, "Perfect. If anyone with under thirty vans stops by, show them the starter plan first."),
+            ("Nadia", "Will do. I'll message you if somebody wants pricing."),
         ]),
     ]),
-    (1, "15:10", "Fitting a customer for a touring bike", [
-        "The customer is planning a three-week tour and carries about 20 kg.",
-        "A steel frame one size up with a longer stem suits them best.",
-        "They will come back on Tuesday to test ride it loaded.",
+    (1, "10:05", "Coffee with Elena Ruiz of Castellan Foods", [
+        "Castellan runs 140 vans from three depots, and its fuel bill is up 18% on last year.",
+        "Elena wants a six-week pilot at one depot, and her IT team needs a security questionnaire.",
+        "Sam will send the pilot proposal and the questionnaire by Friday; her board meets on the 19th.",
     ], [
         (None, [
-            ("Customer", "I'm doing three weeks through France in the summer, camping, so I'm carrying everything."),
-            (ME, "How much weight, roughly, once the tent and the cooking kit are on?"),
-            ("Customer", "About twenty kilos. I had back pain on my last bike after a long day."),
-            (ME, "Then I'd put you on the steel frame, one size up, with a longer stem so you're not hunched over."),
-            ("Customer", "Can I try it with bags on before I decide?"),
-            (ME, "Of course. Come back Tuesday and I'll have it loaded up with panniers for you to ride round the block."),
+            (ME, "Elena, thanks for making time. On the panel you said fuel is the number that keeps you up at night."),
+            ("Elena", "It is. We run a hundred and forty vans out of three depots, and fuel is up eighteen percent on last year."),
+            (ME, "How are the routes planned now?"),
+            ("Elena", "Each depot manager does it by hand the night before. They're good, but nobody can plan again when a van breaks down."),
+            (ME, "That's exactly where we help. What would you need to see before trying it?"),
+            ("Elena", "A pilot at one depot, six weeks, with real numbers at the end. And our IT team won't look at anything without a security questionnaire."),
+            (ME, "I'll send you a pilot proposal for the northern depot and the completed security questionnaire by Friday."),
+            ("Elena", "Friday works. The board meets on the nineteenth, and I'd like to bring them a decision."),
         ]),
     ]),
-    (1, "18:50", "Dinner: the weekend and the school fundraiser", [
-        "The school fundraiser is on Sunday afternoon and needs a raffle prize.",
-        "Sam will donate a bike service voucher.",
-        "Saturday evening is kept free for Dana's parents.",
+    (1, "11:40", "In the hallway with Tobias from Nordvik Cold Chain", [
+        "Nordvik's planner cannot mix chilled and frozen drops on one van, so two vans cover the same streets.",
+        "Their current contract runs until March, and procurement will want three quotes.",
+        "Nadia will show Tobias temperature zones with Nordvik's own data next Wednesday.",
     ], [
         (None, [
-            ("Dana", "The school asked if the shop would give something for the raffle on Sunday."),
-            (ME, "I can do a voucher for a full service. That's easier than finding a prize."),
-            ("Dana", "Perfect. And my parents are coming on Saturday evening, so don't plan anything after the workshop."),
-            (ME, "Workshop finishes at one. I'm all yours after that."),
+            (ME, "Tobias, good session. You said your planner can't mix chilled and frozen on one van."),
+            ("Tobias", "It can't, so we send two vans down the same street. It's absurd."),
+            (ME, "We handle that with temperature zones. Are you tied in with your current supplier?"),
+            ("Tobias", "Until March. I'd need a reason to switch before then, and procurement will want three quotes."),
+            (ME, "Then let's give you the reason. I'll introduce you to Nadia, our engineer, and she can show it with your own drop data."),
+            ("Tobias", "Next Wednesday suits me. Send an invite and I'll bring our transport manager."),
         ]),
     ]),
-    (0, "08:35", "Tracking number and today's repairs", [
-        "The tracking number arrived overnight; the wheels are out for delivery tomorrow.",
-        "The Hendersons have been told their bike will be ready on Thursday evening.",
+    (1, "13:00", "Lunch with Hiro Tanaka: connecting Tracewell's trackers", [
+        "Tracewell has trackers in about 9,000 vehicles and no route planning of its own.",
+        "Hiro suggests sending customers each other's way, starting with a joint webinar in the new year.",
+        "Sam will send the API documentation this week and draft a referral agreement.",
+    ], [
+        ("What Tracewell wants", [
+            ("Hiro", "We have trackers in about nine thousand vehicles, and customers keep asking us for route planning. We don't want to build it."),
+            (ME, "And we keep being asked for live vehicle positions. So each of us has the half the other is missing."),
+            ("Hiro", "Exactly. If your planner can read our positions, I can put you in front of our customers."),
+        ]),
+        ("Next steps", [
+            (ME, "I'll send you our API documentation this week so your team can judge how much work it is."),
+            ("Hiro", "Good. I'd start with a joint webinar in the new year and see who turns up."),
+            (ME, "Agreed. I'll draft a simple referral agreement, nothing exclusive, and we can argue about the percentages later."),
+        ]),
+    ]),
+    (1, "15:30", "Booth demo for Golden Crust Bakeries", [
+        "Golden Crust runs 22 vans that must finish their deliveries by half past six in the morning.",
+        "With that cutoff set, the demo still saved about forty minutes a morning.",
+        "A pricing call for the starter plan is set for Tuesday at ten.",
     ], [
         (None, [
-            ("Priya", "Marco's tracking number came through last night. It says out for delivery tomorrow."),
-            (ME, "Good. Ring the Hendersons and tell them Thursday evening, and that I've a spare wheel if it slips."),
-            ("Priya", "Already did. They were relieved."),
-            (ME, "Then today is the two brake jobs and the fleet quote. I still owe the bursar that."),
+            ("Amara", "We're twenty-two vans, and every café wants its bread before half past six. Can it plan around that?"),
+            (ME, "Yes, delivery windows are the first thing you set. Nadia, can you put in a six-thirty cutoff?"),
+            ("Nadia", "There. It moved four stops to a different van and still saves about forty minutes a morning."),
+            ("Amara", "That's the part I needed to see. What does it cost for a fleet our size?"),
+            (ME, "Under twenty-five vehicles is the starter plan. Let's do a call on Tuesday at ten and I'll walk you through the pricing."),
+            ("Amara", "Tuesday at ten is fine. Send it to my work address, it's on the badge."),
+        ]),
+    ]),
+    (1, "19:10", "Dinner: ranking the leads", [
+        "Castellan Foods comes first: the pilot proposal goes out before anything else.",
+        "Nordvik is a March decision, and Golden Crust is small but could sign this month.",
+        "Sam writes all the follow-ups before the flight home.",
+    ], [
+        (None, [
+            ("Nadia", "So who's first? We scanned thirty-one badges and I can't chase them all."),
+            (ME, "Castellan. A hundred and forty vans and a board date. The pilot proposal goes out before anything else."),
+            ("Nadia", "Nordvik felt keen, but March is a long way off."),
+            (ME, "Keep them warm with the demo on Wednesday. Golden Crust is small, but she could sign this month."),
+            ("Nadia", "And Tracewell?"),
+            (ME, "That's the long game. I'll write all the follow-ups tomorrow morning, before the flight."),
+        ]),
+    ]),
+    (0, "08:35", "Follow-ups before the flight", [
+        "Elena replied overnight: she wants the pilot proposal to cover the eastern depot as well.",
+        "Nadia finishes the security questionnaire by eleven, and Sam sends both from the gate.",
+    ], [
+        (None, [
+            ("Nadia", "Elena emailed overnight. She wants the pilot proposal to cover the eastern depot as well as the northern one."),
+            (ME, "Two depots is a better test anyway. Can you finish the security questionnaire this morning?"),
+            ("Nadia", "It's half done. You'll have it by eleven."),
+            (ME, "Then I'll send both from the gate. After that it's the API documentation for Hiro and the invite for Tobias."),
         ]),
     ]),
 ]
+
+# The conversation the promo video opens, searches for and asks about.
+FEATURED = "Coffee with Elena Ruiz of Castellan Foods"
 
 # (title of the conversation, words the line contains, reminder text, status)
 REMINDERS = [
-    ("Quote for the school bike fleet", "send the quote", "Send the fleet quote to the bursar by Friday", "accepted"),
-    ("Morning plan", "call Marco at ten", "Call Marco at ten about the wheel order", "done"),
-    ("Morning plan", "spare tubes", "Bring the spare tubes from the lock-up on Friday night", "suggested"),
-    ("Lunch", "ask him tonight", "Ask your cousin to cover the shop from the 14th to the 21st", "suggested"),
-    ("Fitting a customer", "Come back Tuesday", "Load the steel tourer with panniers for Tuesday's test ride", "suggested"),
-    ("Dinner", "voucher for a full service", "Make a service voucher for Sunday's school raffle", "accepted"),
+    ("Booth chat", "send you the pricing tonight", "Send Grace the starter-plan pricing", "accepted"),
+    ("Setting up the booth", "catch them after their sessions", "Find Castellan Foods and Nordvik after their sessions", "done"),
+    ("Coffee with Elena", "by Friday", "Send Elena the pilot proposal and the security questionnaire by Friday", "suggested"),
+    ("In the hallway", "introduce you to Nadia", "Invite Tobias and Nadia to a demo next Wednesday", "suggested"),
+    ("Lunch with Hiro", "API documentation this week", "Send Hiro the API documentation", "suggested"),
+    ("Booth demo", "Tuesday at ten and", "Set up Tuesday's ten o'clock pricing call with Amara", "accepted"),
 ]
 
 RECAP = (
-    "Chasing the late wheel order, a touring bike fitting, and settling dates for Lisbon",
+    "Day two of the Freight Futures Summit: a pilot in sight at Castellan Foods, and three more leads",
     [
-        "The wheels were stuck at the port and are now due Thursday; Marco is sending tracking and taking 10% off the invoice.",
-        "Lisbon is the 14th to the 21st: Dana books flights tonight, and Sam needs cover for the shop that week.",
-        "A customer planning a three-week tour suits the steel frame one size up, and returns Tuesday to ride it loaded.",
-        "Saturday's puncture workshop is nearly full at nine of ten, and the shop is giving a service voucher to Sunday's raffle.",
+        "Elena Ruiz wants a six-week pilot at one of Castellan's three depots; the proposal and the security questionnaire are due Friday, ahead of her board on the 19th.",
+        "Nordvik Cold Chain is tied in until March; Tobias gets a temperature-zone demo from Nadia next Wednesday.",
+        "Tracewell wants its trackers connected to the planner and to refer customers both ways, starting with a joint webinar.",
+        "Golden Crust Bakeries, with 22 vans, has a pricing call on Tuesday at ten.",
     ],
 )
 
-QUESTION = "When are the wheels arriving, and what did Marco offer?"
+QUESTION = "What does Elena need before a pilot, and when does she decide?"
 ANSWER = (
-    "The wheels are due on **Thursday**. Marco said the container sat at the port for five days and "
-    "was cleared the day before the call {port}, and gave Thursday as the delivery day {thursday}.\n\n"
-    "He offered two things:\n\n"
-    "- a tracking number, sent that afternoon {thursday}\n"
-    "- **10% off the invoice**, which he said he would put in writing {discount}\n\n"
-    "The tracking number did arrive overnight and shows the wheels out for delivery {tracking}."
+    "Elena asked for two things before Castellan Foods tries it {needs}:\n\n"
+    "- **a six-week pilot at one depot**, with real numbers at the end\n"
+    "- a completed **security questionnaire** for her IT team\n\n"
+    "You said you would send both by **Friday** {friday}. She wants to bring a decision to her board, "
+    "which meets on the **19th** {board}.\n\n"
+    "Since then she has asked for the proposal to cover the eastern depot too {extra}."
 )
-CITES = {"port": "sat at the port", "thursday": "send you the tracking number",
-         "discount": "ten percent off", "tracking": "tracking number came through"}
+CITES = {"needs": "with real numbers at the end", "friday": "by Friday",
+         "board": "board meets on the nineteenth", "extra": "eastern depot as well"}
 
 
 def build(data_dir: Path, today: date | None = None) -> dict:

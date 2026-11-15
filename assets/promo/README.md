@@ -9,7 +9,7 @@ the app's best moments, with no setup guide, and music under it. Make it again w
 `node assets/promo/make_promo.mjs --short`.
 
 Everything in it is made up. The conversations are the ones `limitful demo`
-writes, and `pretend_server.py` stands in for the pendant, the speech model
+writes, two days at a trade show spent meeting possible customers, and `pretend_server.py` stands in for the pendant, the speech model
 download and Ask, so making the video touches no real pendant, sends nothing to
 a hosted model and never opens your own data folder. The line that "plays" at
 the end has a silent recording behind it.

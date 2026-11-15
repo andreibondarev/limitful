@@ -73,7 +73,7 @@ def add_stand_in_audio() -> None:
     store = Store(DATA_DIR)
     try:
         cid, start, end = store.db.execute(
-            "SELECT id, start_ms, end_ms FROM conversations WHERE title LIKE 'Supplier call%'").fetchone()
+            "SELECT id, start_ms, end_ms FROM conversations WHERE title = ?", (demo.FEATURED,)).fetchone()
         (last,) = store.db.execute(
             "SELECT MAX(end_ms) FROM utterances WHERE start_ms BETWEEN ? AND ?", (start, end)).fetchone()
         began = start - 500
@@ -115,9 +115,9 @@ def answer(data_dir, history, api_key=None, model=None, on_step=lambda step: Non
             return lookup.db.execute("SELECT id FROM utterances WHERE text LIKE ?", (f"%{words}%",)).fetchone()[0]
 
         text = demo.ANSWER.format(**{key: f"[L{find(words)}]" for key, words in demo.CITES.items()})
-        on_step("Searching for “wheels”")
+        on_step("Searching for “Elena”")
         time.sleep(0.7)
-        on_step("Reading “Supplier call about the late wheel order”")
+        on_step(f"Reading “{demo.FEATURED}”")
         time.sleep(0.7)
         for piece in re.findall(r"\S+\s*", text):
             on_text(piece)

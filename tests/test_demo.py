@@ -11,15 +11,15 @@ from limitful.web import Library
 
 def test_demo_folder_is_complete_and_consistent(tmp_path):
     made = demo.build(tmp_path, today=date(2026, 3, 12))
-    assert made == {"conversations": 8, "lines": 45, "days": 3, "reminders": 6}
+    assert made == {"conversations": 10, "lines": 56, "days": 3, "reminders": 6}
 
     library = Library(tmp_path)
     assert [d["day"] for d in library.days()] == ["2026-03-10", "2026-03-11", "2026-03-12"]
     talks = library.conversations("2026-03-11")
     assert [t["title"] for t in talks][:2] == [
-        "Morning plan: deliveries and the Saturday workshop", "Supplier call about the late wheel order"]
-    assert [s["title"] for s in talks[0]["sections"]] == ["Deliveries", "Saturday workshop"]
-    assert {line["speaker"]["name"] for line in library.day("2026-03-11")} >= {"Sam", "Priya", "Marco", "Dana"}
+        "Breakfast: the plan for day two", demo.FEATURED]
+    assert [s["title"] for s in talks[0]["sections"]] == ["Who to find", "The demo"]
+    assert {line["speaker"]["name"] for line in library.day("2026-03-11")} >= {"Sam", "Nadia", "Elena", "Tobias", "Hiro", "Amara"}
 
     # Every reminder points at a line inside its own conversation.
     reminders = library.reminders(include_done=True)
@@ -27,7 +27,7 @@ def test_demo_folder_is_complete_and_consistent(tmp_path):
     assert all(r["line"] and r["line"]["text"] for r in reminders)
 
     recap = library.recap("2026-03-11")["recap"]
-    assert recap["headline"].startswith("Chasing the late wheel order") and recap["stale"] is False
+    assert recap["headline"].startswith("Day two of the Freight Futures Summit") and recap["stale"] is False
 
     store = Store(tmp_path)
     (chat,) = store.chats()

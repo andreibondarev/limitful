@@ -146,6 +146,9 @@ const overlay = `
       .promo-launch #promo-card small { color: #7d8d85; }
       .promo-launch #promo-card .lockup { margin-bottom: 44px; }
       .promo-launch #promo-card.closing h1 { font-size: 58px; }
+      .promo-launch #promo-card p.intro { margin-bottom: 30px; color: #f4c63a; font-weight: 600; font-size: 38px; letter-spacing: -0.01em; }
+      .promo-launch #promo-card .late { opacity: 0; transition: opacity 0.4s; }
+      .promo-launch #promo-card.more .late { opacity: 1; }
       .promo-launch #promo-caption { bottom: 46px; max-width: 1100px; background: #13201a; font: 600 36px/1.2 "Avenir Next", "Segoe UI", system-ui, sans-serif;
         letter-spacing: -0.015em; padding: 20px 38px; border-radius: 20px; box-shadow: 0 18px 50px rgba(19, 32, 26, 0.45); }
       .promo-launch #promo-caption.lift { bottom: 140px; }
@@ -210,8 +213,10 @@ const hook1 = `<div class="hook"><h1><span class="theirs"><img src="${inline("li
   <img class="promo-pendant" src="${inline("limitless-pendant.webp", "image/webp")}" alt="The Limitless Pendant"></div>`;
 const hook2 = `<div><h1 class="gold">Your pendant doesn’t have to.</h1></div>`;
 // What this is, said once before the app appears.
-const whyCard = `<div>${lockup}<h1>Keep using your pendant, without the Limitless cloud or phone app.</h1>
-  <p>Limitful syncs it to your own computer instead. Free and open source.</p></div>`;
+// The name comes up first, on its own; the rest of the card follows two beats later.
+const introCard = `<div><p class="intro">Introducing</p>${lockup}
+  <h1 class="late">The transcription and intelligence platform for your Limitless pendant.</h1>
+  <p class="late">On your own computer, or the cloud you choose. Free and open source.</p></div>`;
 const mineCard = `<div><h1>It runs on your computer.</h1><p>No account. No subscription. Nothing leaves it unless you say so.</p></div>`;
 const launchLast = `<div>${lockup}<h1>Keep the pendant. Keep your recordings.</h1>
   <p>Free and open source.</p><p class="where">github.com/andreibondarev/limitful</p>
@@ -315,7 +320,7 @@ await click("document.getElementById('prev')");
 await until("document.querySelector('.recap .headline')");
 await caption("Your Lifelog: every day opens with a recap");
 await sleep(2900);
-const talk = "[...document.querySelectorAll('details.card summary')].find((s) => s.textContent.includes('Supplier call'))";
+const talk = "[...document.querySelectorAll('details.card summary')].find((s) => s.textContent.includes('Coffee with Elena'))";
 await click(`${talk}.querySelector('h2')`);
 await caption("Each conversation gets a title, a summary and its full transcript");
 await run(`window.scrollBy({ top: ${talk}.getBoundingClientRect().top - 190, behavior: "smooth" })`);
@@ -326,7 +331,7 @@ await caption(null);
 await run("window.scrollTo({ top: 0, behavior: 'smooth' })");
 await click("document.getElementById('search')");
 await caption("Search everything that was said");
-await type("tracking number", 65);
+await type("pilot proposal", 65);
 await until("document.getElementById('title').textContent === 'Search' && document.querySelectorAll('main .hit, main .line').length > 0");
 await sleep(2300);
 await caption(null);
@@ -361,10 +366,10 @@ await click("document.getElementById('ask')");
 await until("document.querySelector('.composer textarea')");
 await caption("Ask about anything you've said or heard");
 await click("document.querySelector('.composer textarea')");
-await type("When are the wheels arriving, and what did Marco offer?", 34);
+await type("What does Elena need before a pilot, and when does she decide?", 34);
 await sleep(250);
 await click("document.querySelector('.composer button[type=submit]')");
-await until("document.querySelectorAll('.answer a.cite').length >= 5 && document.querySelector('.working')?.hidden !== false", 30000);
+await until("document.querySelectorAll('.answer a.cite').length >= 4 && document.querySelector('.working')?.hidden !== false", 30000);
 await caption("Answers link to the lines they are based on");
 await sleep(2300);
 await caption(null);
@@ -380,18 +385,20 @@ await card(lastCard);
 await sleep(4600);
 } else {
 scene("hook");
-// The opening cards change on the music's beat: four beats, four, then six.
+// The opening cards change on the music's beat: four beats, four, then two and six.
 await sleep(4 * BEAT);
 await card(hook2);
 await sleep(4 * BEAT);
-await card(whyCard, "closing");
+await card(introCard, "closing");
+await sleep(2 * BEAT);
+await run("document.getElementById('promo-card').classList.add('more'); true");
 await sleep(6 * BEAT);
 
 scene("a day");
 await card(null);
 await caption("Every day, recapped");
 await sleep(2700);
-const talk = "[...document.querySelectorAll('details.card summary')].find((s) => s.textContent.includes('Supplier call'))";
+const talk = "[...document.querySelectorAll('details.card summary')].find((s) => s.textContent.includes('Coffee with Elena'))";
 await click(`${talk}.querySelector('h2')`);
 await caption("Every conversation, transcribed on your computer");
 await run(`window.scrollBy({ top: ${talk}.getBoundingClientRect().top - 190, behavior: "smooth" })`);
@@ -402,7 +409,7 @@ await caption(null);
 await run("window.scrollTo({ top: 0, behavior: 'smooth' })");
 await click("document.getElementById('search')");
 await caption("Search everything that was said");
-await type("tracking number", 48);
+await type("pilot proposal", 48);
 await until("document.getElementById('title').textContent === 'Search' && document.querySelectorAll('main .hit, main .line').length > 0");
 await sleep(1700);
 await caption(null);
@@ -414,10 +421,10 @@ await click("document.getElementById('ask')");
 await until("document.querySelector('.composer textarea')");
 await caption("Ask it anything");
 await click("document.querySelector('.composer textarea')");
-await type("When are the wheels arriving, and what did Marco offer?", 24);
+await type("What does Elena need before a pilot, and when does she decide?", 24);
 await sleep(200);
 await click("document.querySelector('.composer button[type=submit]')");
-await until("document.querySelectorAll('.answer a.cite').length >= 5 && document.querySelector('.working')?.hidden !== false", 30000);
+await until("document.querySelectorAll('.answer a.cite').length >= 4 && document.querySelector('.working')?.hidden !== false", 30000);
 await caption("Every answer points to the moment it was said");
 await sleep(2600);
 
