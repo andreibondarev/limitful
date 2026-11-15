@@ -12,9 +12,9 @@ Limitless ends its service on December 1, 2026 and deletes the data it holds.
 This project keeps the hardware working after that, and keeps the history you
 export before then usable.
 
-<p align="center"><a href="assets/promo/limitful-promo.mp4"><img src="assets/promo/poster.jpg" width="820" alt="Watch the 75-second video: a day in the Lifelog, with a recap of the day and its conversations"></a></p>
+https://github.com/user-attachments/assets/8baeea5a-fbde-49e7-9baf-68c0e0b90f90
 
-<p align="center"><a href="assets/promo/limitful-promo.mp4">Watch the 75-second video</a> (silent, with captions; the conversations in it are made up)</p>
+<p align="center">A 75-second tour (silent, with captions; the conversations in it are made up). <a href="assets/promo/limitful-promo.mp4">Download the video</a>.</p>
 
 ## What it does
 
