@@ -1,11 +1,12 @@
 # The promo video
 
-`limitful-promo.mp4` is a 75-second silent walk through the app, with captions:
+`limitful-promo.mp4` is a silent walk through the app of about 75 seconds, with captions:
 the setup guide, a day in the Lifelog, search, reminders, Settings and Ask.
 `poster.jpg` is a still from it. The main README plays the video from a copy uploaded to GitHub (a `user-attachments` link); after re-recording, drop the new file into any GitHub comment box and put the link it gives on its own line in the README.
 
-`limitful-launch.mp4` is a half-minute cut for social media: a few big lines and
-the app's best moments, with no setup guide, and music under it. Make it again with
+`limitful-launch.mp4` is a 37-second cut for social media: a few big lines, the
+pendant being checked and the app's best moments, with no setup guide, and music
+under it. Make it again with
 `node assets/promo/make_promo.mjs --short`.
 
 Everything in it is made up. The conversations are the ones `limitful demo`

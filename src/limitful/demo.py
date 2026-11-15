@@ -4,6 +4,9 @@ Everything here is invented: the people, the companies, the conference and
 what they say. Sam sells route-planning software and spends two days at a
 trade show meeting people who might buy it. The lines have no audio behind
 them, so they can be read, searched and asked about but not played.
+
+The conversations that matter are written out below. The hours between them,
+talks on stage and visitors at the stand, come from demo_filler.
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import json
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
+from .demo_filler import Filler
 from .store import Store
 
 ME = "Sam"
@@ -156,16 +160,85 @@ TALKS = [
     ]),
 ]
 
+# The long stretches between those: talks Sam sat in and visitors at the stand. Their lines are
+# put together by demo_filler, because a real day with a pendant is hours of speech.
+# (days before today, start time, minutes, title, summary points, kind, the people speaking)
+STAND = [ME, "Nadia"]
+LONG = [
+    (2, "09:00", 38, "Opening session: what a delivery will cost in 2030", [
+        "The speaker argued that planning, more than vehicles, decides what a delivery costs.",
+        "Most of the examples were about time lost at the kerb and at the depot gate.",
+    ], "talk", ["Ingrid"]),
+    (2, "10:00", 75, "At the stand: the first visitors", [
+        "A steady run of visitors, most of them from small and middling fleets.",
+        "The usual questions: how long it takes to set up, what it costs, and how drivers take to it.",
+    ], "stand", STAND),
+    (2, "11:25", 60, "At the stand: up to lunch", [
+        "Several visitors asked to try it on one depot or one round first.",
+        "A few asked for the price list by email.",
+    ], "stand", STAND),
+    (2, "13:10", 55, "At the stand: the early afternoon", [
+        "Quieter after lunch, with longer conversations.",
+        "Questions about where data is kept came up more than once.",
+    ], "stand", STAND),
+    (2, "14:40", 50, "At the stand: fleets that have tried planners before", [
+        "More than one visitor had tried a planner before and given it up because drivers disliked it.",
+        "Sam's answer each time: start with one round, and let drivers overrule the route.",
+    ], "stand", STAND),
+    (2, "15:40", 100, "At the stand: the last two hours of day one", [
+        "The busiest stretch of the day.",
+        "Most visitors ship food, which is why the demo changes tomorrow.",
+    ], "stand", STAND),
+    (1, "09:00", 52, "Panel: what keeps a fleet director awake", [
+        "Elena Ruiz of Castellan Foods said fuel is the number that worries her most.",
+        "The panel agreed that depots differ more in how they plan than in what they drive.",
+        "All three speakers started small: one depot or one round.",
+    ], "talk", ["Elena", "Ingrid", "Marisol"]),
+    (1, "10:38", 20, "At the stand: between sessions", [
+        "A short rush as the first panel emptied out.",
+    ], "stand", STAND),
+    (1, "11:00", 36, "Session: chilled and frozen on one van", [
+        "Tobias of Nordvik Cold Chain described sending two vans down the same street.",
+        "The rules that matter in cold chain are about doors, loading order and waiting.",
+    ], "talk", ["Tobias", "Bastien"]),
+    (1, "11:58", 55, "At the stand: the lunchtime crowd", [
+        "Nadia ran the cold-chain demo for most of an hour.",
+        "Visitors asked about access rules in city centres and about arrival times.",
+    ], "stand", STAND),
+    (1, "13:50", 65, "Keynote: the mile nobody pays for", [
+        "The keynote put the cost of empty miles and second attempts above the cost of fuel.",
+        "Its advice was to ask drivers where the time goes before buying anything.",
+    ], "talk", ["Bastien"]),
+    (1, "15:00", 26, "At the stand: after the keynote", [
+        "Visitors came straight from the keynote asking about empty miles.",
+    ], "stand", STAND),
+    (1, "15:55", 105, "At the stand: the last afternoon", [
+        "The longest stretch at the stand, and the most badges scanned.",
+        "Fleets of every size, from eight vans to ninety.",
+    ], "stand", STAND),
+]
+
+# The written conversations that carry on after their written lines, as the other person
+# works through their questions: start of the title -> (minutes in all, who asks, who answers).
+CARRY_ON = {
+    "Booth chat": (14, "Grace", [ME]),
+    "Coffee with Elena": (28, "Elena", [ME]),
+    "In the hallway": (14, "Tobias", [ME]),
+    "Lunch with Hiro": (42, "Hiro", [ME]),
+    "Booth demo": (18, "Amara", STAND),
+}
+
 # The conversation the promo video opens, searches for and asks about.
 FEATURED = "Coffee with Elena Ruiz of Castellan Foods"
 
 # (title of the conversation, words the line contains, reminder text, status)
+# The one from the featured conversation is the newest still waiting, so it heads the list.
 REMINDERS = [
-    ("Booth chat", "send you the pricing tonight", "Send Grace the starter-plan pricing", "accepted"),
+    ("Booth chat", "send you the pricing tonight", "Send Grace the starter-plan pricing", "suggested"),
     ("Setting up the booth", "catch them after their sessions", "Find Castellan Foods and Nordvik after their sessions", "done"),
     ("Coffee with Elena", "by Friday", "Send Elena the pilot proposal and the security questionnaire by Friday", "suggested"),
-    ("In the hallway", "introduce you to Nadia", "Invite Tobias and Nadia to a demo next Wednesday", "suggested"),
-    ("Lunch with Hiro", "API documentation this week", "Send Hiro the API documentation", "suggested"),
+    ("In the hallway", "introduce you to Nadia", "Invite Tobias and Nadia to a demo next Wednesday", "accepted"),
+    ("Lunch with Hiro", "API documentation this week", "Send Hiro the API documentation", "accepted"),
     ("Booth demo", "Tuesday at ten and", "Set up Tuesday's ten o'clock pricing call with Amara", "accepted"),
 ]
 
@@ -201,35 +274,63 @@ def build(data_dir: Path, today: date | None = None) -> dict:
             raise ValueError(f"{data_dir} already has conversations in it; choose an empty folder")
         db = store.db
         speakers: dict[str, int] = {}
-        line_ids: dict[str, int] = {}      # line text -> id, for reminders and citations
+        line_ids: dict[str, int] = {}      # written line -> id, for reminders and citations
+        written: set[str] = set()
         talk_ids: dict[str, tuple[int, int]] = {}
-        for days_ago, clock, title, summary, sections in TALKS:
+        filler = Filler()
+
+        def begins(days_ago: int, clock: str) -> int:
             hour, minute = map(int, clock.split(":"))
-            at = datetime.combine(today - timedelta(days=days_ago), time(hour, minute))
-            start_ms = cursor = int(at.timestamp() * 1000)
-            headings = []
+            return int(datetime.combine(today - timedelta(days=days_ago), time(hour, minute)).timestamp() * 1000)
+
+        # Each conversation: (start, title, summary, [(when, heading)], [(speaker, text, start, end)]).
+        talks = []
+        for days_ago, clock, title, summary, sections in TALKS:
+            start_ms = cursor = begins(days_ago, clock)
+            headings, said = [], []
             for heading, lines in sections:
                 if heading:
                     headings.append((cursor, heading))
                 for who, text in lines:
-                    if who not in speakers:
-                        speakers[who] = db.execute(
-                            "INSERT INTO speakers (name, voice_sum, lines) VALUES (?, ?, 0)", (who, b"")).lastrowid
                     length = 1200 + 330 * len(text.split())   # about three words a second
-                    line_ids[text] = db.execute(
-                        "INSERT INTO utterances (segment, start_ms, end_ms, text, speaker_id, source) "
-                        "VALUES ('', ?, ?, ?, ?, 'demo')",
-                        (cursor, cursor + length, text, speakers[who])).lastrowid
-                    db.execute("UPDATE speakers SET lines = lines + 1 WHERE id = ?", (speakers[who],))
+                    said.append((who, text, cursor, cursor + length))
+                    written.add(text)
                     cursor += length + 900
                 cursor += 45_000  # a pause between subjects
+            more = next((v for start, v in CARRY_ON.items() if title.startswith(start)), None)
+            if more:
+                minutes, asker, hosts = more
+                if headings:
+                    headings.append((cursor, "Questions"))
+                said += filler.questions(asker, hosts, cursor, start_ms + minutes * 60_000)
+                cursor = said[-1][3] + 20_000
+            talks.append((start_ms, cursor, title, summary, headings, said))
+        for days_ago, clock, minutes, title, summary, kind, people in LONG:
+            start_ms = begins(days_ago, clock)
+            end_ms = start_ms + minutes * 60_000
+            said = filler.talk(people, start_ms, end_ms) if kind == "talk" else filler.stand(people, start_ms, end_ms)
+            talks.append((start_ms, said[-1][3] + 5_000, title, summary, [], said))
+
+        lines_written = 0
+        for start_ms, end_ms, title, summary, headings, said in sorted(talks):
+            for who, text, began, ended in said:
+                if who not in speakers:
+                    speakers[who] = db.execute(
+                        "INSERT INTO speakers (name, voice_sum, lines) VALUES (?, ?, 0)", (who, b"")).lastrowid
+                uid = db.execute(
+                    "INSERT INTO utterances (segment, start_ms, end_ms, text, speaker_id, source) "
+                    "VALUES ('', ?, ?, ?, ?, 'demo')", (began, ended, text, speakers[who])).lastrowid
+                if text in written:
+                    line_ids[text] = uid
+                lines_written += 1
             cid = db.execute(
                 "INSERT INTO conversations (start_ms, end_ms, status, title, summary, engine, source) "
-                "VALUES (?, ?, 'done', ?, ?, 'demo', 'demo')", (start_ms, cursor, title, json.dumps(summary))).lastrowid
+                "VALUES (?, ?, 'done', ?, ?, 'demo', 'demo')", (start_ms, end_ms, title, json.dumps(summary))).lastrowid
             talk_ids[title] = (cid, start_ms)
             db.executemany(
                 "INSERT INTO sections (conversation_id, start_ms, level, title) VALUES (?, ?, 2, ?)",
                 [(cid, when, heading) for when, heading in headings])
+        db.execute("UPDATE speakers SET lines = (SELECT COUNT(*) FROM utterances WHERE speaker_id = speakers.id)")
 
         def find(words: str) -> int:
             return next(uid for text, uid in line_ids.items() if words in text)
@@ -255,7 +356,7 @@ def build(data_dir: Path, today: date | None = None) -> dict:
             store.save_exchange(None, QUESTION, answer, lookup.cited(answer))
         finally:
             lookup.close()
-        return {"conversations": len(TALKS), "lines": len(line_ids), "days": 3, "reminders": len(REMINDERS)}
+        return {"conversations": len(talks), "lines": lines_written, "days": 3, "reminders": len(REMINDERS)}
     finally:
         store.close()
 

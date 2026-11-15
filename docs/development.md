@@ -28,7 +28,7 @@ All under `src/limitful/`.
 - `upkeep.py`: long jobs the Lifelog can start and stop (re-timing, indexing).
 - `config.py`: saved settings, including the API keys.
 - `importer.py`: import of a Limitless data export.
-- `demo.py`: the made-up data folder.
+- `demo.py`: the made-up data folder. `demo_filler.py` writes its long stretches, the talks and the visitors at the stand.
 - `watch.py`: the background loop.
 - `autostart.py`: the macOS login item.
 - `web.py` and `web/index.html`: the Lifelog web app.

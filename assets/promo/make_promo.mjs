@@ -2,7 +2,7 @@
 // Records the promo video: drives the Lifelog in headless Chrome and films it.
 //
 //   node assets/promo/make_promo.mjs           the full walk-through, limitful-promo.mp4
-//   node assets/promo/make_promo.mjs --short   the half-minute launch cut, limitful-launch.mp4
+//   node assets/promo/make_promo.mjs --short   the 37-second launch cut, limitful-launch.mp4
 //
 // The launch cut has music under it (launch-music.ogg); the walk-through is silent.
 // Needs node 22+, uv, ffmpeg and Google Chrome. Everything on screen is made up:
@@ -392,10 +392,23 @@ await sleep(4 * BEAT);
 await card(introCard, "closing");
 await sleep(2 * BEAT);
 await run("document.getElementById('promo-card').classList.add('more'); true");
-await sleep(6 * BEAT);
+await sleep(5 * BEAT);
+// Behind the card, turn to Settings, so the pendant is the first thing seen of the app.
+await run("location.hash = 'settings'; true");
+await until("document.querySelector('.sections')");
+await sleep(BEAT);
+
+scene("the pendant");
+await card(null);
+await caption("Your pendant, synced over Bluetooth");
+await click(button("Check pendant"));
+await until("[...document.querySelectorAll('.reading b')].some((b) => b.textContent === 'nothing')");
+await sleep(1900);
 
 scene("a day");
-await card(null);
+await caption(null);
+await run(`location.hash = ${JSON.stringify(dayKey)}; true`);
+await until("document.querySelector('.recap .headline')");
 await caption("Every day, recapped");
 await sleep(2700);
 const talk = "[...document.querySelectorAll('details.card summary')].find((s) => s.textContent.includes('Coffee with Elena'))";

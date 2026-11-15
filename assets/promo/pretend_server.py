@@ -74,8 +74,11 @@ def add_stand_in_audio() -> None:
     try:
         cid, start, end = store.db.execute(
             "SELECT id, start_ms, end_ms FROM conversations WHERE title = ?", (demo.FEATURED,)).fetchone()
+        # Only its first minutes, where the lines the video plays are: a recording of the whole
+        # conversation takes long enough to make that the setup guide stalls on film.
+        end = min(end, start + 240_000)
         (last,) = store.db.execute(
-            "SELECT MAX(end_ms) FROM utterances WHERE start_ms BETWEEN ? AND ?", (start, end)).fetchone()
+            "SELECT MAX(end_ms) FROM utterances WHERE end_ms BETWEEN ? AND ?", (start, end)).fetchone()
         began = start - 500
         seconds = (last - began) / 1000 + 1.0
         day = datetime.fromtimestamp(start / 1000)
@@ -87,7 +90,7 @@ def add_stand_in_audio() -> None:
         store.db.execute(
             "INSERT INTO segments (path, start_ms, duration_ms, first_page, last_page, retimed) VALUES (?, ?, ?, 0, 0, 1)",
             (path, began, int(seconds * 1000)))
-        store.db.execute("UPDATE utterances SET segment = ? WHERE start_ms BETWEEN ? AND ?", (path, start, end))
+        store.db.execute("UPDATE utterances SET segment = ? WHERE start_ms BETWEEN ? AND ?", (path, start, last))
         # The demo folder comes with this question already asked; the video asks it live.
         store.db.execute("DELETE FROM chat_messages")
         store.db.execute("DELETE FROM chats")
