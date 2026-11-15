@@ -32,3 +32,17 @@ All under `src/limitful/`.
 - `watch.py`: the background loop.
 - `autostart.py`: the macOS login item.
 - `web.py` and `web/index.html`: the Lifelog web app.
+
+## The website
+
+[limitful.ai](https://limitful.ai) is the single page in `site/`, published
+to GitHub Pages by `.github/workflows/site.yml` on every push to main that
+touches it. The video, poster and logos are borrowed from `assets/` when the
+site is assembled, so nothing is kept twice. To look at it locally:
+
+```sh
+sh site/build.sh && open _site/index.html
+```
+
+The screenshots in `site/img/` are crops of the app showing `limitful demo`
+data; take them again when the app's look changes.

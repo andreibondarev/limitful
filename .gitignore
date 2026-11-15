@@ -12,3 +12,6 @@ dist/
 
 # Personal workspace scripts.
 .paradev/
+
+# The assembled website (sh site/build.sh).
+_site/
