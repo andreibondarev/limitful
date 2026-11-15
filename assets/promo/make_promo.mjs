@@ -4,6 +4,7 @@
 //   node assets/promo/make_promo.mjs           the full walk-through, limitful-promo.mp4
 //   node assets/promo/make_promo.mjs --short   the half-minute launch cut, limitful-launch.mp4
 //
+// The launch cut has music under it (launch-music.ogg); the walk-through is silent.
 // Needs node 22+, uv, ffmpeg and Google Chrome. Everything on screen is made up:
 // the app is served by pretend_server.py, which stands in for the pendant, the
 // speech model and Ask, and fills the Lifelog with the `limitful demo` conversations.
@@ -30,6 +31,9 @@ const chrome = process.env.CHROME || "/Applications/Google Chrome.app/Contents/M
 const SHORT = process.argv.includes("--short");
 const WIDTH = 1280, HEIGHT = 720, SCALE = 1.5;  // filmed at 1920 x 1080; any narrower and the app's header wraps
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// The launch cut plays 1.25 times faster than it is filmed, over music at 117.5 beats a minute.
+const SPEED = Number(process.env.PROMO_SPEED || (SHORT ? 1.25 : 1.12));
+const BEAT = (60000 / 117.5) * SPEED;  // one beat of the music, in filming time
 
 for (const dir of ["data", "frames", "chrome"]) rmSync(join(work, dir), { recursive: true, force: true });
 mkdirSync(join(work, "data"), { recursive: true });
@@ -376,11 +380,12 @@ await card(lastCard);
 await sleep(4600);
 } else {
 scene("hook");
-await sleep(2300);
+// The opening cards change on the music's beat: four beats, four, then six.
+await sleep(4 * BEAT);
 await card(hook2);
-await sleep(2400);
+await sleep(4 * BEAT);
 await card(whyCard, "closing");
-await sleep(3400);
+await sleep(6 * BEAT);
 
 scene("a day");
 await card(null);
@@ -449,7 +454,7 @@ stop();
 
 // --- assemble: each frame is held until the next one arrived ------------------------
 // Played a little faster than it was filmed: the app's own waits (polling, page loads) drag on film.
-const speed = Number(process.env.PROMO_SPEED || (SHORT ? 1.25 : 1.12));
+const speed = SPEED;
 const list = [];
 let total = 0;
 frames.forEach((frame, n) => {
@@ -461,10 +466,15 @@ frames.forEach((frame, n) => {
 list.push(`file '${frames[frames.length - 1].file}'`);
 writeFileSync(join(work, "frames.txt"), list.join("\n") + "\n");
 const out = join(here, SHORT ? "limitful-launch.mp4" : "limitful-promo.mp4");
-const made = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", join(work, "frames.txt"),
+// The launch cut has music under it: the start of a CC0 track, levelled, fading out under the last card.
+const music = SHORT ? join(here, "launch-music.ogg") : null;
+const sound = music
+  ? ["-af", `loudnorm=I=-18:TP=-2:LRA=11,afade=t=in:d=0.25,afade=t=out:st=${Math.max(0, total - 2.2).toFixed(2)}:d=2.2`, "-c:a", "aac", "-b:a", "160k"]
+  : ["-an"];
+const made = spawnSync("ffmpeg", ["-loglevel", "error", "-y", "-f", "concat", "-safe", "0", "-i", join(work, "frames.txt"), ...(music ? ["-i", music] : []),
   // JPEG frames are full-range; players expect video range, so convert rather than relabel.
   "-vf", `fps=30,scale=${OUT_W}:${OUT_H}:flags=lanczos:in_range=full:out_range=tv,format=yuv420p`,
-  "-c:v", "libx264", "-preset", "slow", "-crf", process.env.PROMO_CRF || "25", "-color_range", "tv", "-movflags", "+faststart", "-an",
+  "-c:v", "libx264", "-preset", "slow", "-crf", process.env.PROMO_CRF || "25", "-color_range", "tv", "-movflags", "+faststart", ...sound,
   "-t", total.toFixed(3),  // the list has to name the last frame twice, which would otherwise hold it twice as long
   out], { stdio: "inherit" });
 if (made.status !== 0) throw new Error("ffmpeg failed");

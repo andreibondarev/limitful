@@ -4,8 +4,8 @@
 the setup guide, a day in the Lifelog, search, reminders, Settings and Ask.
 `poster.jpg` is the still the main README links from.
 
-`limitful-launch.mp4` is a 30-second cut for social media: a few big lines and
-the app's best moments, with no setup guide. Make it again with
+`limitful-launch.mp4` is a half-minute cut for social media: a few big lines and
+the app's best moments, with no setup guide, and music under it. Make it again with
 `node assets/promo/make_promo.mjs --short`.
 
 Everything in it is made up. The conversations are the ones `limitful demo`
@@ -18,6 +18,11 @@ The launch cut opens on Limitless's own mark and a photo of the pendant, so it
 is plain what the video is about. `limitless-mark.svg` and
 `limitless-pendant.webp` are Limitless's, taken from limitless.ai, and are not
 covered by this project's licence.
+
+The music is the start of "One Cool Minute" by Loyalty Freak Music, which the
+artist released into the public domain (CC0). `launch-music.ogg` is its first
+45 seconds, from
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Loyalty_Freak_Music_-_02_-_One_Cool_Minute.ogg).
 
 ## Making it again
 
