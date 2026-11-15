@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Limitful: keep your Limitless Pendant working</title>
-<meta name="description" content="Limitless shuts down on December 1, 2026. Limitful is free, open-source software that keeps the pendant working: it syncs over Bluetooth, transcribes on your computer and gives you a Lifelog to read, search and ask. No account, no subscription.">
+<meta name="description" content="Limitless shuts down on December 1, 2026. Limitful keeps your pendant syncing, transcribing and searchable on your own computer. Free and open source.">
 <link rel="canonical" href="https://limitful.ai/">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <meta name="theme-color" content="#13201a">
@@ -64,25 +64,25 @@
   .btn svg { width: 1.15em; height: 1.15em; fill: currentColor; }
 
   /* Hero */
-  .hero { background: var(--ink); color: var(--on-ink); padding-top: clamp(3.5rem, 9vw, 7rem); }
-  .hero h1 { font-size: clamp(2.7rem, 7.4vw, 6.2rem); line-height: 1.02; max-width: 15.5em; }
+  .hero { background: var(--ink); color: var(--on-ink); padding-block: clamp(3rem, 7vw, 6rem); }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(2rem, 4vw, 4rem); align-items: center; }
+  .hero h1 { font-size: clamp(2.5rem, 4.1vw, 3.8rem); line-height: 1.06; }
   .hero h1 .then { display: block; color: var(--on-ink-muted); }
   .hero h1 .ast { fill: var(--gold); width: 0.5em; height: 0.5em; top: -0.42em; transform-origin: 50% 50%; animation: arrive 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) 0.25s both; }
   @keyframes arrive { from { opacity: 0; transform: rotate(-120deg) scale(0.4); } to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) { .hero h1 .ast { animation: none; } }
-  .hero .lede { color: var(--on-ink); opacity: 0.86; max-width: 39rem; font-size: clamp(1.15rem, 1.7vw, 1.35rem); margin-top: 1.8rem; }
-  .hero .acts { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-top: 2.2rem; }
+  .hero .lede { color: var(--on-ink); opacity: 0.86; max-width: 30rem; font-size: clamp(1.15rem, 1.5vw, 1.3rem); margin-top: 1.5rem; }
+  .hero .acts { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-top: 2rem; }
   .hero .small-print { margin-top: 1.6rem; font-family: var(--chrome); font-size: 0.95rem; color: var(--on-ink-muted); }
   .hero .small-print a { color: var(--on-ink-muted); }
   .hero .small-print a:hover { color: var(--on-ink); }
   .hero .small-print .ast { fill: var(--gold); top: -0.25em; margin: 0 0.25em 0 0; }
   .shot { border-radius: 14px; border: 1px solid var(--rule); background: var(--paper); box-shadow: 0 30px 70px -20px rgba(8, 20, 14, 0.45); overflow: hidden; }
-  .hero .shot { margin-top: clamp(3rem, 6vw, 5rem); margin-bottom: clamp(-14rem, -16vw, -5rem); border-color: var(--rule-ink); position: relative; z-index: 1; }
-  .after-hero { padding-top: clamp(6.5rem, 18vw, 16.5rem); }
+  .hero video { width: 100%; border-radius: 14px; border: 1px solid var(--rule-ink); background: #0c1511; aspect-ratio: 16 / 9; box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.6); }
+  .hero .caption { color: var(--on-ink-muted); }
   .caption { margin-top: 0.9rem; font-family: var(--chrome); font-size: 0.92rem; color: var(--muted); }
 
   section { padding-block: clamp(4rem, 9vw, 7.5rem); }
-  .after-hero + section { padding-top: clamp(2.5rem, 6vw, 5rem); }
 
   /* Features */
   .feature { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 8fr); gap: clamp(2rem, 5vw, 5rem); align-items: center; margin-top: clamp(3.5rem, 8vw, 6.5rem); }
@@ -98,8 +98,6 @@
   /* Dark bands */
   .band { background: var(--ink); color: var(--on-ink); }
   .band .lede { color: var(--on-ink-muted); }
-  .band video { width: 100%; margin-top: 2.5rem; border-radius: 14px; border: 1px solid var(--rule-ink); background: #0c1511; aspect-ratio: 16 / 9; }
-  .band .caption { color: var(--on-ink-muted); }
 
   /* Privacy */
   .leaves { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(2rem, 5vw, 5rem); align-items: start; }
@@ -158,7 +156,7 @@
   @media (max-width: 860px) {
     body { font-size: 1.06rem; }
     .top nav { display: none; }
-    .feature, .feature.flip, .leaves, .deadline, .install, .fine .cols { grid-template-columns: minmax(0, 1fr); }
+    .hero .wrap, .feature, .feature.flip, .leaves, .deadline, .install, .fine .cols { grid-template-columns: minmax(0, 1fr); }
     .feature.flip > .words { order: 0; }
     .also { grid-template-columns: minmax(0, 1fr); }
     .fine ul { columns: 1; }
@@ -187,30 +185,34 @@
 <main id="top">
   <div class="hero">
     <div class="wrap">
-      <h1><span class="then" data-after="Limitless shut down on December 1.">Limitless shuts down on December 1.</span> Your pendant doesn’t have to.<a class="note" href="#fine" aria-label="Limits apply: see the fine print"><svg class="ast" aria-hidden="true"><use href="#ast"/></svg></a></h1>
-      <p class="lede">Limitful is free, open-source software that keeps the Limitless Pendant working. It pulls recordings off the pendant over Bluetooth, transcribes them on your computer, and gives you a Lifelog to read, search, listen to and ask questions of. No account. No subscription.</p>
-      <div class="acts">
-        <a class="btn gold" href="#install">Install Limitful</a>
-        <a class="btn line" href="#tour">Watch the 75-second tour</a>
+      <div>
+        <h1><span class="then" data-after="Limitless shut down on December 1.">Limitless shuts down on December 1.</span> Your pendant doesn’t have to.<a class="note" href="#fine" aria-label="Limits apply: see the fine print"><svg class="ast" aria-hidden="true"><use href="#ast"/></svg></a></h1>
+        <p class="lede">Limitful keeps it syncing, transcribing and searchable, on your own computer. Free and open source.</p>
+        <div class="acts">
+          <a class="btn gold" href="#install">Install Limitful</a>
+          <a class="btn line" href="https://github.com/andreibondarev/limitful"><svg aria-hidden="true"><use href="#gh"/></svg>See the code</a>
+        </div>
+        <p class="small-print"><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><a href="#fine">Limits apply.</a></p>
       </div>
-      <p class="small-print"><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><a href="#fine">Limits apply.</a> All of them are listed at the bottom of this page.</p>
-      <img class="shot" src="img/day.webp" width="2200" height="1433" alt="The Lifelog for one day: a strip showing when speech was recorded, a list of conversations with titles and lengths, a recap of the day, and reminders to follow up">
+      <div>
+        <video controls preload="metadata" poster="poster.jpg" playsinline aria-label="A 75-second tour of Limitful">
+          <source src="limitful-promo.mp4" type="video/mp4">
+          <a href="limitful-promo.mp4">Download the video</a>
+        </video>
+        <p class="caption">A 75-second tour. The conversations in it are made up.</p>
+      </div>
     </div>
-  </div>
-  <div class="after-hero">
-    <p class="wrap caption">A day in the Lifelog. Every conversation shown on this page is made up.</p>
   </div>
 
   <section id="what">
     <div class="wrap">
-      <h2>The app Limitless is taking away, kept on your own computer</h2>
-      <p class="lede">Limitful talks to the pendant directly. Nothing goes through Limitless, so nothing stops working when its servers do.</p>
+      <h2>Your Lifelog, on your own computer</h2>
+      <p class="lede">Limitful talks to the pendant directly, so nothing stops working when Limitless does.</p>
 
       <div class="feature">
         <div class="words">
           <h3>Every day, recapped</h3>
-          <p>Each day is a list of conversations with titles, a summary and the transcript, each speaker in their own colour. A recap says what the day came to, and the things you said you would do are pulled out as reminders.</p>
-          <p>Click any sentence to hear it.</p>
+          <p>Each conversation gets a title, a summary and a transcript. A recap sums up the day and pulls out what you promised to do. Click any sentence to hear it.</p>
         </div>
         <img class="shot" loading="lazy" src="img/talk.webp" width="1720" height="1220" alt="An open conversation with a three-point summary, a reminder to send a proposal by Friday, and the transcript beneath">
       </div>
@@ -218,8 +220,7 @@
       <div class="feature flip">
         <div class="words">
           <h3>Find the moment</h3>
-          <p>Search everything that was said, by the exact words or by meaning. Press ⌘K to jump to “yesterday”, “12 nov” or any line that mentions the pilot.</p>
-          <p>Search runs on your computer. Nothing is sent anywhere.</p>
+          <p>Search everything that was said, by exact words or by meaning. ⌘K jumps to any day or line. Nothing is sent anywhere.</p>
         </div>
         <img class="shot" loading="lazy" src="img/quick.webp" width="1400" height="950" alt="The quick find box with the word pilot typed in, listing four lines that contain it with the word highlighted">
       </div>
@@ -227,31 +228,19 @@
       <div class="feature">
         <div class="words">
           <h3>Ask it anything<a class="note" href="#fine-model" aria-label="Needs a model: see the fine print"><svg class="ast" aria-hidden="true"><use href="#ast"/></svg></a></h3>
-          <p>“What does Elena need before a pilot, and when does she decide?” Answers are written from your transcripts, and every claim links to the line it came from, so you can hear the moment for yourself.</p>
+          <p>Answers are written from your transcripts, and every claim links to the line it came from.</p>
         </div>
         <img class="shot" loading="lazy" src="img/ask.webp" width="1550" height="830" alt="A question about what Elena needs before a pilot, answered in a short list with links to the times each thing was said">
       </div>
 
       <dl class="also">
-        <div><dt>Syncs by itself</dt><dd>On demand, or every two minutes from login on macOS, with no terminal open.</dd></div>
-        <div><dt>Transcribes on your machine</dt><dd>Speech becomes text with Whisper, running locally. Deepgram is there if you would rather.</dd></div>
-        <div><dt>Brings your history with it</dt><dd>Imports your Limitless export: transcripts, audio and reminders.</dd></div>
-        <div><dt>Runs the pendant</dt><dd>Battery, storage, the light, pause, pair and unpair, from Settings or the command line.</dd></div>
-        <div><dt>Plain files you own</dt><dd>Every day is saved as Markdown and the audio as Ogg, in a folder on your disk.</dd></div>
-        <div><dt>Free and open source</dt><dd>MIT licence. Read it, change it, <a href="https://github.com/andreibondarev/limitful">help build it</a>.</dd></div>
+        <div><dt>Syncs by itself</dt><dd>Every two minutes on macOS, or on demand.</dd></div>
+        <div><dt>Transcribes on your machine</dt><dd>Whisper, running locally. Deepgram if you prefer.</dd></div>
+        <div><dt>Brings your history with it</dt><dd>Imports your Limitless export.</dd></div>
+        <div><dt>Runs the pendant</dt><dd>Battery, storage, light, pause and pairing.</dd></div>
+        <div><dt>Plain files you own</dt><dd>Markdown and Ogg, in a folder on your disk.</dd></div>
+        <div><dt>Free and open source</dt><dd>MIT licence. <a href="https://github.com/andreibondarev/limitful">Help build it</a>.</dd></div>
       </dl>
-    </div>
-  </section>
-
-  <section class="band" id="tour">
-    <div class="wrap">
-      <h2>See it in 75 seconds</h2>
-      <p class="lede">From pairing the pendant to asking a question of the day.</p>
-      <video controls preload="none" poster="poster.jpg" playsinline>
-        <source src="limitful-promo.mp4" type="video/mp4">
-        <a href="limitful-promo.mp4">Download the video</a>
-      </video>
-      <p class="caption">With captions and music. The conversations in it are made up.</p>
     </div>
   </section>
 
@@ -259,16 +248,16 @@
     <div class="wrap leaves">
       <div>
         <h2>What leaves your computer? Nothing, unless you say so.</h2>
-        <p class="lede">Syncing, transcription, search and playback all happen on your machine. Two choices in Settings send data out, and both are off until you make them.</p>
+        <p class="lede">Everything runs on your machine. Two optional settings send data out, and both start off.</p>
       </div>
       <div class="table">
         <table>
           <thead><tr><th>If you choose</th><th>What is sent</th><th>To</th></tr></thead>
           <tbody>
             <tr class="none"><td>Nothing (the default)</td><td>Nothing</td><td>No one</td></tr>
-            <tr><td>Claude for summaries and Ask</td><td>The text of conversations, your questions, and what Claude reads to answer them</td><td>Anthropic</td></tr>
+            <tr><td>Claude for summaries and Ask</td><td>Conversation text and your questions</td><td>Anthropic</td></tr>
             <tr><td>Deepgram for transcription</td><td>The audio of new recordings</td><td>Deepgram</td></tr>
-            <tr><td>Ollama for summaries</td><td>Nothing: the model runs on your computer</td><td>No one</td></tr>
+            <tr><td>Ollama for summaries</td><td>Nothing</td><td>No one</td></tr>
           </tbody>
         </table>
       </div>
@@ -277,13 +266,13 @@
 
   <section class="band" id="before">
     <div class="wrap deadline">
-      <p class="count" id="count"><b>Dec 1</b><span>2026: the day Limitless ends its service and deletes the data it holds.</span></p>
+      <p class="count" id="count"><b>Dec 1</b><span>2026: Limitless ends its service and deletes your data.</span></p>
       <div>
         <h2 data-after="What to do now that Limitless has shut down">What to do before December 1</h2>
         <ol class="steps">
-          <li><div><b>Export your data from Limitless</b><span>Ask for your export while the service is still up. After December 1 it is gone. Limitful reads the zip as it comes.</span></div></li>
-          <li><div><b>Let the Limitless app sync one last time</b><span>Pairing with the pendant’s button resets it and clears the audio stored on it. With a USB cable you can <a href="https://github.com/andreibondarev/limitful/blob/main/docs/pendant.md">pair without erasing</a>.</span></div></li>
-          <li><div><b>Install Limitful and import</b><span>A setup guide pairs the pendant, does the first sync and brings your export in. From then on the pendant answers to you.</span></div></li>
+          <li><div><b>Export your data from Limitless</b><span>After December 1 it is gone. Limitful reads the zip as it comes.</span></div></li>
+          <li><div><b>Let the Limitless app sync one last time</b><span>Pairing by the button erases the pendant. Or <a href="https://github.com/andreibondarev/limitful/blob/main/docs/pendant.md">pair over USB</a> and keep what is on it.</span></div></li>
+          <li><div><b>Install Limitful and import</b><span>The setup guide pairs the pendant, syncs it and brings your export in.</span></div></li>
         </ol>
       </div>
     </div>
@@ -293,12 +282,11 @@
     <div class="wrap install">
       <div>
         <h2>Install it</h2>
-        <p class="lede">Four lines in a terminal, then everything happens in your browser.</p>
+        <p class="lede">Four lines in a terminal. The rest happens in your browser.</p>
         <ul>
           <li>Needs Python 3.10 or newer and <a href="https://docs.astral.sh/uv/">uv</a>.</li>
-          <li>Open <code>localhost:4747</code> and the setup guide takes it from there.</li>
-          <li>Turn off Bluetooth on your phone first: the pendant only shows up when nothing else is connected to it.</li>
-          <li>The <a href="https://github.com/andreibondarev/limitful/blob/main/docs/guide.md">guide</a> covers every feature and option.</li>
+          <li>Turn off Bluetooth on your phone first, so the pendant is free to connect.</li>
+          <li>The <a href="https://github.com/andreibondarev/limitful/blob/main/docs/guide.md">guide</a> covers the rest.</li>
         </ul>
       </div>
       <div>
@@ -309,7 +297,7 @@
 <span class="p">$ </span>uv sync
 <span class="p">$ </span>uv run limitful serve</pre>
         </div>
-        <p class="code-label">No pendant? Look around with made-up conversations:</p>
+        <p class="code-label">No pendant? Try it with made-up conversations:</p>
         <div class="code">
           <button class="copy" type="button" data-copy="uv run limitful demo&#10;uv run limitful serve --data-dir ~/Limitful-demo">Copy</button>
 <pre><span class="p">$ </span>uv run limitful demo
@@ -323,17 +311,17 @@
     <div class="wrap cols">
       <div>
         <h2>The fine print</h2>
-        <p class="lede">Limits apply. These are all of them.</p>
+        <p class="lede">Limits apply. All of them:</p>
       </div>
       <ul>
-        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>It runs on a computer, not a phone.</b>You install it from a terminal and use it in a browser on the same machine.</div></li>
-        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>macOS is the tested path.</b>It runs daily against one real pendant on a Mac. Linux and Windows are not yet verified.</div></li>
-        <li id="fine-model"><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>Summaries and Ask need a model.</b>Claude, with your own API key, or Ollama on your computer. Syncing, transcripts, search and playback work without either.</div></li>
-        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>Pairing by the button erases the pendant.</b>It is a factory reset. Sync with Limitless first, or pair over USB to keep what is on it.</div></li>
-        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>One connection at a time.</b>The pendant talks to one device. While your phone holds it, your computer cannot see it.</div></li>
+        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>It runs on a computer, not a phone.</b>Installed from a terminal, used in a browser.</div></li>
+        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>macOS is the tested path.</b>Linux and Windows are not yet verified.</div></li>
+        <li id="fine-model"><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>Summaries and Ask need a model.</b>Claude with your own API key, or Ollama on your computer. Everything else works without one.</div></li>
+        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>Pairing by the button erases the pendant.</b>Sync with Limitless first, or pair over USB.</div></li>
+        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>One connection at a time.</b>While your phone holds the pendant, your computer cannot see it.</div></li>
         <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>The first sync is a big download.</b>The speech model is 1.6 GB, fetched once.</div></li>
-        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>It is early.</b>Working, and used every day, but young. The <a href="https://github.com/andreibondarev/limitful/blob/main/ROADMAP.md">roadmap</a> says what is next.</div></li>
-        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>It is not Limitless.</b>Limitful is an independent project, not affiliated with or endorsed by Limitless or Meta.</div></li>
+        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>It is early.</b>Used every day, but young. See the <a href="https://github.com/andreibondarev/limitful/blob/main/ROADMAP.md">roadmap</a>.</div></li>
+        <li><svg class="ast" aria-hidden="true"><use href="#ast"/></svg><div><b>It is not Limitless.</b>Not affiliated with or endorsed by Limitless or Meta.</div></li>
       </ul>
     </div>
   </section>
@@ -364,9 +352,9 @@
     var count = document.getElementById("count");
     if (days > 0) {
       count.querySelector("b").textContent = days;
-      count.querySelector("span").textContent = (days === 1 ? "day" : "days") + " until Limitless ends its service on December 1, 2026 and deletes the data it holds.";
+      count.querySelector("span").textContent = (days === 1 ? "day" : "days") + " until Limitless ends its service and deletes your data.";
     } else {
-      count.querySelector("span").textContent = "2026: the day Limitless ended its service and deleted the data it held.";
+      count.querySelector("span").textContent = "2026: Limitless ended its service and deleted your data.";
       document.querySelectorAll("[data-after]").forEach(function (n) { n.textContent = n.dataset.after; });
     }
   })();
