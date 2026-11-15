@@ -2,7 +2,7 @@
 // Records the promo video: drives the Lifelog in headless Chrome and films it.
 //
 //   node assets/promo/make_promo.mjs           the full walk-through, limitful-promo.mp4
-//   node assets/promo/make_promo.mjs --short   the 37-second launch cut, limitful-launch.mp4
+//   node assets/promo/make_promo.mjs --short   the 44-second launch cut, limitful-launch.mp4
 //
 // Both have music under them (launch-music.ogg); the launch cut's opening cards are timed to its beat.
 // Needs node 22+, uv, ffmpeg and Google Chrome. Everything on screen is made up:
