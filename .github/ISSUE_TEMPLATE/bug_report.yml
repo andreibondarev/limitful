@@ -1,0 +1,43 @@
+name: Something does not work
+description: Pairing, syncing, transcription, the Lifelog, or anything else that went wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Limitful has been run daily against one pendant on macOS, so details about your setup matter.
+        Please do not paste transcripts, audio or API keys: recordings are private, and this page is public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Command and its output
+      description: The command you ran and everything it printed, or the message the Lifelog showed.
+      render: text
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15.1 on Apple silicon, Ubuntu 24.04, Windows 11
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Limitful and Python versions
+      description: From `uv run limitful --version` and `uv run python -V`.
+      placeholder: 0.1.0, Python 3.13.1
+    validations:
+      required: true
+  - type: textarea
+    id: pendant
+    attributes:
+      label: The pendant
+      description: If the pendant is involved, what `uv run limitful scan` and `uv run limitful status` print, and whether the Limitless app or another device was connected to it.
+      render: text
