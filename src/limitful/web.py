@@ -125,7 +125,7 @@ class Library:
 
         with self._lock:
             if self.job["running"]:
-                raise RuntimeError("an import is already running")
+                raise RuntimeError("Something is already running. Wait for it to finish.")
             self.job.update(running=True, what="Importing the export", done=0, total=0, error=None, note=None)
         upload = self.data_dir / "imports" / f"upload-{int(time.time())}.zip"
         try:
@@ -947,7 +947,7 @@ def make_handler(library: Library):
             except ValueError as err:
                 return self._text(HTTPStatus.BAD_REQUEST, str(err))
             except sqlite3.Error as err:
-                return self._text(HTTPStatus.INTERNAL_SERVER_ERROR, f"Could not save: {err}")
+                return self._text(HTTPStatus.INTERNAL_SERVER_ERROR, str(err))
 
         def _ask(self) -> None:
             """Answer a question, sending progress as it happens.
@@ -1020,7 +1020,7 @@ def make_handler(library: Library):
             except zipfile.BadZipFile:
                 return self._text(HTTPStatus.BAD_REQUEST, "That file is not a zip archive.")
             except (ValueError, OSError, sqlite3.Error) as err:
-                return self._text(HTTPStatus.BAD_REQUEST, f"Could not import: {err}")
+                return self._text(HTTPStatus.BAD_REQUEST, str(err))
 
         def _send(self, status: int, body: bytes, content_type: str, extra: dict | None = None) -> None:
             self.send_response(status)

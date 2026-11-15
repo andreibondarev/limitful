@@ -12,7 +12,7 @@ Limitless ends its service on December 1, 2026 and deletes the data it holds.
 This project keeps the hardware working after that, and keeps the history you
 export before then usable.
 
-https://github.com/user-attachments/assets/a95ff562-1c9e-4e5a-a110-429ce14eafce
+https://github.com/user-attachments/assets/0368fb39-0f1a-4290-a679-cf790fb867ef
 
 <p align="center">A 78-second tour (with captions and music; the conversations in it are made up). <a href="assets/promo/limitful-promo.mp4">Download the video</a>.</p>
 
@@ -65,7 +65,7 @@ Everything the app does is also a command; `uv run limitful --help` lists them a
 uv run limitful pair               # first use only
 uv run limitful sync               # download new audio into ~/Limitful
 uv run limitful transcribe         # turn new audio into text
-uv run limitful watch              # do both every two minutes
+uv run limitful watch              # do both every two minutes, and free synced audio on the pendant
 uv run limitful autostart on       # macOS: run from login, no terminal needed
 uv run limitful import export.zip  # bring in a Limitless data export
 uv run limitful ask "what did the dentist say about the crown?"
@@ -80,6 +80,9 @@ Two choices in Settings send data out, and both are off until you make them:
 |---|---|---|
 | Claude for summaries and Ask | The text of conversations, your questions, and what Claude reads to answer them | Anthropic |
 | Deepgram for transcription | The audio of new recordings | Deepgram |
+
+On the command line, a flag or an environment variable makes the same choice for one run,
+and the `score-speakers` experiment sends the audio of the imported conversations it measures to Deepgram.
 
 API keys are kept in `~/.config/limitful/config.json`, readable only by you.
 Models are downloaded on first use from Hugging Face and GitHub.

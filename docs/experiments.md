@@ -90,7 +90,8 @@ Whisper for new recordings from the pendant:
 - Lines arrive as "Speaker 1", "Speaker 2" within each conversation. Click one
   to name that speaker in that conversation, exactly as with imported ones.
 - Imported conversations are never sent for transcription; they keep
-  Limitless's transcript.
+  Limitless's transcript. (`score-speakers`, below, does send the audio of the
+  ones it measures.)
 
 **Measured against the real service, its speaker labels are no better than
 guessing.** Five imported conversations were sent to Deepgram (nova-3) and
@@ -131,8 +132,8 @@ the main speaker. On the conversations used for the table above that baseline
 averaged 57%; a service worth switching to should beat it clearly.
 
 The experimental voice labelling is still there for anyone who wants to try
-it: `limitful transcribe --speakers`, `limitful watch --speakers`, and
-`limitful speakers --link-imported` for imported conversations.
+it: `uv run limitful transcribe --speakers`, `uv run limitful watch --speakers`,
+and `uv run limitful speakers --link-imported` for imported conversations.
 
 ## Transcription on the Apple GPU: tried, not the default
 

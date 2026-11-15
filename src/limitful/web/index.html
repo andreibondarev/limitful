@@ -17,6 +17,7 @@
     --rule: #d0dad3;
     --accent: #0b6b58;
     --mark: #f4c63a;
+    --on-player: #f4c63a;  /* what stands out on the player bar, which is the opposite shade to the page */
     --star: #e2a900;
     --mark-ink: #2a2100;
     --voice: "Charter", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
@@ -40,6 +41,7 @@
       --rule: #26322c;
       --accent: #63d2b6;
       --star: #f4c63a;
+      --on-player: #0b6b58;
       --bad: #ff8a80;
       --who-0: #5fc3b3; --who-1: #7fa9e6; --who-2: #b29be6; --who-3: #e08fc4;
       --who-4: #ef8f76; --who-5: #dcae55; --who-6: #a9b860; --who-7: #9fb0c0;
@@ -51,7 +53,8 @@
     --muted: #8fa097;
     --rule: #26322c;
     --accent: #63d2b6;
-      --star: #f4c63a;
+    --star: #f4c63a;
+    --on-player: #0b6b58;
     --bad: #ff8a80;
     --who-0: #5fc3b3; --who-1: #7fa9e6; --who-2: #b29be6; --who-3: #e08fc4;
     --who-4: #ef8f76; --who-5: #dcae55; --who-6: #a9b860; --who-7: #9fb0c0;
@@ -321,6 +324,7 @@
   }
   .todo p { margin: 0; flex: 1 1 14rem; }
   .todo small { color: var(--muted); flex-basis: 100%; }
+  .todo small.failed { color: var(--bad); }
   .todo .jump { border-style: dashed; }
   .recap { margin: 0 0 1.8rem; padding: 1.3rem 1.5rem 1.2rem; max-width: 46rem; border-left: 3px solid var(--mark); background: color-mix(in srgb, var(--accent) 5%, transparent); border-radius: 0 14px 14px 0; }
   .recap.bare { padding: 0; border: 0; background: none; }
@@ -435,7 +439,8 @@
     border: 1px solid var(--rule); border-radius: 999px; background: transparent;
     padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
   }
-  .todo button:hover, #remind:hover, #settings:hover, .pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .todo button.away:hover { border-color: var(--bad); color: var(--bad); }
+  .todo button:not(.away):hover, #remind:hover, #settings:hover, .pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   #remind, #settings, #ask, .pill { padding: 0.4rem 0.85rem; font-size: inherit; }
   #ask:hover { border-color: var(--accent); color: var(--accent); }
   #paused {
@@ -665,7 +670,7 @@
     background: var(--ink); color: var(--paper);
   }
   #transport { display: flex; align-items: center; gap: 0.7rem; }
-  #seek { flex: 1; min-width: 5rem; height: 1.4rem; margin: 0; accent-color: var(--mark); cursor: pointer; }
+  #seek { flex: 1; min-width: 5rem; height: 1.4rem; margin: 0; accent-color: var(--on-player); cursor: pointer; }
   #at, #total { font-size: 0.82rem; font-variant-numeric: tabular-nums; opacity: 0.8; min-width: 2.6rem; }
   #at { text-align: right; }
   .skip {
@@ -673,8 +678,8 @@
     background: transparent; color: inherit; padding: 0.3rem 0.65rem; cursor: pointer;
     font-size: 0.82rem; white-space: nowrap;
   }
-  .skip:hover { border-color: var(--mark); color: var(--mark); }
-  #player :focus-visible { outline-color: var(--mark); }
+  .skip:hover { border-color: var(--on-player); color: var(--on-player); }
+  #player :focus-visible { outline-color: var(--on-player); }
   #player[hidden] { display: none; }
   #toggle {
     border: 0; border-radius: 999px; padding: 0.4rem 1rem; cursor: pointer;
@@ -1058,7 +1063,7 @@ async function showWelcome(step = "start", fromSettings = false) {
       page("connect", "Pair your pendant",
         el("p", { className: "lede", textContent: "The pendant only accepts a new computer once it has forgotten the old one. There are two ways to get there." }),
         way("plug", "Keep its recordings", "Plug the pendant in with its USB cable and it is told to forget its old computer. Nothing on it is erased.", () => steps.keep()),
-        way("pendant", "Reset the pendant", "No cable needed. A button press puts it in pairing mode, which erases any recordings it has not synced yet.", () => steps.reset()),
+        way("pendant", "Reset the pendant", "No cable needed. A button press puts it in pairing mode, which erases any audio it has not synced yet.", () => steps.reset()),
         el("div", { className: "row" }, button("Back", () => steps.before())));
     },
 
@@ -1208,7 +1213,7 @@ async function showWelcome(step = "start", fromSettings = false) {
         el("b", { textContent: title }), el("span", { textContent: about }));
       const options = el("fieldset", {},
         el("legend", { className: "unseen", textContent: "What writes summaries" }),
-        pick("", "Not now", "Conversations keep their opening words as a title. You can choose later under Settings."),
+        pick("", "Off", "Conversations keep their opening words as a title. You can choose later under Settings."),
         pick("claude", "Claude", "Best results. The text of each conversation is sent to Anthropic and billed to your Anthropic account."),
         keyBox,
         pick("ollama", "Ollama", "A model running on this computer, so nothing leaves it. Weaker, and Ollama must be running."));
@@ -1250,7 +1255,7 @@ async function showWelcome(step = "start", fromSettings = false) {
     history() {
       const status = el("p", { className: "status", role: "status" });
       const file = el("input", { type: "file", accept: ".zip,application/zip", hidden: true });
-      const choose = button("Choose the export zip", () => file.click(), "main");
+      const choose = button("Choose an export zip", () => file.click(), "main");
       file.addEventListener("change", async () => {
         const chosen = file.files[0];
         file.value = "";
@@ -1266,7 +1271,7 @@ async function showWelcome(step = "start", fromSettings = false) {
             : "Nothing new in that export.";
           choose.replaceWith(button("Continue", () => steps.done(false), "main"));
         } catch (err) {
-          status.replaceChildren(trouble(`Import failed. ${err.message}`));
+          status.replaceChildren(trouble(`Import failed. ${sentence(err.message)}`));
           choose.disabled = false;
         }
       });
@@ -1290,11 +1295,11 @@ function autostartSwitch() {
     box.checked = a.enabled;
     box.disabled = !a.supported;
     about.classList.remove("failed");
-    if (!a.supported) { about.textContent = "Only on macOS so far. Elsewhere, leave limitful watch running in a terminal."; return; }
+    if (!a.supported) { about.textContent = "Only on macOS so far. Elsewhere, leave uv run limitful watch running in a terminal."; return; }
     const last = a.last ? ` Last tried ${clock.format(new Date(a.last))}: ${a.found ? "pendant found" : "pendant not in reach"}.` : "";
     about.textContent = a.enabled
       ? `Limitful starts when you log in and syncs the pendant every two minutes, with no terminal open. Synced audio is freed on the pendant.${a.syncing_every ? " It is syncing by itself now." : ""}${last}`
-      : "Off. The pendant syncs only when you click Sync now or run limitful watch.";
+      : "Off. The pendant syncs only when you click Sync now or run uv run limitful watch.";
   };
   get("/api/autostart").then(show).catch(() => { about.textContent = "Could not check."; });
   box.addEventListener("change", async () => {
@@ -1328,15 +1333,15 @@ async function showDemoBar() {
 function todoRow(r, after, source) {
   const row = el("div", { className: `todo ${r.status}` }, el("p", { textContent: r.text }));
   const act = (label, status) => {
-    const b = el("button", { textContent: label });
+    const b = el("button", { textContent: label, className: status === "dismissed" ? "away" : "" });
     b.addEventListener("click", async () => {
       try { await post(`/api/reminders/${r.id}`, { status }); r.status = status; after(); }
-      catch (err) { row.append(el("small", { textContent: `Could not save. ${err.message}` })); }
+      catch (err) { row.append(el("small", { className: "failed", textContent: `Could not save. ${sentence(err.message)}` })); }
     });
     return b;
   };
   if (r.status === "suggested") row.append(act("Keep", "accepted"), act("Dismiss", "dismissed"));
-  else if (r.status === "accepted") row.append(act("Done", "done"), act("Dismiss", "dismissed"));
+  else if (r.status === "accepted") row.append(act("Done", "done"), act("Remove", "dismissed"));
   if (source) row.append(source);
   return row;
 }
@@ -1376,7 +1381,7 @@ async function showReminders() {
       const finished = main.querySelector("details.finished");
       if (finished && wasOpen) finished.open = true;
     }
-    catch (err) { row.append(el("small", { className: "oops", textContent: `Could not save. ${err.message}` })); }
+    catch (err) { row.append(el("small", { className: "oops", textContent: `Could not save. ${sentence(err.message)}` })); }
   };
   const round = (name, label, onClick, extra = "") => {
     const b = el("button", { className: `round ${extra}`, ariaLabel: label, title: label }, icon(name, 18));
@@ -1485,7 +1490,7 @@ function whoRow(speaker, colour) {
         renderDay();
       } catch (err) {
         busy = false;
-        hint.textContent = `Could not save. ${err.message}`;
+        hint.textContent = `Could not save. ${sentence(err.message)}`;
       }
     };
     // Leaving the field cancels, unless the click went to the button beside it.
@@ -1651,14 +1656,14 @@ function followUps() {
   const list = el("ul", { className: "plain" });
   for (const { r, g } of open) {
     const go = el("button", {}, el("span", { textContent: r.text }),
-      el("small", { textContent: `${clock.format(new Date(g.start))}${r.status === "suggested" ? ", to review" : ""}` }));
+      el("small", { textContent: `${clock.format(new Date(g.start))}${r.status === "suggested" ? ", suggested" : ""}` }));
     go.addEventListener("click", () => {
       if (r.line && g.own.some((u) => u.id === r.line)) reveal(r.line, true);
       else { g.setOpen(true); $(`g${g.key}`).scrollIntoView({ block: "start" }); }
     });
     list.append(el("li", {}, go));
   }
-  return [el("section", {}, el("h3", { textContent: "To follow up" }), list)];
+  return [el("section", {}, el("h3", { textContent: "Reminders" }), list)];
 }
 
 /* Beside the conversations: the named people heard this day, by how long they spoke. */
@@ -1700,7 +1705,7 @@ function renderDay() {
     drawStrip();
     main.replaceChildren(el("div", { className: "empty" },
       el("p", { textContent: "Nothing was said on this day, or nothing has been synced yet." }),
-      ...(days.length ? [el("p", {}, "To bring in new audio from the pendant, run ", el("code", { textContent: "limitful watch" }), ", or use Sync now under Settings.")]
+      ...(days.length ? [el("p", {}, "To bring in new audio from the pendant, run ", el("code", { textContent: "uv run limitful watch" }), ", or use Sync now under Settings.")]
         : [(() => { const b = el("button", { className: "pill main", textContent: "Set up Limitful" }); b.addEventListener("click", () => showWelcome()); return b; })()])));
     return;
   }
@@ -1917,7 +1922,7 @@ function card(g, longest = 0) {
   const title = g.title || (first.length > 70 ? `${first.slice(0, 70)}…` : first);
   const waiting = g.reminders.filter((r) => r.status === "suggested").length;
   const meta = [lengthOf(g.end - g.start), `${g.own.length} line${g.own.length === 1 ? "" : "s"}`];
-  if (waiting) meta.push(`${waiting} reminder${waiting === 1 ? "" : "s"} to review`);
+  if (waiting) meta.push(`${waiting} suggested reminder${waiting === 1 ? "" : "s"}`);
   const body = el("div", { className: "body" });
   const length = el("i", { className: "len", hidden: !longest, title: lengthOf(g.end - g.start) });
   if (longest) length.style.width = `${Math.max(6, 100 * (g.end - g.start) / longest)}%`;
@@ -2098,7 +2103,7 @@ async function runSearch(query) {
   try {
     results = await get(`/api/search?q=${encodeURIComponent(query)}`);
   } catch (err) {
-    main.replaceChildren(el("p", { className: "empty", textContent: `Search failed. ${err.message}` }));
+    main.replaceChildren(el("p", { className: "empty", textContent: `Search failed. ${sentence(err.message)}` }));
     return;
   }
   if ($("search").value.trim() !== query) return;  // a newer search is on its way
@@ -2329,6 +2334,11 @@ function sayDone(text) {
   say(text);
   sayTimer = setTimeout(() => say(""), 8000);
 }
+/* A reason as the server or a library gave it, as a sentence: "could not reach `x`" -> "Could not reach x." */
+const sentence = (text) => {
+  const s = String(text || "").replace(/`/g, "").trim();
+  return s ? `${s[0].toUpperCase()}${s.slice(1)}${/[.!?…]$/.test(s) ? "" : "."}` : "";
+};
 const withAdvice = (error, advice) => `${error}${/[.!?]$/.test(error) ? "" : "."}${advice ? ` ${advice}` : ""}`;
 
 /* Importing a Limitless export, and the slower speaker recognition that follows it. */
@@ -2393,7 +2403,7 @@ $("file").addEventListener("change", async (e) => {
     if (r.conversations && days.length) openDay(days[days.length - 1].day);
     watchJob();
   } catch (err) {
-    say(`Import failed. ${err.message}`, true);
+    say(`Import failed. ${sentence(err.message)}`, true);
     document.querySelectorAll(".busy-off").forEach((b) => { b.disabled = false; });
   }
 });
@@ -2431,7 +2441,8 @@ async function showSettings() {
     : "Optional. Leave it empty to use your sign-in from the Anthropic command-line tool (ant auth login). A key is kept on this computer in ~/.config/limitful/config.json and sent only to Anthropic." });
   const forget = el("button", { className: "pill", textContent: "Remove saved key", hidden: !now.has_key });
   const keyBox = el("div", { className: "key" }, el("label", { htmlFor: "key", textContent: "Anthropic API key" }), key, keyHelp);
-  const note = el("p", { className: "note", role: "status" });
+  // The page is drawn again after a save, so the note is found by name to say how it went.
+  const note = el("p", { className: "note", role: "status", id: "summariesNote" });
   const tell = (text, failed) => { note.textContent = text; note.classList.toggle("failed", Boolean(failed)); };
   const save = el("button", { className: "pill main", textContent: "Save" });
   // Only switched on and off by running jobs when there is something to run it with.
@@ -2449,15 +2460,15 @@ async function showSettings() {
   const send = async (body, done) => {
     save.disabled = true;
     tell(body.provider === "claude" ? "Checking with Anthropic…" : "Saving…");
-    try { await post("/api/settings", body); await showSettings(); done(); }
-    catch (err) { tell(`Could not save. ${err.message}`, true); save.disabled = false; }
+    try { await post("/api/settings", body); await showSettings(); $("summariesNote").textContent = done; }
+    catch (err) { tell(`Could not save. ${sentence(err.message)}`, true); save.disabled = false; }
   };
   save.addEventListener("click", () => {
     const body = { provider: picked() };
     if (key.value.trim()) body.api_key = key.value.trim();
-    send(body, () => sayDone("Settings saved."));
+    send(body, "Settings saved.");
   });
-  forget.addEventListener("click", () => send({ provider: picked() === "claude" ? "" : picked(), api_key: "" }, () => sayDone("Key removed.")));
+  forget.addEventListener("click", () => send({ provider: picked() === "claude" ? "" : picked(), api_key: "" }, "Key removed."));
   run.addEventListener("click", async () => {
     try { await post("/api/digest", {}); watchJob(); }
     catch (err) { tell(err.message, true); }
@@ -2472,7 +2483,7 @@ async function showSettings() {
     placeholder: now.has_deepgram_key ? `A key is saved (${now.deepgram_key_hint}). Type a new one to replace it.` : "Deepgram API key" });
   const dgBox = el("div", { className: "key" }, el("label", { htmlFor: "dgkey", textContent: "Deepgram API key" }), dgKey,
     el("small", { textContent: "Kept on this computer in ~/.config/limitful/config.json and sent only to Deepgram. Nothing is sent until you save this choice." }));
-  const heardNote = el("p", { className: "note", role: "status" });
+  const heardNote = el("p", { className: "note", role: "status", id: "heardNote" });
   const heardSave = el("button", { className: "pill main", textContent: "Save" });
   const dgForget = el("button", { className: "pill", textContent: "Remove saved key", hidden: !now.has_deepgram_key });
   const heardPicked = () => document.querySelector('input[name="transcriber"]:checked')?.value ?? "local";
@@ -2487,8 +2498,8 @@ async function showSettings() {
     heardSave.disabled = true;
     heardNote.classList.remove("failed");
     heardNote.textContent = body.transcriber === "deepgram" ? "Checking with Deepgram…" : "Saving…";
-    try { await post("/api/settings", body); await showSettings(); sayDone(done); }
-    catch (err) { heardNote.textContent = `Could not save. ${err.message}`; heardNote.classList.add("failed"); heardSave.disabled = false; }
+    try { await post("/api/settings", body); await showSettings(); $("heardNote").textContent = done; }
+    catch (err) { heardNote.textContent = `Could not save. ${sentence(err.message)}`; heardNote.classList.add("failed"); heardSave.disabled = false; }
   };
   heardSave.addEventListener("click", () => {
     const body = { transcriber: heardPicked() };
@@ -2556,7 +2567,7 @@ async function showSettings() {
   });
 
   // Pairing and unpairing.
-  const pair = el("button", { className: "pill busy-off" }, ...withIcon("link", "Pair this computer", 16));
+  const pair = el("button", { className: "pill busy-off" }, ...withIcon("link", "Start pairing", 16));
   const unpair = el("button", { className: "pill danger busy-off" }, ...withIcon("unlink", "Unpair", 16));
   pair.addEventListener("click", async () => {
     try { await post("/api/pendant", { action: "pair" }); watchJob(); }
@@ -2638,7 +2649,11 @@ async function showSettings() {
     const b = el("button", { className: "pill busy-off" }, ...withIcon(name, label, 16));
     b.addEventListener("click", async () => {
       try { await post("/api/upkeep", { action }); watchJob(); }
-      catch (err) { say(err.message, true); }
+      catch (err) {
+        const row = b.closest(".row");
+        if (!row.nextElementSibling?.matches(".note.failed")) row.after(el("p", { className: "note failed", role: "status" }));
+        row.nextElementSibling.textContent = sentence(err.message);
+      }
     });
     return b;
   };
@@ -2694,11 +2709,12 @@ async function showSettings() {
     el("details", { className: "more" },
       el("summary", { textContent: "Pairing" }),
       el("ol", {},
-        el("li", { textContent: "Sync first. Pairing mode is a factory reset: it erases any audio still on the pendant." }),
-        el("li", { textContent: "Click Pair this computer. It waits three minutes." }),
-        el("li", { textContent: "On the pendant, press the button once and release, then straight away press and hold. A purple light appears; keep holding until it goes out." }),
+        el("li", { textContent: "Sync first. Pairing resets the pendant, and any audio it has not synced yet is erased." }),
+        el("li", { textContent: "Click Start pairing. It waits three minutes." }),
+        el("li", { textContent: "On the pendant, press the side button once and let go, then straight away press and hold it." }),
+        el("li", { textContent: "A purple light comes on. Keep holding until it goes out, then let go." }),
         el("li", { textContent: "A blue light means it is ready. Accept the connection request your computer shows." })),
-      el("p", { className: "small", textContent: "Unpair makes the pendant forget this computer, so it can be paired with another. Its recordings are kept. Your computer may also remember the pendant: if pairing again fails, remove it under Bluetooth in System Settings." }),
+      el("p", { className: "small", textContent: "Unpair makes the pendant forget this computer, so it can be paired with another. Its recordings are kept. Your computer may also remember the pendant: if pairing again fails, remove Pendant under Bluetooth in System Settings, then turn Bluetooth off and on." }),
       el("div", { className: "row" }, pair, unpair),
       el("p", { className: "small" }, "With the pendant's USB cable you can pair without the reset, and keep the audio on it. ",
         (() => { const b = el("button", { className: "pill", textContent: "Pair without erasing" }); b.addEventListener("click", () => showWelcome("keep", true)); return b; })()))),
@@ -2958,7 +2974,7 @@ function showAsk(question) {
       if (asking) { paint(); field.value = question; grow(); }
     } else if (asking) paint();
     go.disabled = false;
-    tell(failure ? `No answer. ${failure}` : "", { failed: Boolean(failure) });
+    tell(failure ? `No answer. ${sentence(failure)}` : "", { failed: Boolean(failure) });
     if (asking) { (failure ? working : form).scrollIntoView({ block: "nearest" }); field.focus(); }
   };
 

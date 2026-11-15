@@ -203,14 +203,13 @@ three read-only commands. The only other thing Limitful ever types there is
   when it syncs, without being stored or transcribed. A Paused marker shows on
   every page until you resume. To stop the pendant recording at all, hold its
   button for two seconds to switch it off.
-- **Pairing** has three buttons. Pair this computer waits three minutes while
+- **Pairing** has three buttons. Start pairing waits three minutes while
   you put the pendant in pairing mode. Unpair makes the pendant forget this
   computer so another can pair with it, keeping its recordings. Pair without
   erasing opens the USB route described in
   [Moving a pendant without erasing it](pendant.md#moving-a-pendant-to-another-computer-without-erasing-it).
 
-On the command line: `limitful pause`, `limitful resume`, `limitful pair` and
-`limitful unpair`.
+On the command line: `uv run limitful pause`, `resume`, `pair` and `unpair`.
 
 The Bluetooth unpair command has only been tested against a simulated
 pendant. Unpairing over USB has been done on a real one.
@@ -242,7 +241,7 @@ uv run limitful watch
 downloads new audio, frees that audio on the pendant, transcribes it and, if
 a summary writer is chosen, summarises it. Leave
 it running in a terminal. Use `--keep` to leave audio on the pendant and
-`--no-transcribe` to download only. `limitful serve --sync-every 120` does the
+`--no-transcribe` to download only. `uv run limitful serve --sync-every 120` does the
 same from inside the Lifelog.
 
 ## Freeing space on the pendant

@@ -219,7 +219,7 @@ const hook2 = `<div><h1 class="gold">Your pendant doesn’t have to.</h1></div>`
 // What this is, said once before the app appears.
 // The name comes up first, on its own; the rest of the card follows two beats later.
 const introCard = `<div><p class="intro">Introducing</p>${lockup}
-  <h1 class="late">The transcription and intelligence platform for your Limitless pendant.</h1>
+  <h1 class="late">The transcription and intelligence platform for your Limitless Pendant.</h1>
   <p class="late">On your own computer, or the cloud you choose. Free and open source.</p></div>`;
 const mineCard = `<div><h1>It runs on your computer.</h1><p>No account. No subscription. Nothing leaves it unless you say so.</p></div>`;
 const launchLast = `<div>${lockup}<h1>Keep the pendant. Keep your recordings.</h1>

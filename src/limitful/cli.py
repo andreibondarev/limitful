@@ -174,7 +174,7 @@ async def _cmd_index(args) -> int:
     try:
         if args.find:
             if not index.exists():
-                raise PendantError("there is no index yet: run `limitful index` first")
+                raise PendantError("there is no index yet: run `uv run limitful index` first")
             start_of = dict(store.db.execute("SELECT id, start_ms FROM utterances"))
             hits = search.spread(index.search(search.make_embedder(), args.find, limit=200), start_of, 10)
             for uid, score in hits:
@@ -225,7 +225,7 @@ async def _cmd_unpair(args) -> int:
 
     await unpair(args.timeout)
     print("Unpaired. The pendant has forgotten this computer and keeps its recordings.")
-    print("To use it here again, run `limitful pair`.")
+    print("To use it here again, run `uv run limitful pair`.")
     return 0
 
 
@@ -333,7 +333,7 @@ async def _cmd_demo(args) -> int:
         raise PendantError(str(err)) from None
     print(f"Wrote {made['conversations']} made-up conversations ({made['lines']} lines over "
           f"{made['days']} days) to {args.data_dir}.")
-    print(f"Open them with: limitful serve --data-dir {args.data_dir}")
+    print(f"Open them with: uv run limitful serve --data-dir {args.data_dir}")
     return 0
 
 
@@ -351,7 +351,7 @@ def _index_imported(store: Store) -> None:
     try:
         added = index.build(store, search.make_embedder(), progress)
     except Exception as err:  # the import itself is already saved
-        print(f"\nSearch by meaning was not updated ({err}). Run `limitful index` to add the new lines.")
+        print(f"\nSearch by meaning was not updated ({err}). Run `uv run limitful index` to add the new lines.")
         return
     if added:
         print(file=sys.stderr)
@@ -581,7 +581,7 @@ async def _cmd_autostart(args) -> int:
             print(f"Limitful will start when you log in and sync the pendant every "
                   f"{autostart.SYNC_EVERY_S // 60} minutes. Lifelog: http://localhost:{args.port}")
             print("It is running now." if free else
-                  f"Port {args.port} is in use (is `limitful serve` open?), so it starts at your next login.")
+                  f"Port {args.port} is in use (is `uv run limitful serve` open?), so it starts at your next login.")
         elif args.action == "off":
             autostart.disable()
             print("Limitful no longer starts at login.")
@@ -619,7 +619,7 @@ async def _cmd_serve(args) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="limitful",
-        description="Limitful: sync a Limitless Pendant over Bluetooth, transcribe it, and browse, search and summarise your days.",
+        description="Limitful: sync a Limitless Pendant over Bluetooth, transcribe it, and browse, search, summarise and ask about your days.",
     )
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)

@@ -1,7 +1,7 @@
 [project]
 name = "limitful"
 version = "0.1.0"
-description = "Open-source replacement for the Limitless Pendant software: sync recordings over Bluetooth, transcribe them locally, then browse, search, summarise and ask about your days."
+description = "Open-source replacement for the Limitless app: sync recordings over Bluetooth, transcribe them locally, then browse, search, summarise and ask about your days."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
