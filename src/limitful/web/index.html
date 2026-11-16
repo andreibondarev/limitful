@@ -733,12 +733,15 @@
   #quickList h3 { margin: 0.8rem 1.2rem 0.2rem; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
   #quickList .row { display: grid; grid-template-columns: 7.2rem minmax(0, 1fr); align-items: baseline; padding: 0.45rem 1.2rem; cursor: pointer; }
   #quickList .row.wide { grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; }
+  /* A date from another year carries the year, and needs a wider column. */
+  #quickList.years .row:not(.wide) { grid-template-columns: 10.2rem minmax(0, 1fr); }
+  #quickList .row time { overflow: hidden; text-overflow: ellipsis; padding-right: 0.6rem; }
   #quickList .row.on { background: color-mix(in srgb, var(--accent) 12%, transparent); }
   #quickList .row time, #quickList .row small { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
   #quickList .row p { margin: 0; font-family: var(--voice); font-size: 1.05rem; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #quickList mark { background: var(--mark); color: var(--mark-ink); border-radius: 3px; padding: 0 0.15em; }
   #quick .foot { display: flex; gap: 1.2rem; flex-wrap: wrap; padding: 0.55rem 1.2rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.8rem; }
-  @media (max-width: 620px) { #quick { margin-top: 1rem; } #quick .foot { display: none; } #quickList .row { grid-template-columns: 5.6rem minmax(0, 1fr); } }
+  @media (max-width: 620px) { #quick { margin-top: 1rem; } #quick .foot { display: none; } #quickList .row { grid-template-columns: 5.6rem minmax(0, 1fr); } #quickList.years .row:not(.wide) { grid-template-columns: minmax(0, 1fr); } }
   /* Dropping audio files on the page adds them as recordings. */
   #drop {
     position: fixed; inset: 0.75rem; z-index: 50; pointer-events: none;
@@ -3345,6 +3348,9 @@ function quickDraw() {
     add("Find", "find", wide(`Search everything for “${query}”`, fresh && quickFound.words.length ? count(quickFound.words.length, "line") : ""),
       () => { $("search").value = query; runSearch(query); });
     if (!like.sure) addDays(like.days);
+    const thisYear = String(new Date().getFullYear());
+    $("quickList").classList.toggle("years", fresh
+      && [...quickFound.words.slice(0, 5), ...quickFound.near].some((u) => u.day.slice(0, 4) !== thisYear));
     if (fresh) {
       const words = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig");
       const when = (u) => `${(u.day.slice(0, 4) === String(new Date().getFullYear()) ? briefDay : briefDayYear).format(new Date(dayStart(u.day)))}, ${clock.format(new Date(u.start))}`;
