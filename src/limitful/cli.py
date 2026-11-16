@@ -358,6 +358,33 @@ def _index_imported(store: Store) -> None:
         print(f"Added {added} line(s) to search by meaning.")
 
 
+async def _cmd_add(args) -> int:
+    from .recordings import NotAudio, add_recording
+
+    store = Store(args.data_dir)
+    added = 0
+    try:
+        for file in args.files:
+            if not file.is_file():
+                raise PendantError(f"no such file: {file}")
+            try:
+                result = await asyncio.to_thread(
+                    add_recording, store, file, file.name, int(file.stat().st_mtime * 1000))
+            except NotAudio as err:
+                raise PendantError(f"{file}: {err}") from None
+            if not result.new:
+                print(f"{file.name}: already added.")
+                continue
+            added += 1
+            when = datetime.fromtimestamp(result.start_ms / 1000).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"{file.name}: added at {when} ({result.duration_ms / 1000:.0f} s).")
+    finally:
+        store.close()
+    if added:
+        print("Run `uv run limitful transcribe` to turn them into text.")
+    return 0
+
+
 async def _cmd_import(args) -> int:
     from .importer import import_limitless
 
@@ -742,6 +769,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("file", type=Path, help="the export zip")
     data_args(p)
     p.set_defaults(func=_cmd_import)
+
+    p = sub.add_parser("add", help="add audio recorded elsewhere (a Voice Memo, any audio file)")
+    p.add_argument("files", type=Path, nargs="+", help="audio files: .m4a, .mp3, .wav and most others")
+    data_args(p)
+    p.set_defaults(func=_cmd_add)
 
     p = sub.add_parser("ask", help="ask a question about what was said (uses Claude)")
     p.add_argument("question")

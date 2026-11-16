@@ -120,7 +120,7 @@ hits, conversation titles, whole conversations) are sent to Anthropic.
 ## Bringing your Limitless history
 
 Request a data export from Limitless before December 1, 2026, then import the
-zip from Settings, Import from Limitless, or with:
+zip from Settings, Import, or with:
 
 ```sh
 uv run limitful import data-export.zip
@@ -130,6 +130,29 @@ Transcripts, section headings, audio and reminders are imported, and
 importing the same export twice adds nothing. Speakers keep Limitless's
 "Speaker 1", "Speaker 2" within each conversation. Chats in the export are not
 imported yet.
+
+## Adding other recordings
+
+Audio recorded somewhere else, such as a Voice Memo from your phone, can join
+the Lifelog. Drop the files anywhere on the page, choose them in Settings
+under Import, or run:
+
+```sh
+uv run limitful add "New Recording.m4a"
+uv run limitful transcribe
+```
+
+To get a Voice Memo onto the computer, share it from the phone by AirDrop, or
+drag it out of the Voice Memos app on a Mac. `.m4a`, `.mp3`, `.wav` and most
+other kinds of audio are read. Each recording is kept as Ogg Opus beside the
+pendant's audio and transcribed the same way, by Whisper on this computer or
+by Deepgram if you chose it. Adding the same file twice adds nothing.
+
+A recording is filed at the moment it began. That is read from a date and time
+in the file's name (`20261114 093012.m4a`), then from the date written inside
+the file, then from when the file was last changed. A file that has been
+edited or copied by another app can carry the wrong date, and there is no way
+to correct it in the app yet.
 
 Lines in a Limitless transcript usually sit about a second away from where
 they are heard. `uv run limitful retime` listens to the imported audio with Whisper

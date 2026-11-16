@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -677,3 +678,75 @@ def test_search_hits_come_with_their_surroundings(site, tmp_path):
     later, hit = json.loads(site("/api/search?q=ferry")[2])   # newest first
     assert (hit["before"], hit["after"], hit["talk"]) == ("We could go on Friday.", "Then nine it is.", "Trip plans")
     assert (later["before"], later["after"], later["talk"]) == (None, None, None)  # nothing near it, no conversation
+
+
+def _spoken_file(folder, name="20261114 093012-1A2B3C4D.m4a", seconds=3):
+    """A short AAC file of a tone, as a phone's recorder would write it."""
+    import av
+    import numpy as np
+
+    path = folder / name
+    with av.open(str(path), "w", format="ipod") as out:
+        stream = out.add_stream("aac", rate=44100)
+        stream.layout = "mono"
+        tone = (np.sin(np.arange(44100 * seconds) * 2 * np.pi * 220 / 44100) * 0.3).astype(np.float32)
+        frame = av.AudioFrame.from_ndarray(tone.reshape(1, -1), format="fltp", layout="mono")
+        frame.sample_rate = 44100
+        for packet in stream.encode(frame):
+            out.mux(packet)
+        for packet in stream.encode(None):
+            out.mux(packet)
+    return path
+
+
+AUDIO = {"Content-Type": "application/octet-stream"}
+
+
+def test_add_a_recording_through_the_page(site, tmp_path, monkeypatch):
+    from limitful import web
+
+    data = _spoken_file(tmp_path).read_bytes()
+    named = dict(AUDIO, **{"X-Name": "20261114%20093012-1A2B3C4D.m4a"})
+    status, _h, body = site("/api/recordings", named, data)
+    assert status == 200, body
+    got = json.loads(body)
+    assert got["added"] and got["day"] == "2026-11-14" and got["dated_by"] == "name"
+    assert 2800 <= got["duration_ms"] <= 3200
+    kept = list((tmp_path / "audio" / "2026-11-14").glob("added_09-30-12_*.ogg"))
+    assert len(kept) == 1 and kept[0].read_bytes()[:4] == b"OggS"
+    assert not list((tmp_path / "imports").iterdir())  # the upload is not kept
+    assert site(f"/audio/2026-11-14/{kept[0].name}")[0] == 200
+
+    # The same file again adds nothing.
+    assert json.loads(site("/api/recordings", named, data)[2])["added"] is False
+
+    # Transcribing needs no pendant.
+    monkeypatch.setattr(web.Library, "_transcriber", lambda self: Words())
+    assert json.loads(site("/api/transcribe", JSON, b"{}")[2]) == {"waiting": 1}
+    for _ in range(200):
+        job = json.loads(site("/api/status")[2])
+        if not job["running"]:
+            break
+        time.sleep(0.02)
+    assert job["error"] is None and job["note"] == "Transcribed 1 recording: 2 lines of speech."
+    store = Store(tmp_path)
+    try:
+        rows = store.db.execute(
+            "SELECT text, start_ms FROM utterances WHERE segment LIKE '%added_%' ORDER BY start_ms").fetchall()
+    finally:
+        store.close()
+    assert [r[0] for r in rows] == ["buy 100% oat_milk", "call Joseph"]
+    assert datetime.fromtimestamp(rows[0][1] / 1000).strftime("%Y-%m-%d %H:%M:%S") == "2026-11-14 09:30:12"
+    assert json.loads(site("/api/transcribe", JSON, b"{}")[2]) == {"waiting": 0}
+
+
+def test_add_a_recording_rejects_bad_uploads(site):
+    named = dict(AUDIO, **{"X-Name": "memo.m4a"})
+    assert site("/api/recordings", named, b"this is not audio")[0] == 400
+    assert site("/api/recordings", named, b"")[0] == 400
+    assert site("/api/recordings", dict(AUDIO, **{"X-Name": "notes.txt"}), b"x")[0] == 400
+    assert site("/api/recordings", dict(AUDIO, **{"X-Name": "..%2F..%2Fescape.m4a"}), b"x")[0] == 400
+    assert site("/api/recordings", JSON, b"{}")[0] == 415
+    assert site("/api/recordings", {"Content-Type": "audio/mp4"}, b"x")[0] == 415
+    assert site("/api/recordings", dict(named, Host="evil.example"), b"x")[0] == 403
+    assert site("/api/import", AUDIO, b"x")[0] == 415

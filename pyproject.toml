@@ -8,6 +8,8 @@ requires-python = ">=3.10"
 dependencies = [
     "bleak>=0.22",
     "faster-whisper>=1.1",
+    # Imported directly to read added recordings (m4a, mp3, wav) and write them as Ogg Opus.
+    "av>=12",
     "sherpa-onnx>=1.10",
     "numpy>=1.26",
     "anthropic>=2.8",

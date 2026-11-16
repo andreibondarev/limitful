@@ -27,6 +27,7 @@ https://github.com/user-attachments/assets/723f2695-8869-466a-bd2b-90385d5f8d4c
 - **Ask**: questions about what was said, answered with links to the lines
   behind the answer.
 - **Imports your Limitless export**: transcripts, audio and reminders.
+- **Takes other recordings**: drop a Voice Memo or any audio file on the page to transcribe it.
 - **Pendant controls**: battery, storage, light, pause, pair and unpair.
 
 ## Install

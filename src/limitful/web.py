@@ -158,6 +158,66 @@ class Library:
             "indexing": indexing,
         }
 
+    def add_recording(self, stream, length: int, name: str, modified_ms: int | None) -> dict:
+        """Save an uploaded audio file as a recording. It is transcribed by `start_transcribing`."""
+        from .recordings import add_recording
+
+        upload = self.data_dir / "imports" / f"upload-{time.time_ns()}{Path(name).suffix.lower()}"
+        try:
+            upload.parent.mkdir(parents=True, exist_ok=True)
+            with open(upload, "wb") as out:
+                left = length
+                while left > 0:
+                    chunk = stream.read(min(left, 1 << 20))
+                    if not chunk:
+                        raise ValueError("the upload was cut short")
+                    out.write(chunk)
+                    left -= len(chunk)
+            added = self._with_store(lambda store: add_recording(store, upload, name, modified_ms))
+        finally:
+            upload.unlink(missing_ok=True)
+        day = datetime.fromtimestamp(added.start_ms / 1000).strftime("%Y-%m-%d") if added.new else None
+        return {"added": added.new, "day": day, "start_ms": added.start_ms,
+                "duration_ms": added.duration_ms, "dated_by": added.dated_by}
+
+    def start_transcribing(self) -> dict:
+        """Transcribe and summarise whatever is waiting, in the background. No pendant is needed."""
+        waiting = self._with_store(lambda store: len(store.pending_transcription()))
+        if not waiting:
+            return {"waiting": 0}
+        with self._lock:
+            if self.job["running"]:
+                raise RuntimeError("Something is already running. Wait for it to finish.")
+            self.job.update(running=True, what="Transcribing", done=0, total=0, error=None, note=None)
+        threading.Thread(target=self._transcribe_job, daemon=True).start()
+        return {"waiting": waiting}
+
+    def _transcribe_job(self) -> None:
+        from .store import Store
+
+        try:
+            store = Store(self.data_dir)
+            try:
+                waiting = len(store.pending_transcription())
+                lines, _files = store.transcribe_pending(
+                    self._transcriber(), lambda done, total: self.job.update(done=done, total=total))
+                self.job["note"] = (f"Transcribed {waiting} recording{'' if waiting == 1 else 's'}: "
+                                    f"{lines} line{'' if lines == 1 else 's'} of speech.")
+                provider = config.provider()
+                if provider:
+                    self.job.update(what="Summarising conversations", done=0, total=0)
+                    try:
+                        store.digest_pending(digest_mod.make_summarizer(provider, None, config.api_key()))
+                    except digest_mod.DigestError as err:
+                        self.job["note"] += f" Summaries are waiting: {err}."
+            finally:
+                store.close()
+        except Exception as err:  # shown in the page; the audio is kept and can be tried again
+            self.job["error"] = f"Transcribing stopped: {err}"
+            self.job["note"] = None
+        finally:
+            self.job.update(running=False, what="")
+
     def _index_new_lines(self) -> bool:
         """Start adding new lines to search by meaning, if the user has set it up.
 
@@ -825,13 +885,21 @@ def make_handler(library: Library):
             # JSON and zip content types cannot be sent by another website without
             # our permission, which this server never gives.
             kind = (self.headers.get("Content-Type") or "").split(";")[0].strip()
-            if kind not in ("application/json", "application/zip"):
+            if kind not in ("application/json", "application/zip", "application/octet-stream"):
                 return self._text(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "Send JSON.")
-            if (kind == "application/zip") != (urlparse(self.path).path == "/api/import"):
-                return self._text(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "Wrong content type for this address.")
             path = urlparse(self.path).path
+            expected = {"/api/import": "application/zip", "/api/recordings": "application/octet-stream"}
+            if kind != expected.get(path, "application/json"):
+                return self._text(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "Wrong content type for this address.")
             if path == "/api/import":
                 return self._import()
+            if path == "/api/recordings":
+                return self._recording()
+            if path == "/api/transcribe":
+                try:
+                    return self._json(library.start_transcribing())
+                except RuntimeError as err:
+                    return self._text(HTTPStatus.CONFLICT, str(err))
             if path == "/api/ask":
                 return self._ask()
             found = re.match(r"^/api/chats/(\d+)/delete$", path)
@@ -1019,6 +1087,27 @@ def make_handler(library: Library):
                 return self._text(HTTPStatus.CONFLICT, str(err))
             except zipfile.BadZipFile:
                 return self._text(HTTPStatus.BAD_REQUEST, "That file is not a zip archive.")
+            except (ValueError, OSError, sqlite3.Error) as err:
+                return self._text(HTTPStatus.BAD_REQUEST, str(err))
+
+        def _recording(self) -> None:
+            from .recordings import SUFFIXES, NotAudio
+
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                modified = int(self.headers.get("X-Modified") or 0) or None
+            except ValueError:
+                length, modified = 0, None
+            name = Path(unquote(self.headers.get("X-Name") or "")).name[:200]
+            if not 0 < length <= _MAX_UPLOAD:
+                return self._text(HTTPStatus.BAD_REQUEST, "Choose an audio file to add.")
+            if Path(name).suffix.lower() not in SUFFIXES:
+                return self._text(HTTPStatus.BAD_REQUEST,
+                                  "That is not a kind of audio file this can read. Try .m4a, .mp3 or .wav.")
+            try:
+                return self._json(library.add_recording(self.rfile, length, name, modified))
+            except NotAudio as err:
+                return self._text(HTTPStatus.BAD_REQUEST, str(err))
             except (ValueError, OSError, sqlite3.Error) as err:
                 return self._text(HTTPStatus.BAD_REQUEST, str(err))
 

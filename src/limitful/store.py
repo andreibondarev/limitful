@@ -513,6 +513,10 @@ class Store:
             _path, start, duration = sessions[-1][-1]
             if now_ms - (start + duration) <= CONVERSATION_GAP_MS:
                 sessions.pop()  # may still be going on
+        # A recording added from a file is whole already: one session each.
+        sessions += [[item] for item in self.db.execute(
+            "SELECT path, start_ms, duration_ms FROM segments WHERE first_page < 0 "
+            "AND path NOT IN (SELECT segment FROM transcriptions) ORDER BY start_ms").fetchall()]
         return sessions
 
     def session_audio(self, session: list[tuple[str, int, int]]) -> tuple[bytes, list[tuple[str, int, float, float]]]:
@@ -521,9 +525,14 @@ class Store:
         Also returns, for each recording: (path, the clock time it starts at in ms,
         where it starts in the joined audio in seconds, how long it is in seconds).
         The stream is rebuilt from the stored pages, so nothing is re-encoded.
+        A recording added from a file is sent as the file it is.
         """
         import io
 
+        if len(session) == 1 and self.db.execute(
+                "SELECT first_page FROM segments WHERE path = ?", (session[0][0],)).fetchone()[0] < 0:
+            path, start_ms, duration_ms = session[0]
+            return (self.data_dir / path).read_bytes(), [(path, start_ms, 0.0, duration_ms / 1000)]
         packets: list[bytes] = []
         pieces: list[tuple[str, int, float, float]] = []
         at = 0.0

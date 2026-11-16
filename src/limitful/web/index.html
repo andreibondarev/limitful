@@ -720,6 +720,16 @@
   #quickList mark { background: var(--mark); color: var(--mark-ink); border-radius: 3px; padding: 0 0.15em; }
   #quick .foot { display: flex; gap: 1.2rem; flex-wrap: wrap; padding: 0.55rem 1.2rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.8rem; }
   @media (max-width: 620px) { #quick { margin-top: 1rem; } #quick .foot { display: none; } #quickList .row { grid-template-columns: 5.6rem minmax(0, 1fr); } }
+  /* Dropping audio files on the page adds them as recordings. */
+  #drop {
+    position: fixed; inset: 0.75rem; z-index: 50; pointer-events: none;
+    display: grid; place-content: center; gap: 0.4rem; text-align: center;
+    background: color-mix(in srgb, var(--paper) 90%, transparent);
+    border: 2px dashed var(--accent); border-radius: 18px; color: var(--ink);
+  }
+  #drop[hidden] { display: none; }
+  #drop b { font-family: var(--voice, inherit); font-weight: 400; font-size: clamp(1.4rem, 3vw, 2rem); }
+  #drop span { font-family: var(--chrome); color: var(--muted); }
 </style>
 </head>
 <body>
@@ -740,9 +750,11 @@
     <button id="remind" aria-pressed="false"><span id="remindLabel">Reminders</span></button>
     <button id="settings" aria-pressed="false" aria-label="Settings" title="Settings"></button>
     <input type="file" id="file" accept=".zip,application/zip" hidden>
+    <input type="file" id="memos" accept="audio/*,.m4a,.mp3,.wav,.aac,.caf,.flac,.ogg,.opus,.qta" multiple hidden>
     <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said" title="Search what was said. For quick find, press ⌘K or Ctrl+K.">
   </div>
   <p id="status" role="status" hidden></p>
+  <div id="drop" hidden><b>Drop recordings to add them to your Lifelog</b><span>Voice Memos and other audio files: .m4a, .mp3, .wav</span></div>
   <p id="demobar" hidden></p>
   <div id="strip" role="group" aria-label="When speech was recorded during this day"></div>
   <div id="hours" aria-hidden="true"></div>
@@ -940,7 +952,7 @@ async function showWelcome(step = "start", fromSettings = false) {
   searching = reminding = configuring = asking = false;
   document.querySelector("header").classList.add("plain");
   for (const id of ["ask", "remind", "settings"]) $(id).setAttribute("aria-pressed", "false");
-  history.replaceState(null, "", "#welcome");
+  visit("#welcome");
   $("title").textContent = "Welcome";
   strip.replaceChildren();
   say("");
@@ -1357,7 +1369,7 @@ async function showReminders() {
   configuring = false;
   asking = false;
   $("ask").setAttribute("aria-pressed", "false");
-  history.replaceState(null, "", "#reminders");
+  visit("#reminders");
   $("remind").setAttribute("aria-pressed", "true");
   $("settings").setAttribute("aria-pressed", "false");
   $("title").textContent = "Reminders";
@@ -2061,7 +2073,7 @@ async function openDay(key, revealId, revealTalk, startPlaying) {
   day = key;
   wanted = revealId || revealTalk
     ? { line: revealId || null, talk: revealTalk || null, start: Boolean(startPlaying) } : null;
-  history.replaceState(null, "", `#${key}`);
+  visit(`#${key}`);
   try {
     const [gotLines, gotTalks] = await Promise.all([get(`/api/day/${key}`), get(`/api/conversations/${key}`)]);
     if (!onDay(key)) return;  // moved on while this was loading
@@ -2369,7 +2381,9 @@ async function watchJob() {
     clearInterval(watching);
     watching = null;
     toldError = job.error;
+    if (transcribeNext && !job.error) return transcribeAdded();  // recordings were added while this ran
     if (job.error) say(withAdvice(job.error, job.advice), true); else sayDone(job.note || "Finished.");
+    if (showNext && !job.error) { day = showNext; showNext = null; }
     if (configuring) showSettings();
     try { days = await get("/api/days"); } catch { /* keep what we had */ }
     if (!searching && !reminding && !configuring && !asking && !welcoming) openDay(day);
@@ -2403,6 +2417,62 @@ $("file").addEventListener("change", async (e) => {
   }
 });
 
+/* Recordings made elsewhere (a Voice Memo, any audio file): dropped anywhere on the page or
+   chosen in Settings. Each is filed at the moment it was recorded, then transcribed. */
+const AUDIO_FILE = /\.(m4a|mp3|wav|aac|mp4|mov|caf|aiff?|flac|ogg|opus|webm|qta|amr|3gp|wma)$/i;
+let transcribeNext = false, showNext = null;
+async function transcribeAdded() {
+  transcribeNext = false;
+  try { await post("/api/transcribe", {}); } catch { transcribeNext = true; }  // something else is running: after it
+  watchJob();
+}
+async function addRecordings(files) {
+  const audio = [...files].filter((f) => AUDIO_FILE.test(f.name));
+  if (!audio.length) return say("Those are not audio files. Add recordings such as .m4a, .mp3 or .wav.", true);
+  let added = 0, already = 0;
+  const failed = [];
+  for (const [i, file] of audio.entries()) {
+    say(`Adding ${file.name}${audio.length > 1 ? ` (${i + 1} of ${audio.length})` : ""}…`);
+    try {
+      const res = await fetch("/api/recordings", { method: "POST", body: file, headers: {
+        "Content-Type": "application/octet-stream", "X-Name": encodeURIComponent(file.name), "X-Modified": String(file.lastModified || 0) } });
+      if (!res.ok) throw new Error(await res.text());
+      const r = await res.json();
+      if (!r.added) { already += 1; continue; }
+      added += 1;
+      if (!showNext || r.day > showNext) showNext = r.day;
+    } catch (err) {
+      failed.push(`${file.name}: ${sentence(err.message)}`);
+    }
+  }
+  const notes = [];
+  if (added) notes.push(`Added ${count(added, "recording")}.`);
+  if (already) notes.push(`${count(already, "recording")} ${already === 1 ? "was" : "were"} already here.`);
+  if (failed.length) notes.push(`Could not add ${failed.join(" ")}`);
+  say(notes.join(" "), Boolean(failed.length));
+  if (added && !failed.length) transcribeAdded();
+  else if (added) { try { await post("/api/transcribe", {}); } catch { transcribeNext = true; } }  // keep the failure on screen
+}
+$("memos").addEventListener("change", (e) => {
+  const chosen = [...e.target.files];
+  e.target.value = "";
+  if (chosen.length) addRecordings(chosen);
+});
+{
+  let depth = 0;
+  const carriesFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  window.addEventListener("dragenter", (e) => { if (carriesFiles(e)) { e.preventDefault(); depth += 1; $("drop").hidden = false; } });
+  window.addEventListener("dragover", (e) => { if (carriesFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });
+  window.addEventListener("dragleave", (e) => { if (carriesFiles(e) && (depth -= 1) <= 0) { depth = 0; $("drop").hidden = true; } });
+  window.addEventListener("drop", (e) => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    $("drop").hidden = true;
+    addRecordings(e.dataTransfer.files);
+  });
+}
+
 /* Settings: what writes summaries, the Anthropic key, and importing an export. */
 let settingsPane = "pendant";  // the section last open, kept across saves
 async function showSettings() {
@@ -2414,7 +2484,7 @@ async function showSettings() {
   searching = false;
   asking = false;
   $("ask").setAttribute("aria-pressed", "false");
-  history.replaceState(null, "", `#settings/${settingsPane}`);
+  visit(`#settings/${settingsPane}`);
   $("settings").setAttribute("aria-pressed", "true");
   $("remind").setAttribute("aria-pressed", "false");
   $("title").textContent = "Settings";
@@ -2669,6 +2739,8 @@ async function showSettings() {
   post("/api/pendant", { action: "usb" }).then(showWired).catch(() => {});  // quick, and silent when not plugged in
   const pick = el("button", { className: "pill busy-off" }, ...withIcon("import", "Choose an export zip", 16));
   pick.addEventListener("click", () => $("file").click());
+  const addAudio = el("button", { className: "pill busy-off" }, ...withIcon("import", "Choose audio files", 16));
+  addAudio.addEventListener("click", () => $("memos").click());
   const theme = () => { try { return localStorage.getItem("limitful-theme") || ""; } catch { return ""; } };
   const themeChoice = (value, name, about) => el("label", { className: "choice" },
     el("input", { type: "radio", name: "theme", value, checked: theme() === value }),
@@ -2737,6 +2809,9 @@ async function showSettings() {
     el("h2", {}, ...withIcon("import", "Import from Limitless", 22)),
     el("p", { textContent: "Bring in a data export: conversations, transcripts, audio and reminders. Importing the same export twice adds nothing." }),
     el("div", { className: "row" }, pick),
+    el("h2", {}, ...withIcon("import", "Add recordings", 22)),
+    el("p", { textContent: "Bring in audio recorded elsewhere, such as Voice Memos from your phone: .m4a, .mp3, .wav and most other kinds. Each is filed at the time it was recorded and transcribed like the pendant's audio. You can also drop files anywhere on this page." }),
+    el("div", { className: "row" }, addAudio),
     el("h2", {}, ...withIcon("clock", "Timing of imported lines", 22)),
     el("p", { textContent: `Limitless's timestamps run about a second late, so imported lines trail their audio. This listens to each recording and moves every line to where its words are said, keeping Limitless's text. ${retimeState}` }),
     retiming),
@@ -2747,13 +2822,13 @@ async function showSettings() {
     ["summaries", "summary", "Summaries", () => now.provider === "claude" ? "Claude" : now.provider === "ollama" ? "Ollama" : "Off"],
     ["search", "find", "Search by meaning", () => !upkeep.index.total ? "Nothing to index" : !upkeep.index.indexed ? "Not set up" : upkeep.index.left ? `${count(upkeep.index.left)} lines left` : "Up to date"],
     ["appearance", "bright", "Appearance", () => ({ light: "Light", dark: "Dark" })[theme()] || "Matches this computer"],
-    ["import", "import", "Import from Limitless", () => upkeep.retime.recordings ? `${count(upkeep.retime.recordings)} recordings to re-time` : "Bring in an export"],
+    ["import", "import", "Import", () => upkeep.retime.recordings ? `${count(upkeep.retime.recordings)} recordings to re-time` : "A Limitless export, or audio files"],
   ];
   const tabs = el("nav", { className: "sections", ariaLabel: "Settings sections" });
   const states = {};
   const open = (id) => {
     settingsPane = id;
-    history.replaceState(null, "", `#settings/${id}`);  // so a section can be bookmarked or linked
+    visit(`#settings/${id}`);  // so a section can be bookmarked or linked
     for (const [name, pane] of Object.entries(panes)) pane.hidden = name !== id;
     for (const b of tabs.children) b.setAttribute("aria-current", String(b.dataset.pane === id));
   };
@@ -2818,7 +2893,7 @@ function showAsk(question) {
   document.title = "Lifelog, ask";
   asking = true;
   searching = false; reminding = false; configuring = false;
-  history.replaceState(null, "", "#ask");
+  visit("#ask");
   for (const [id, on] of [["ask", true], ["remind", false], ["settings", false]]) $(id).setAttribute("aria-pressed", String(on));
   $("title").textContent = "Ask";
   strip.replaceChildren();
@@ -3211,14 +3286,26 @@ setInterval(async () => {
   } catch { /* the server is away; try again next time */ }
 }, 30000);
 
-/* Following a link or editing the address goes there without a reload. */
+/* Each view the reader goes to gets its own place in the browser's history, so Back
+   and Forward step through them. While the page is following the address (first load,
+   Back, Forward, a link) the entry already exists and is only corrected. */
+let arriving = true;
+function visit(hash) {
+  if (location.hash === hash) return;
+  if (arriving) history.replaceState(null, "", hash);
+  else history.pushState(null, "", hash);
+}
+
+/* Following a link, editing the address or pressing Back goes there without a reload. */
 window.addEventListener("hashchange", () => {
   const [where, id] = location.hash.slice(1).split("/");
+  arriving = true;  // every view sets the address before its first wait
   if (/^\d{4}-\d{2}-\d{2}$/.test(where)) openDay(where, id && Number(id));
   else if (where === "reminders") showReminders();
   else if (where === "settings") { if (id) settingsPane = id; showSettings(); }
   else if (where === "ask") showAsk();
   else if (where === "welcome") showWelcome();
+  arriving = false;
 });
 
 (async () => {
@@ -3227,6 +3314,7 @@ window.addEventListener("hashchange", () => {
   } catch (err) {
     day = dayKey(new Date());
     main.replaceChildren(el("p", { className: "empty", textContent: `Could not load recordings. ${err.message}` }));
+    arriving = false;
     return;
   }
   const [hashDay, hashId] = location.hash.slice(1).split("/");
@@ -3239,6 +3327,7 @@ window.addEventListener("hashchange", () => {
   showDemoBar();
   // An empty Lifelog that has never been set up starts with the guide.
   if (hashDay === "welcome" || (!days.length && !welcomed() && !hashDay)) showWelcome();
+  arriving = false;
   watchJob();
   countReminders();
   showPaused();
