@@ -271,6 +271,14 @@
   .glance .recap { margin: 0 0 1.6rem; padding: 1rem 1.1rem; max-width: none; }
   .glance .recap .headline { font-size: 1.2rem; }
   .glance .recap ul { font-size: 0.92rem; }
+  .recap .kicker { margin: 0 0 0.35rem; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+  /* Beside the day, an open conversation's summary takes the recap's place. Where the
+     side column sits above the conversations instead, the summary stays inside its card. */
+  @media (min-width: 1101px) {
+    .card .brief { display: none; }
+    .glance.talking > .recap:not(.talk) { display: none; }
+  }
+  @media (max-width: 1100px) { .glance > .recap.talk { display: none; } }
   .glance ul.plain { list-style: none; margin: 0; padding: 0; }
   .glance ul.plain li { border-top: 1px solid var(--rule); }
   .glance ul.plain .go {
@@ -1868,16 +1876,43 @@ function renderDay() {
   const real = groups.length - strays;
   const count = `${real} conversation${real === 1 ? "" : "s"}${strays ? `, ${strays} short moment${strays === 1 ? "" : "s"}` : ""}`;
   const recap = el("section", { className: "recap", hidden: true });
-  const side = [recap, ...followUps(), ...peopleList];
+  const talk = el("section", { className: "recap talk", hidden: true });
+  const side = [talk, recap, ...followUps(), ...peopleList];
+  const glance = el("aside", { className: "glance", ariaLabel: "This day at a glance" }, ...side);
   const grid = el("div", { className: "daygrid" },
     el("div", { className: "talks" }, el("div", { className: "tools" }, el("span", { textContent: count }), toggleAll), ...rows),
-    el("aside", { className: "glance", ariaLabel: "This day at a glance" }, ...side));
+    glance);
   main.replaceChildren(grid);
   // With nothing to put beside them, the conversations take the full width.
-  const solo = () => grid.classList.toggle("solo", recap.hidden && side.length === 1);
+  const solo = () => grid.classList.toggle("solo", recap.hidden && side.length === 2 && !groups.some(hasBrief));
   solo();
+  // The summary of the open conversation being read, in the recap's place; the day's recap
+  // comes back when none is open or in view.
+  let shown = null;
+  refreshTalk = () => {
+    if (!grid.isConnected) return;
+    const line = document.querySelector("header").getBoundingClientRect().bottom + 48;
+    let reading = null, below = null;
+    for (const g of groups) {
+      if (!openCards.has(g.key) || !hasBrief(g)) continue;
+      const at = $(`g${g.key}`)?.getBoundingClientRect();
+      if (!at) continue;
+      if (at.top <= line && at.bottom > line) { reading = g; break; }
+      if (!below && at.top > line && at.top < innerHeight) below = g;
+    }
+    const now = reading || below;
+    if (now === shown) return;
+    shown = now;
+    talk.hidden = !now;
+    glance.classList.toggle("talking", Boolean(now));
+    if (now) talk.replaceChildren(
+      el("p", { className: "kicker", textContent: `Conversation at ${clock.format(new Date(now.start))}` }),
+      el("p", { className: "headline", textContent: now.title || "Untitled conversation" }),
+      el("ul", {}, ...now.summary.map((t) => el("li", { textContent: t }))));
+  };
   showRecap(recap, day).then(solo);
   if (groups.length === 1) groups[0].setOpen(true);
+  refreshTalk();
   markPlaying();
   if (wanted) {
     const { line, talk, start } = wanted;
@@ -2040,6 +2075,14 @@ function lengthOf(ms) {
 
 /* A conversation, closed until clicked. The bar under its time shows how long it ran,
    against the day's longest. */
+/* A conversation with a summary of its own to show. */
+const hasBrief = (g) => !g.sections.length && g.summary.length > 0;
+let refreshTalk = () => {};  // set by the day view: shows the summary of the conversation being read
+let talkTick = 0;
+window.addEventListener("scroll", () => {
+  if (!talkTick) talkTick = requestAnimationFrame(() => { talkTick = 0; refreshTalk(); });
+}, { passive: true });
+
 function card(g, longest = 0) {
   const first = g.own[0].text;
   const title = g.title || (first.length > 70 ? `${first.slice(0, 70)}…` : first);
@@ -2060,8 +2103,9 @@ function card(g, longest = 0) {
   const fill = () => { if (!body.childElementCount) { body.append(...cardBody(g)); markPlaying(); } };
   box.addEventListener("toggle", () => {
     if (box.open) { openCards.add(g.key); fill(); } else openCards.delete(g.key);
+    refreshTalk();
   });
-  g.setOpen = (open) => { if (open) { openCards.add(g.key); fill(); } else openCards.delete(g.key); box.open = open; };
+  g.setOpen = (open) => { if (open) { openCards.add(g.key); fill(); } else openCards.delete(g.key); box.open = open; refreshTalk(); };
   if (openCards.has(g.key)) g.setOpen(true);
   box.addEventListener("mouseenter", () => lightUp(g));
   box.addEventListener("mouseleave", () => lightUp(null));
@@ -2087,7 +2131,7 @@ function cardBody(g) {
   const nodes = [];
   // What the conversation came to, before the words themselves.
   const brief = el("div", { className: "brief" });
-  if (!g.sections.length && g.summary.length) brief.append(el("ul", {}, ...g.summary.map((t) => el("li", { textContent: t }))));
+  if (hasBrief(g)) brief.append(el("ul", {}, ...g.summary.map((t) => el("li", { textContent: t }))));
   if (brief.childElementCount) nodes.push(brief);
 
   const copy = el("button", { className: "copy", textContent: "Copy as Markdown" });
