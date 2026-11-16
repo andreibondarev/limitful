@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Open-source replacement for the Limitless app: sync recordings over Bluetooth, transcribe them locally, then browse, search, summarise and ask about your days."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "bleak>=0.22",
     "faster-whisper>=1.1",
@@ -15,9 +15,7 @@ dependencies = [
     "anthropic>=2.8",
     "pyserial>=3.5",
     # Imported directly for search by meaning and the speech-model download.
-    "onnxruntime>=1.17; python_version >= '3.11'",
-    # onnxruntime 1.24 dropped its Python 3.10 wheels without saying so in its metadata.
-    "onnxruntime>=1.17,<1.24; python_version < '3.11'",
+    "onnxruntime>=1.17",
     "tokenizers>=0.15",
     "huggingface-hub>=0.23",
 ]

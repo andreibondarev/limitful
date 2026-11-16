@@ -32,7 +32,7 @@ https://github.com/user-attachments/assets/723f2695-8869-466a-bd2b-90385d5f8d4c
 
 ## Install
 
-Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```sh
 git clone https://github.com/andreibondarev/limitful.git
