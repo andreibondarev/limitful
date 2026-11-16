@@ -141,7 +141,16 @@
     border: 1px solid var(--rule); border-radius: 999px;
     background: transparent; padding: 0.4rem 0.85rem;
   }
-  #search { flex: 1 1 6rem; max-width: 13rem; min-width: 0; }
+  #findbox { position: relative; display: flex; flex: 1 1 6rem; max-width: 13rem; min-width: 0; }
+  #search { flex: 1; width: 100%; min-width: 0; }
+  /* The quick-find shortcut, shown in the empty search box until it is used. */
+  #search:placeholder-shown:not(:focus) { padding-right: 3rem; }
+  #findbox kbd {
+    position: absolute; right: 0.6rem; top: 50%; transform: translateY(-50%); pointer-events: none;
+    font: inherit; font-size: 0.75rem; line-height: 1.5; color: var(--muted);
+    border: 1px solid var(--rule); border-radius: 5px; padding: 0 0.35rem; white-space: nowrap;
+  }
+  #search:focus + kbd, #search:not(:placeholder-shown) + kbd { display: none; }
   /* Settings is an icon alone, so the row has room for the search box even while paused. */
   header #settings { padding-inline: 0.65rem; }
   #settings .icon { margin: 0; }
@@ -773,7 +782,7 @@
     <button id="settings" aria-pressed="false" aria-label="Settings" title="Settings"></button>
     <input type="file" id="file" accept=".zip,application/zip" hidden>
     <input type="file" id="memos" accept="audio/*,.m4a,.mp3,.wav,.aac,.caf,.flac,.ogg,.opus,.qta" multiple hidden>
-    <input type="search" id="search" placeholder="Search what was said" aria-label="Search what was said" title="Search what was said. For quick find, press ⌘K or Ctrl+K.">
+    <span id="findbox"><input type="search" id="search" placeholder="Search" aria-label="Search what was said" title="Search what was said. For quick find, press ⌘K or Ctrl+K."><kbd id="shortcut" aria-hidden="true">⌘K</kbd></span>
   </div>
   <p id="status" role="status" hidden></p>
   <div id="drop" hidden><b>Drop recordings to add them to your Lifelog</b><span>Voice Memos and other audio files: .m4a, .mp3, .wav</span></div>
@@ -3323,6 +3332,7 @@ function quickRun(row) {
   row.run();
 }
 
+if (!/Mac|iPhone|iPad/.test(navigator.platform)) $("shortcut").textContent = "Ctrl K";
 function openQuick() {
   if (quick.open) { quick.close(); return; }
   closeCalendar();
