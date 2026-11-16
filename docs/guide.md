@@ -53,11 +53,12 @@ Markdown.
 
 **Getting around.** The arrows either side of the date in the header step
 through the days with recordings. The date itself opens a calendar, each day shaded
-by how much was said, with its recap shown as you point at it. Search covers
-every day and shows each hit with the words marked, the line before and
+by how much was said, with its recap shown as you point at it. The search box
+opens quick find (below); its "Search everything" row lists every hit across
+all days, each with the words marked, the line before and
 after, and the conversation it is from.
 
-**Quick find.** Press ⌘K (Ctrl+K on Linux and Windows) anywhere for one box
+**Quick find.** Click the search box, or press ⌘K (Ctrl+K on Linux and Windows) or `/` anywhere, for one box
 that goes places. Type a date ("yesterday", "12 nov", "thursday", "march
 2025") to open that day, the start of "reminders", "ask" or "settings" to go
 there, or any words to see the first lines that contain them, with lines
@@ -224,7 +225,7 @@ it shows as a job at the top of the page and can be stopped.
 Once the index exists:
 
 - **Ask** gets a second way to look things up and is told when to use it.
-- **The search box** lists exact matches first, exactly as before, and under
+- **A full search** lists exact matches first, exactly as before, and under
   them up to eight moments that are close in meaning.
 
 How well it works was measured: see [Experiments](experiments.md#search-by-meaning).

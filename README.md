@@ -14,7 +14,7 @@ export before then usable.
 
 https://github.com/user-attachments/assets/74849ccd-a92d-451a-9275-ca2112dce1fd
 
-<p align="center">A 78-second tour (with captions and music; the conversations in it are made up). <a href="assets/promo/limitful-promo.mp4">Download the video</a>.</p>
+<p align="center">A 79-second tour (with captions and music; the conversations in it are made up). <a href="assets/promo/limitful-promo.mp4">Download the video</a>.</p>
 
 ## What it does
 
