@@ -380,6 +380,12 @@
     margin: 0.7rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.9rem;
     border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent);
   }
+  /* How far a job has got: a filled bar when that is known, a moving one when it is not. */
+  #status .bar { display: block; height: 4px; margin-top: 0.5rem; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, var(--accent) 20%, transparent); }
+  #status .bar i { display: block; height: 100%; border-radius: 2px; background: var(--accent); transition: width 0.8s ease; }
+  #status .bar.unknown i { width: 28%; animation: working 1.5s ease-in-out infinite; }
+  @keyframes working { from { transform: translateX(-110%); } to { transform: translateX(370%); } }
+  @media (prefers-reduced-motion: reduce) { #status .bar.unknown i { animation: none; width: 100%; opacity: 0.45; } #status .bar i { transition: none; } }
   .switch { display: grid; grid-template-columns: 1.8rem 1fr; align-items: start; margin: 1.2rem 0; padding: 0.9rem 0; border-block: 1px solid var(--rule); cursor: pointer; }
   .switch input { margin-top: 0.25rem; accent-color: var(--accent); width: 1rem; height: 1rem; }
   .switch b { display: block; font-weight: 600; }
@@ -2453,13 +2459,30 @@ function say(text, failed) {
   box.classList.toggle("failed", Boolean(failed));
 }
 
+/* A notice of work under way, with a bar: `fraction` from 0 to 1, or null when it cannot be known. */
+function sayBusy(text, fraction) {
+  say(text);
+  const known = typeof fraction === "number";
+  const bar = el("span", { className: known ? "bar" : "bar unknown", role: "progressbar", ariaLabel: text },
+    el("i", { style: known ? `width: ${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%` : "" }));
+  if (known) bar.setAttribute("aria-valuenow", String(Math.round(fraction * 100)));
+  $("status").append(bar);
+}
+
 let watching = null;
 async function watchJob() {
   let job;
   try { job = await get("/api/status"); } catch { return; }
   document.querySelectorAll(".busy-off").forEach((b) => { b.disabled = job.running; });
   if (job.running) {
-    say(job.total ? `${job.what}: ${job.done} of ${job.total}. You can keep using the page.` : `${job.what}…`);
+    if (job.percent != null) {
+      const which = job.total > 1 ? `, recording ${Math.min(job.done + 1, job.total)} of ${job.total}` : "";
+      sayBusy(`${job.what}: ${job.percent}%${which}. You can keep using the page.`, job.percent / 100);
+    } else if (job.total) {
+      sayBusy(`${job.what}: ${job.done.toLocaleString()} of ${job.total.toLocaleString()}. You can keep using the page.`, job.done / job.total);
+    } else {
+      sayBusy(`${job.what}…`, null);
+    }
     if (job.stoppable && !job.what.includes("stopping")) {
       const halt = el("button", { className: "halt" }, ...withIcon("stop", "Stop", 14));
       halt.addEventListener("click", async () => {
@@ -2468,8 +2491,9 @@ async function watchJob() {
         watchJob();
       });
       $("status").append(" ", halt);
+      $("status").append($("status").querySelector(".bar"));  // the bar stays underneath
     }
-    if (!watching) watching = setInterval(watchJob, 3000);
+    if (!watching) watching = setInterval(watchJob, 1500);
     return;
   }
   if (watching) {
@@ -2527,7 +2551,7 @@ async function addRecordings(files) {
   let added = 0, already = 0;
   const failed = [];
   for (const [i, file] of audio.entries()) {
-    say(`Adding ${file.name}${audio.length > 1 ? ` (${i + 1} of ${audio.length})` : ""}…`);
+    sayBusy(`Adding ${file.name}${audio.length > 1 ? ` (${i + 1} of ${audio.length})` : ""}…`, audio.length > 1 ? i / audio.length : null);
     try {
       const res = await fetch("/api/recordings", { method: "POST", body: file, headers: {
         "Content-Type": "application/octet-stream", "X-Name": encodeURIComponent(file.name), "X-Modified": String(file.lastModified || 0) } });

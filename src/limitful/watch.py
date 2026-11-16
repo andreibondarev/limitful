@@ -40,6 +40,8 @@ async def run_cycle(
     summarizer: Summarizer | None = None,
     scan_timeout: float = 5.0,
     on_stage: Callable[[str], None] = lambda stage: None,
+    on_audio: Callable[[int, int], None] | None = None,
+    on_indexing: Callable[[int, int], None] | None = None,
 ) -> CycleResult:
     """One pass: find the pendant, download, export audio, transcribe."""
     pendants = await client.scan(scan_timeout)
@@ -55,7 +57,8 @@ async def run_cycle(
         on_stage("Transcribing")
         # Whisper is CPU-heavy and blocking; keep the event loop free.
         try:
-            lines, _files = await asyncio.to_thread(store.transcribe_pending, get_transcriber())
+            lines, _files = await asyncio.to_thread(
+                store.transcribe_pending, get_transcriber(), None, on_audio, on_indexing)
         except HostedError as err:
             # The audio is safe on disk; transcription is retried next cycle.
             return CycleResult(True, result.pages_new, len(segments), 0,

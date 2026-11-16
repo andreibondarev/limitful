@@ -245,7 +245,7 @@ class Index:
         return [(int(ids[i]), float(scores[i])) for i in top if scores[i] > -2.0]
 
 
-def update_if_built(store: "Store") -> int:
+def update_if_built(store: "Store", on_progress: Callable[[int, int], None] | None = None) -> int:
     """Add new lines to the index, but only if the user has built one.
 
     Called after transcription, so an index stays complete once it exists and
@@ -257,7 +257,7 @@ def update_if_built(store: "Store") -> int:
     if not index.exists():
         return 0
     try:
-        return index.build(store, make_embedder())
+        return index.build(store, make_embedder(), on_progress=on_progress)
     except Exception:
         return 0
 

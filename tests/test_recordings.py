@@ -160,3 +160,29 @@ def test_remove_a_recording(tmp_path):
         assert again.new is True
     finally:
         store.close()
+
+
+def test_transcribing_reports_how_far_through_the_audio_it_is(tmp_path):
+    from limitful.transcribe import Utterance
+
+    class Follows:
+        name = "fake"
+        reports_progress = True
+
+        def transcribe(self, audio_path, on_heard=None):
+            for second in (1, 2, 99):  # the last is past the end, as a model can report
+                on_heard(second)
+            return [Utterance(0, 900, "hello")]
+
+    store = Store(tmp_path / "data")
+    try:
+        for name in ("20261114 093012.m4a", "20261114 101500.m4a"):
+            add_recording(store, _spoken_file(tmp_path, name, seconds=3 if "0930" in name else 4), name, now_ms=NOW)
+        heard = []
+        store.transcribe_pending(Follows(), on_audio=lambda ms, of: heard.append((ms, of)))
+        total = heard[0][1]
+        assert 6800 <= total <= 7200 and all(of == total for _ms, of in heard)
+        assert [ms for ms, _of in heard] == sorted(ms for ms, _of in heard)  # never goes backwards
+        assert heard[0][0] == 1000 and heard[-1][0] == total
+    finally:
+        store.close()

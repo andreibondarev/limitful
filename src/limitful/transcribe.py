@@ -43,7 +43,10 @@ class WhisperTranscriber:
         self._language = language
         self._model = WhisperModel(model, device=device, compute_type="auto")
 
-    def transcribe(self, audio_path: Path) -> list[Utterance]:
+    reports_progress = True  # `transcribe` can say how far into the audio it has got
+
+    def transcribe(self, audio_path: Path, on_heard=None) -> list[Utterance]:
+        """`on_heard(seconds)` is called as the work moves through the recording."""
         segments, _info = self._model.transcribe(
             str(audio_path),
             language=self._language,
@@ -52,6 +55,8 @@ class WhisperTranscriber:
         )
         utterances = []
         for seg in segments:
+            if on_heard:
+                on_heard(seg.end)
             text = seg.text.strip()
             if text and seg.avg_logprob >= MIN_AVG_LOGPROB:
                 utterances.append(Utterance(int(seg.start * 1000), int(seg.end * 1000), text))

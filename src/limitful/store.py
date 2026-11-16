@@ -458,18 +458,36 @@ class Store:
         self,
         transcriber: Transcriber,
         on_progress: Callable[[int, int], None] | None = None,
+        on_audio: Callable[[int, int], None] | None = None,
+        on_indexing: Callable[[int, int], None] | None = None,
     ) -> tuple[int, list[Path]]:
-        """Transcribe new audio files. Returns (utterances added, transcript files written)."""
+        """Transcribe new audio files. Returns (utterances added, transcript files written).
+
+        `on_progress(n, of)` counts recordings; `on_audio(ms, of_ms)` follows the work
+        through the audio itself, for a transcriber that can say; `on_indexing(n, of)`
+        counts lines added to search by meaning afterwards.
+        """
         if hasattr(transcriber, "transcribe_session"):
             # A hosted service with speaker labels works a conversation at a time.
-            return self.transcribe_sessions(transcriber, on_progress)
+            return self.transcribe_sessions(transcriber, on_progress, on_indexing=on_indexing)
         pending = self.pending_transcription()
         added = 0
         days: set[str] = set()
+        all_ms = sum(duration for _path, _start, duration in pending) or 1
+        heard_ms = 0
+        follows = on_audio is not None and getattr(transcriber, "reports_progress", False)
         for n, (path, start_ms, duration_ms) in enumerate(pending, 1):
             utterances = []
-            if duration_ms >= MIN_TRANSCRIBE_MS:
+            if duration_ms >= MIN_TRANSCRIBE_MS and follows:
+                utterances = transcriber.transcribe(
+                    self.data_dir / path,
+                    on_heard=lambda s, base=heard_ms, length=duration_ms:
+                        on_audio(base + min(int(s * 1000), length), all_ms))
+            elif duration_ms >= MIN_TRANSCRIBE_MS:
                 utterances = transcriber.transcribe(self.data_dir / path)
+            heard_ms += duration_ms
+            if on_audio:
+                on_audio(heard_ms, all_ms)
             # Replace rather than append, so an interrupted run cannot duplicate text.
             self.db.execute("DELETE FROM utterances WHERE segment = ?", (path,))
             self.db.executemany(
@@ -489,7 +507,7 @@ class Store:
         if added:
             from . import search
 
-            search.update_if_built(self)  # keeps search by meaning complete, if it is in use
+            search.update_if_built(self, on_indexing)  # keeps search by meaning complete, if it is in use
         return added, [self.write_transcript(day) for day in sorted(days)]
 
     # --- hosted transcription, a conversation at a time -----------------------------
@@ -561,6 +579,7 @@ class Store:
         service,
         on_progress: Callable[[int, int], None] | None = None,
         now_ms: int | None = None,
+        on_indexing: Callable[[int, int], None] | None = None,
     ) -> tuple[int, list[Path]]:
         """Send each waiting conversation to a hosted service and store its lines.
 
@@ -604,7 +623,7 @@ class Store:
         if added:
             from . import search
 
-            search.update_if_built(self)  # keeps search by meaning complete, if it is in use
+            search.update_if_built(self, on_indexing)  # keeps search by meaning complete, if it is in use
         return added, [self.write_transcript(day) for day in sorted(days)]
 
     def write_transcript(self, day: str) -> Path:

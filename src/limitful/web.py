@@ -110,7 +110,9 @@ class Library:
         self._link_speakers = link_speakers
         self._lock = threading.Lock()
         # What the server is busy with, shown in the Lifelog.
-        self.job = {"running": False, "what": "", "done": 0, "total": 0, "error": None, "note": None}
+        # `percent` is set while a step can say how far through it is; otherwise done of total, or neither.
+        self.job = {"running": False, "what": "", "done": 0, "total": 0, "error": None, "note": None,
+                    "percent": None}
         # One Bluetooth conversation with the pendant at a time.
         self._radio = threading.Lock()
         self._pendant: dict = {"checked": None, "error": None}
@@ -195,13 +197,24 @@ class Library:
     def _transcribe_waiting(self, store) -> tuple[int, int]:
         """Transcribe what is waiting, then summarise if a model is chosen. Returns (recordings, lines)."""
         waiting = len(store.pending_transcription())
-        self.job.update(what="Transcribing", done=0, total=0)
-        lines, _files = store.transcribe_pending(
-            self._transcriber(), lambda done, total: self.job.update(done=done, total=total))
-        provider = config.provider()
-        if provider:
-            self.job.update(what="Summarising conversations", done=0, total=0)
-            store.digest_pending(digest_mod.make_summarizer(provider, None, config.api_key()))
+        self.job.update(what="Transcribing", done=0, total=0, percent=None)
+        transcriber = self._transcriber()
+        self.job.update(done=0, total=waiting)
+        try:
+            lines, _files = store.transcribe_pending(
+                transcriber,
+                lambda done, total: self.job.update(done=done, total=total),
+                on_audio=lambda ms, of: self.job.update(percent=min(99, ms * 100 // of)),
+                on_indexing=lambda done, total: self.job.update(
+                    what="Adding the new lines to search", done=done, total=total, percent=None))
+            provider = config.provider()
+            if provider:
+                self.job.update(what="Summarising conversations", done=0, total=0, percent=None)
+                store.digest_pending(
+                    digest_mod.make_summarizer(provider, None, config.api_key()),
+                    lambda done, total: self.job.update(done=done, total=total))
+        finally:
+            self.job.update(percent=None)
         return waiting, lines
 
     def _transcribe_job(self) -> None:
@@ -532,6 +545,7 @@ class Library:
                 if not self.job["error"]:
                     self.job["error"] = f"Voice Memos stopped: {err}"
             else:
+                self.job.update(percent=None)
                 if memos and not self.job["error"]:
                     self.job["note"] = f"{self.job['note']} {memos}" if self.job["note"] else memos
                 elif memos_only and not memos:
@@ -556,7 +570,10 @@ class Library:
                         store, ack=True,
                         get_transcriber=self._transcriber,
                         get_embedder=None, summarizer=summarizer,  # voice labels are opt-in: see docs/experiments.md
-                        on_stage=lambda stage: self.job.update(what=stage)))
+                        on_stage=lambda stage: self.job.update(what=stage, done=0, total=0, percent=None),
+                        on_audio=lambda ms, of: self.job.update(percent=min(99, ms * 100 // of)),
+                        on_indexing=lambda done, total: self.job.update(
+                            what="Adding the new lines to search", done=done, total=total, percent=None)))
                 finally:
                     store.close()
             finally:
