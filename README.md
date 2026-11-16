@@ -12,7 +12,7 @@ Limitless ends its service on December 1, 2026 and deletes the data it holds.
 This project keeps the hardware working after that, and keeps the history you
 export before then usable.
 
-https://github.com/user-attachments/assets/74849ccd-a92d-451a-9275-ca2112dce1fd
+https://github.com/user-attachments/assets/b761b118-aa2e-4a0e-b604-573f97a8c76a
 
 <p align="center">A 79-second tour (with captions and music; the conversations in it are made up). <a href="assets/promo/limitful-promo.mp4">Download the video</a>.</p>
 
