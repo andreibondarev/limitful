@@ -151,8 +151,36 @@ by Deepgram if you chose it. Adding the same file twice adds nothing.
 A recording is filed at the moment it began. That is read from a date and time
 in the file's name (`20261114 093012.m4a`), then from the date written inside
 the file, then from when the file was last changed. A file that has been
-edited or copied by another app can carry the wrong date, and there is no way
-to correct it in the app yet.
+edited or copied by another app can carry the wrong date. Settings, Import
+lists every recording you added: **Change time** moves one, with its lines and
+summary, and **Remove** deletes its audio and lines from Limitful (never the
+original).
+
+### Voice Memos on a Mac
+
+On a Mac signed in to the same Apple account as your iPhone, the Voice Memos
+app keeps a copy of every memo. Limitful can read that copy, so a memo
+recorded on the phone appears in the Lifelog at the next sync, with its title
+and exact time. Turn it on in Settings, Import, **Bring in Voice Memos**, or
+run it once with:
+
+```sh
+uv run limitful voice-memos --since 2026-11-01
+uv run limitful transcribe
+```
+
+- Only memos recorded after you turn it on are brought in, unless you choose
+  to bring in older ones too.
+- Nothing is fetched from Apple, and the Voice Memos library is only read.
+  Memos in Recently Deleted are skipped, and one you remove in Limitful does
+  not come back.
+- macOS guards that folder. Limitful needs **Full Disk Access**: System
+  Settings, Privacy & Security, Full Disk Access, then add the program that
+  Settings names (the Python that runs Limitful) and reopen Limitful. That
+  lets the program read any file you can, so it is your call.
+- Voice Memos must be turned on under System Settings, your name, iCloud, on
+  both devices. Apple does not document this folder and has moved it before;
+  if a macOS update breaks it, dropping files still works.
 
 Lines in a Limitless transcript usually sit about a second away from where
 they are heard. `uv run limitful retime` listens to the imported audio with Whisper

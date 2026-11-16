@@ -88,3 +88,75 @@ def test_a_hosted_service_is_sent_the_added_file_itself(tmp_path):
                         ("for Tuesday", added.start_ms + 1800, "2", added.path)]
     finally:
         store.close()
+
+
+# --- removing, re-timing, and conversations for recordings older than the newest one ---
+
+def _added_and_transcribed(tmp_path, name="20261114 093012.m4a"):
+    from test_web import Words
+
+    store = Store(tmp_path / "data")
+    added = add_recording(store, _spoken_file(tmp_path, name), name, now_ms=NOW)
+    store.transcribe_pending(Words())
+    return store, added
+
+
+def test_an_older_recording_still_becomes_a_conversation(tmp_path):
+    store, added = _added_and_transcribed(tmp_path)
+    try:
+        # Something newer is already a conversation, as after any sync.
+        store.db.execute("INSERT INTO conversations (start_ms, end_ms, status) VALUES (?, ?, 'done')",
+                         (NOW - 3_600_000, NOW - 3_000_000))
+        assert store.build_conversations(NOW) == 1
+        row = store.db.execute("SELECT start_ms, end_ms, status FROM conversations ORDER BY start_ms").fetchone()
+        assert row == (added.start_ms, added.start_ms + 1900, "pending")
+        assert store.build_conversations(NOW) == 0  # and only once
+    finally:
+        store.close()
+
+
+def test_move_a_recording_to_when_it_really_began(tmp_path):
+    from limitful.recordings import added_recordings, move_recording
+
+    store, added = _added_and_transcribed(tmp_path)
+    try:
+        store.build_conversations(NOW)
+        store.db.execute("UPDATE conversations SET status = 'done', title = 'Shopping'")
+        store.db.commit()
+        target = int(datetime(2026, 11, 12, 18, 0, 5).timestamp() * 1000)
+        moved = move_recording(store, added.path, target)
+        assert moved.startswith("audio/2026-11-12/added_18-00-05_") and (store.data_dir / moved).is_file()
+        assert not (store.data_dir / added.path).exists()
+        assert store.db.execute("SELECT segment, start_ms FROM utterances ORDER BY start_ms").fetchall() == [
+            (moved, target), (moved, target + 1200)]
+        # The conversation made from it moves too and keeps its title.
+        assert store.db.execute("SELECT start_ms, title, status FROM conversations").fetchall() == [
+            (target, "Shopping", "done")]
+        assert [r["path"] for r in added_recordings(store)] == [moved]
+        assert store.pending_transcription() == []
+        assert "buy 100% oat_milk" in (store.data_dir / "transcripts" / "2026-11-12.md").read_text()
+        assert "oat_milk" not in (store.data_dir / "transcripts" / "2026-11-14.md").read_text()
+        with pytest.raises(ValueError):
+            move_recording(store, moved, NOW * 2)
+        with pytest.raises(ValueError):
+            move_recording(store, "audio/2026-11-12/not-added.ogg", target)
+    finally:
+        store.close()
+
+
+def test_remove_a_recording(tmp_path):
+    from limitful.recordings import added_recordings, remove_recording
+
+    store, added = _added_and_transcribed(tmp_path)
+    try:
+        store.build_conversations(NOW)
+        remove_recording(store, added.path)
+        assert added_recordings(store) == []
+        assert not (store.data_dir / added.path).exists()
+        for table in ("utterances", "segments", "transcriptions", "conversations", "added"):
+            assert store.db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0, table
+        # A file that was removed can be added again.
+        again = add_recording(store, tmp_path / "20261114 093012.m4a", "20261114 093012.m4a", now_ms=NOW)
+        assert again.new is True
+    finally:
+        store.close()

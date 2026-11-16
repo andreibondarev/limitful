@@ -47,10 +47,18 @@ _updating = threading.Lock()
 
 
 def update(provider: Any = _KEEP, api_key: Any = _KEEP, led_brightness: Any = _KEEP,
-           transcriber: Any = _KEEP, deepgram_api_key: Any = _KEEP) -> dict:
+           transcriber: Any = _KEEP, deepgram_api_key: Any = _KEEP,
+           voice_memos: Any = _KEEP, voice_memos_since: Any = _KEEP) -> dict:
     """Change the given settings and return the result. `None` clears a setting."""
     with _updating:  # two requests saving at once must not undo each other
-        return _update(provider, api_key, led_brightness, transcriber, deepgram_api_key)
+        settings = _update(provider, api_key, led_brightness, transcriber, deepgram_api_key)
+        if voice_memos is not _KEEP or voice_memos_since is not _KEEP:
+            if voice_memos is not _KEEP:
+                settings["voice_memos"] = bool(voice_memos)
+            if voice_memos_since is not _KEEP:
+                settings["voice_memos_since"] = int(voice_memos_since or 0)
+            save(settings)
+        return settings
 
 
 def _update(provider: Any, api_key: Any, led_brightness: Any, transcriber: Any, deepgram_api_key: Any) -> dict:
@@ -95,6 +103,13 @@ def transcriber() -> str:
     """What turns audio into text: local Whisper unless the user chose a hosted service."""
     chosen = os.environ.get("LIMITFUL_TRANSCRIBER") or load().get("transcriber")
     return chosen if chosen in TRANSCRIBERS else "local"
+
+
+def voice_memos() -> tuple[bool, int]:
+    """Whether Voice Memos on this Mac are brought in, and from what moment on (ms)."""
+    settings = load()
+    since = settings.get("voice_memos_since")
+    return bool(settings.get("voice_memos")), since if isinstance(since, int) else 0
 
 
 def deepgram_api_key() -> str | None:

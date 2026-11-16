@@ -728,6 +728,22 @@
     border: 2px dashed var(--accent); border-radius: 18px; color: var(--ink);
   }
   #drop[hidden] { display: none; }
+  /* Settings, Import: Voice Memos on this Mac, and the recordings that were added. */
+  .added { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+  .added li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.2rem 1rem; align-items: center; padding: 0.7rem 0; border-top: 1px solid var(--rule); }
+  .added b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .added small { grid-column: 1; color: var(--muted); }
+  .added a { color: inherit; }
+  .added a:hover { color: var(--accent); }
+  .added .acts { grid-column: 2; grid-row: 1 / span 2; }
+  .added .when { grid-column: 1 / -1; }
+  .added .when[hidden] { display: none; }
+  .added small.when:empty { display: none; }
+  .added small.when { color: var(--bad); }
+  .setup .panel h2 { margin-top: 2.4rem; }
+  .setup .panel > p:not(.note) { margin: 0 0 1rem; color: var(--muted); line-height: 1.5; }
+  .added input[type="datetime-local"] { font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 8px; padding: 0.3rem 0.5rem; }
+  .setup code.path { display: block; margin: 0.5rem 0; padding: 0.5rem 0.7rem; border: 1px solid var(--rule); border-radius: 8px; font-size: 0.82rem; overflow-wrap: anywhere; user-select: all; color: var(--ink); }
   #drop b { font-family: var(--voice, inherit); font-weight: 400; font-size: clamp(1.4rem, 3vw, 2rem); }
   #drop span { font-family: var(--chrome); color: var(--muted); }
 </style>
@@ -1290,6 +1306,85 @@ async function showWelcome(step = "start", fromSettings = false) {
     },
   };
   (steps[step] || steps.start)();
+}
+
+/* Settings, Import: bringing in Voice Memos from this Mac, and the list of recordings that
+   were added, each of which can be given the right time or removed. Fills itself in once loaded. */
+function recordingsPanel() {
+  const node = el("div", { className: "panel" });
+  const stamp = (ms) => { const d = new Date(ms), p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+  const long = (ms) => ms < 60000 ? `${Math.max(1, Math.round(ms / 1000))} s` : ms < 3600000 ? `${Math.round(ms / 60000)} min` : `${Math.floor(ms / 3600000)} h ${Math.round(ms % 3600000 / 60000)} min`;
+  const act = async (url, body, problem) => {
+    try { draw(await post(url, body)); return true; } catch (err) { problem.textContent = sentence(err.message); problem.classList.add("failed"); return false; }
+  };
+  const twice = (label, sure, run) => {  // a button that asks once more before doing something that cannot be undone
+    const b = el("button", { className: "pill danger busy-off", textContent: label });
+    b.addEventListener("click", () => { if (b.dataset.sure) run(b); else { b.dataset.sure = "1"; b.textContent = sure; } });
+    b.addEventListener("blur", () => { delete b.dataset.sure; b.textContent = label; });
+    return b;
+  };
+  function draw(r) {
+    const vm = r.voice_memos, parts = [];
+    if (vm.state !== "unsupported") {
+      const problem = el("p", { className: "note" });
+      const box = el("input", { type: "checkbox", checked: vm.enabled });
+      const about = vm.enabled && vm.since
+        ? `Memos recorded since ${shortDay.format(new Date(vm.since))}, ${clock.format(new Date(vm.since))} are added at each sync, filed at the time they were recorded, and transcribed.`
+        : vm.enabled ? "Every memo is added at each sync, filed at the time it was recorded, and transcribed."
+        : "Memos you record from now on are added at each sync, filed at the time they were recorded, and transcribed like the pendant's audio.";
+      box.addEventListener("change", () => act("/api/voicememos", { enabled: box.checked }, problem));
+      parts.push(el("h2", {}, ...withIcon("import", "Voice Memos on this Mac", 22)),
+        el("p", { textContent: "Reads the Voice Memos this Mac keeps in step with your iPhone through iCloud. Nothing is fetched from Apple, and the Voice Memos library is never changed." }),
+        el("label", { className: "switch" }, box, el("span", {}, el("b", { textContent: "Bring in Voice Memos" }), el("small", { textContent: about }))));
+      if (vm.state === "denied") {
+        parts.push(el("p", { className: "note failed", textContent: "macOS is not letting Limitful read your Voice Memos yet." }),
+          el("p", { className: "note", textContent: "Open System Settings, Privacy & Security, Full Disk Access. Press +, then ⇧⌘G, paste the path below and switch it on. Then quit and reopen Limitful. This lets that program read any file you can, so only do it if you are comfortable with that." }),
+          el("code", { className: "path", textContent: vm.program }));
+      } else if (vm.state === "missing") {
+        parts.push(el("p", { className: "note", textContent: "No Voice Memos library was found on this Mac. Open the Voice Memos app once, and turn on Voice Memos under System Settings, your name, iCloud." }));
+      } else {
+        const row = el("div", { className: "row", style: "margin-top: 0.8rem" });
+        const check = el("button", { className: "pill busy-off" }, ...withIcon("refresh", "Check now", 16));
+        check.addEventListener("click", async () => { try { await post("/api/voicememos/sync", {}); watchJob(); } catch (err) { problem.textContent = sentence(err.message); } });
+        if (vm.enabled) row.append(check);
+        if (vm.memos && !(vm.enabled && !vm.since)) {
+          row.append(twice(`Bring in all ${count(vm.memos, "memo")}, older ones too`, `Add and transcribe all ${vm.memos}? Click again`, async () => {
+            if (await act("/api/voicememos", { enabled: true, older: true }, problem)) { try { await post("/api/voicememos/sync", {}); watchJob(); } catch { /* the next sync does it */ } }
+          }));
+        }
+        parts.push(el("p", { className: "note", textContent: `${count(vm.memos, "memo")} in the library.` }), row);
+      }
+      parts.push(problem);
+    }
+    if (r.recordings.length) {
+      const list = el("ul", { className: "added" });
+      for (const rec of r.recordings) {
+        const problem = el("small", { className: "when" });
+        const when = el("input", { type: "datetime-local", step: 1, value: stamp(rec.start_ms), ariaLabel: "When it began" });
+        const save = el("button", { className: "pill busy-off", textContent: "Save" });
+        const editor = el("div", { className: "row when", hidden: true }, when, save);
+        save.addEventListener("click", () => {
+          const at = new Date(when.value).getTime();
+          if (Number.isNaN(at)) { problem.textContent = "Choose a date and time."; return; }
+          act("/api/recordings/move", { path: rec.path, start_ms: at }, problem);
+        });
+        const change = el("button", { className: "pill busy-off", textContent: "Change time" });
+        change.addEventListener("click", () => { editor.hidden = !editor.hidden; if (!editor.hidden) when.focus(); });
+        const open = el("a", { href: "#", textContent: `${shortDay.format(new Date(rec.start_ms))}, ${clock.format(new Date(rec.start_ms))}` });
+        open.addEventListener("click", (e) => { e.preventDefault(); const d = new Date(rec.start_ms), p = (n) => String(n).padStart(2, "0"); openDay(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`); });
+        list.append(el("li", {},
+          el("b", { textContent: rec.name, title: rec.name }),
+          el("small", {}, open, ` · ${long(rec.duration_ms)} · ${rec.transcribed ? count(rec.lines, "line") : "waiting to be transcribed"}${rec.source === "voicememos" ? " · Voice Memos" : ""}`),
+          el("div", { className: "row acts" }, change, twice("Remove", "Remove for good? Click again", () => act("/api/recordings/remove", { path: rec.path }, problem))),
+          editor, problem));
+      }
+      parts.push(el("h2", {}, ...withIcon("import", "Recordings you added", 22)),
+        el("p", { textContent: "Removing one deletes its audio and its lines here. It does not touch the original file or your Voice Memos." }), list);
+    }
+    node.replaceChildren(...parts);
+  }
+  get("/api/recordings").then(draw).catch(() => {});
+  return node;
 }
 
 /* A switch for starting at login and syncing without a terminal. Fills itself in once loaded. */
@@ -2812,6 +2907,7 @@ async function showSettings() {
     el("h2", {}, ...withIcon("import", "Add recordings", 22)),
     el("p", { textContent: "Bring in audio recorded elsewhere, such as Voice Memos from your phone: .m4a, .mp3, .wav and most other kinds. Each is filed at the time it was recorded and transcribed like the pendant's audio. You can also drop files anywhere on this page." }),
     el("div", { className: "row" }, addAudio),
+    recordingsPanel(),
     el("h2", {}, ...withIcon("clock", "Timing of imported lines", 22)),
     el("p", { textContent: `Limitless's timestamps run about a second late, so imported lines trail their audio. This listens to each recording and moves every line to where its words are said, keeping Limitless's text. ${retimeState}` }),
     retiming),

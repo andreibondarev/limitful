@@ -118,6 +118,12 @@ CREATE TABLE IF NOT EXISTS day_recaps (
     signature TEXT NOT NULL,               -- of the conversations it was written from
     made_ms   INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS added (
+    path   TEXT PRIMARY KEY,           -- segments.path of a recording made elsewhere
+    name   TEXT NOT NULL,              -- its file name, or the title it had in Voice Memos
+    source TEXT NOT NULL,              -- file or voicememos
+    key    TEXT NOT NULL               -- imports.key: what stops it being added twice
+);
 CREATE TABLE IF NOT EXISTS reminders (
     id              INTEGER PRIMARY KEY,
     conversation_id INTEGER NOT NULL,
@@ -959,6 +965,19 @@ class Store:
                 groups.append([start, end])
         if groups and now_ms - groups[-1][1] <= CONVERSATION_GAP_MS:
             groups.pop()  # may still be going on
+        # A recording added from a file can be older than everything above: last
+        # week's Voice Memo. Its lines become conversations too, wherever they fall.
+        late: list[list[int]] = []
+        for start, end in self.db.execute(
+                "SELECT u.start_ms, u.end_ms FROM utterances u WHERE u.start_ms <= ? "
+                "AND u.segment IN (SELECT path FROM segments WHERE first_page < 0 AND path LIKE 'audio/%/added_%') "
+                "AND NOT EXISTS (SELECT 1 FROM conversations c WHERE u.start_ms BETWEEN c.start_ms AND c.end_ms) "
+                "ORDER BY u.start_ms, u.id", (after,)):
+            if late and start - late[-1][1] <= CONVERSATION_GAP_MS:
+                late[-1][1] = max(late[-1][1], end)
+            else:
+                late.append([start, end])
+        groups += late
         self.db.executemany(
             "INSERT INTO conversations (start_ms, end_ms, status) VALUES (?, ?, 'pending')", groups)
         self.db.commit()

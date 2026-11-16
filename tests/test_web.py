@@ -750,3 +750,56 @@ def test_add_a_recording_rejects_bad_uploads(site):
     assert site("/api/recordings", {"Content-Type": "audio/mp4"}, b"x")[0] == 415
     assert site("/api/recordings", dict(named, Host="evil.example"), b"x")[0] == 403
     assert site("/api/import", AUDIO, b"x")[0] == 415
+
+
+def test_voice_memos_through_the_page(site, tmp_path, monkeypatch):
+    from limitful import web
+    from test_voicememos import MEMOS, library
+
+    folder = library(tmp_path, MEMOS)
+    monkeypatch.setenv("LIMITFUL_VOICE_MEMOS", str(folder))
+    monkeypatch.setattr(web.Library, "_transcriber", lambda self: Words())
+
+    got = json.loads(site("/api/recordings")[2])
+    assert got["recordings"] == [] and got["voice_memos"]["state"] == "ok"
+    assert (got["voice_memos"]["memos"], got["voice_memos"]["enabled"]) == (2, False)
+
+    def finished():
+        for _ in range(300):
+            job = json.loads(site("/api/status")[2])
+            if not job["running"]:
+                return job
+            time.sleep(0.02)
+        raise AssertionError("still running")
+
+    # Off: a check adds nothing.
+    assert site("/api/voicememos/sync", JSON, b"{}")[0] == 200
+    assert finished()["note"] == "No new Voice Memos."
+
+    # On: only memos recorded from now on, so still nothing.
+    on = json.loads(site("/api/voicememos", JSON, b'{"enabled": true}')[2])["voice_memos"]
+    assert on["enabled"] and on["since"] > 0
+    site("/api/voicememos/sync", JSON, b"{}")
+    assert finished()["note"] == "No new Voice Memos."
+
+    # Older ones too: both arrive and are transcribed.
+    assert json.loads(site("/api/voicememos", JSON, b'{"enabled": true, "older": true}')[2])["voice_memos"]["since"] == 0
+    site("/api/voicememos/sync", JSON, b"{}")
+    job = finished()
+    assert job["error"] is None and job["note"] == "Added 2 Voice Memos: 4 lines of speech."
+    listed = json.loads(site("/api/recordings")[2])["recordings"]
+    assert [(r["name"], r["lines"], r["transcribed"]) for r in listed] == [
+        ("Dr. Ruiz, follow-up", 2, True), ("Idea for the newsletter", 2, True)]
+
+    # Give one the right time, then remove it.
+    target = int(datetime(2026, 11, 13, 7, 0, 0).timestamp() * 1000)
+    body = json.dumps({"path": listed[0]["path"], "start_ms": target}).encode()
+    moved = json.loads(site("/api/recordings/move", JSON, body)[2])["recordings"]
+    assert sorted(r["start_ms"] for r in moved)[1] == target
+    path = next(r["path"] for r in moved if r["start_ms"] == target)
+    left = json.loads(site("/api/recordings/remove", JSON, json.dumps({"path": path}).encode())[2])["recordings"]
+    assert [r["name"] for r in left] == ["Idea for the newsletter"]
+
+    assert site("/api/recordings/remove", JSON, b'{"path": "audio/2026-11-08/nope.ogg"}')[0] == 400
+    assert site("/api/recordings/move", JSON, json.dumps({"path": left[0]["path"], "start_ms": "soon"}).encode())[0] == 400
+    assert site("/api/voicememos", dict(JSON, Host="evil.example"), b'{"enabled": true}')[0] == 403

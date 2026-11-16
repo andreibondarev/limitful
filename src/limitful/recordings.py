@@ -117,21 +117,34 @@ def to_ogg(source: Path, target: Path) -> tuple[int, str | None]:
 
 
 def add_recording(store: Store, source: Path, name: str, modified_ms: int | None = None,
-                  now_ms: int | None = None) -> Added:
-    """File one recording in the data folder, ready to be transcribed. Adding the same file twice does nothing."""
+                  now_ms: int | None = None, start_ms: int | None = None, origin: str = "file",
+                  also_key: str | None = None, title: str | None = None) -> Added:
+    """File one recording in the data folder, ready to be transcribed. Adding the same file twice does nothing.
+
+    `start_ms` is for a caller that knows when it began; `also_key` is a second
+    name the recording is remembered by (the id Voice Memos gives it).
+    """
     digest = hashlib.sha256()
     with open(source, "rb") as handle:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             digest.update(chunk)
     key = f"recording:{digest.hexdigest()}"
-    if store.db.execute("SELECT 1 FROM imports WHERE key = ?", (key,)).fetchone():
+    known = [key] + ([also_key] if also_key else [])
+    if store.db.execute(
+            f"SELECT 1 FROM imports WHERE key IN ({','.join('?' * len(known))})", known).fetchone():
+        for each in known:  # seen under one name: remember the other too
+            store.db.execute("INSERT OR IGNORE INTO imports VALUES (?)", (each,))
+        store.db.commit()
         return Added("", 0, 0, False, "")
 
     audio = store.data_dir / "audio"
     audio.mkdir(parents=True, exist_ok=True)
     scratch = audio / f".adding-{digest.hexdigest()[:12]}.ogg"
     duration_ms, created = to_ogg(source, scratch)
-    start_ms, dated_by = recorded_at(name, created, modified_ms, duration_ms, now_ms)
+    if start_ms is not None:
+        dated_by = "given"
+    else:
+        start_ms, dated_by = recorded_at(name, created, modified_ms, duration_ms, now_ms)
     local = datetime.fromtimestamp(start_ms / 1000)
     # A name we chose: nothing from the upload's own name reaches the disk.
     rel = Path("audio") / local.strftime("%Y-%m-%d") / f"added_{local.strftime('%H-%M-%S')}_{digest.hexdigest()[:8]}.ogg"
@@ -141,6 +154,109 @@ def add_recording(store: Store, source: Path, name: str, modified_ms: int | None
     store.db.execute(
         "INSERT OR REPLACE INTO segments (path, start_ms, duration_ms, first_page, last_page) "
         "VALUES (?, ?, ?, -1, -1)", (str(rel), start_ms, duration_ms))
-    store.db.execute("INSERT INTO imports VALUES (?)", (key,))
+    for each in known:
+        store.db.execute("INSERT OR IGNORE INTO imports VALUES (?)", (each,))
+    store.db.execute("INSERT OR REPLACE INTO added (path, name, source, key) VALUES (?, ?, ?, ?)",
+                     (str(rel), (title or Path(name).stem)[:200] or "Recording", origin, also_key or key))
     store.db.commit()
     return Added(str(rel), start_ms, duration_ms, True, dated_by)
+
+
+def _is_added(store: Store, path: str) -> tuple[int, int]:
+    row = store.db.execute(
+        "SELECT start_ms, duration_ms FROM segments WHERE path = ? AND first_page < 0 "
+        "AND path LIKE 'audio/%/added_%'", (path,)).fetchone()
+    if not row:
+        raise ValueError("that is not a recording that was added")
+    return row
+
+
+def added_recordings(store: Store) -> list[dict]:
+    """Every recording added from a file or from Voice Memos, newest first."""
+    rows = store.db.execute(
+        "SELECT s.path, s.start_ms, s.duration_ms, a.name, a.source, "
+        "(SELECT COUNT(*) FROM utterances u WHERE u.segment = s.path), "
+        "EXISTS (SELECT 1 FROM transcriptions t WHERE t.segment = s.path) "
+        "FROM segments s LEFT JOIN added a ON a.path = s.path "
+        "WHERE s.first_page < 0 AND s.path LIKE 'audio/%/added_%' ORDER BY s.start_ms DESC").fetchall()
+    return [{"path": path, "start_ms": start, "duration_ms": duration, "name": name or "Recording",
+             "source": source or "file", "lines": lines, "transcribed": bool(done)}
+            for path, start, duration, name, source, lines, done in rows]
+
+
+def _own_conversations(store: Store, path: str) -> list[int]:
+    """Conversations made only of this recording's lines."""
+    return [row[0] for row in store.db.execute(
+        "SELECT c.id FROM conversations c WHERE "
+        "EXISTS (SELECT 1 FROM utterances u WHERE u.segment = ? AND u.start_ms BETWEEN c.start_ms AND c.end_ms) "
+        "AND NOT EXISTS (SELECT 1 FROM utterances u WHERE u.segment != ? "
+        "AND u.start_ms BETWEEN c.start_ms AND c.end_ms)", (path, path))]
+
+
+def _day(ms: int) -> str:
+    return datetime.fromtimestamp(ms / 1000).strftime("%Y-%m-%d")
+
+
+def remove_recording(store: Store, path: str) -> None:
+    """Delete an added recording: its audio, its lines and the conversations made from it alone.
+
+    One from Voice Memos stays remembered, so the next sync does not bring it
+    back. One added from a file is forgotten, so the file can be added again.
+    """
+    start_ms, _duration = _is_added(store, path)
+    days = {_day(start_ms)} | {_day(row[0]) for row in store.db.execute(
+        "SELECT start_ms FROM utterances WHERE segment = ?", (path,))}
+    for conversation in _own_conversations(store, path):
+        store.db.execute("DELETE FROM reminders WHERE conversation_id = ?", (conversation,))
+        store.db.execute("DELETE FROM sections WHERE conversation_id = ?", (conversation,))
+        store.db.execute("DELETE FROM conversations WHERE id = ?", (conversation,))
+    store.db.execute(
+        "UPDATE reminders SET utterance_id = NULL WHERE utterance_id IN "
+        "(SELECT id FROM utterances WHERE segment = ?)", (path,))
+    store.db.execute("DELETE FROM utterances WHERE segment = ?", (path,))
+    store.db.execute("DELETE FROM transcriptions WHERE segment = ?", (path,))
+    store.db.execute("DELETE FROM segments WHERE path = ?", (path,))
+    store.db.execute("DELETE FROM imports WHERE key IN "
+                     "(SELECT key FROM added WHERE path = ? AND source = 'file')", (path,))
+    store.db.execute("DELETE FROM added WHERE path = ?", (path,))
+    store.db.commit()
+    (store.data_dir / path).unlink(missing_ok=True)
+    for day in sorted(days):
+        store.write_transcript(day)
+    from . import search
+
+    search.update_if_built(store)  # drops the removed lines from search by meaning
+
+
+def move_recording(store: Store, path: str, start_ms: int) -> str:
+    """Say when an added recording really began. Its lines, and the conversations made
+    from it alone, move with it and keep their titles and summaries. Returns its new path."""
+    old_start, _duration = _is_added(store, path)
+    if not _EARLIEST_MS <= start_ms <= int(time.time() * 1000):
+        raise ValueError("that time is in the future, or too long ago")
+    shift = start_ms - old_start
+    if not shift:
+        return path
+    local = datetime.fromtimestamp(start_ms / 1000)
+    rel = str(Path("audio") / local.strftime("%Y-%m-%d")
+              / f"added_{local.strftime('%H-%M-%S')}_{Path(path).stem.rsplit('_', 1)[-1]}.ogg")
+    if rel != path and store.db.execute("SELECT 1 FROM segments WHERE path = ?", (rel,)).fetchone():
+        raise ValueError("another recording is already filed at that moment")
+    days = {_day(old_start), _day(start_ms)}
+    for conversation in _own_conversations(store, path):
+        store.db.execute("UPDATE conversations SET start_ms = start_ms + ?, end_ms = end_ms + ? WHERE id = ?",
+                         (shift, shift, conversation))
+        store.db.execute("UPDATE sections SET start_ms = start_ms + ? WHERE conversation_id = ?",
+                         (shift, conversation))
+    store.db.execute("UPDATE utterances SET start_ms = start_ms + ?, end_ms = end_ms + ?, segment = ? "
+                     "WHERE segment = ?", (shift, shift, rel, path))
+    store.db.execute("UPDATE transcriptions SET segment = ? WHERE segment = ?", (rel, path))
+    store.db.execute("UPDATE segments SET path = ?, start_ms = ? WHERE path = ?", (rel, start_ms, path))
+    store.db.execute("UPDATE added SET path = ? WHERE path = ?", (rel, path))
+    if rel != path:
+        (store.data_dir / rel).parent.mkdir(parents=True, exist_ok=True)
+        (store.data_dir / path).replace(store.data_dir / rel)
+    store.db.commit()
+    for day in sorted(days):
+        store.write_transcript(day)
+    return rel

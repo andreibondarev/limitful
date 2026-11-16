@@ -385,6 +385,35 @@ async def _cmd_add(args) -> int:
     return 0
 
 
+async def _cmd_voice_memos(args) -> int:
+    from . import voicememos
+
+    if not voicememos.supported():
+        raise PendantError("Voice Memos are only read on macOS")
+    since = 0
+    if args.since:
+        try:
+            since = int(datetime.strptime(args.since, "%Y-%m-%d").timestamp() * 1000)
+        except ValueError:
+            raise PendantError("--since takes a date such as 2026-11-01") from None
+    store = Store(args.data_dir)
+    try:
+        try:
+            found = await asyncio.to_thread(voicememos.sync, store, since)
+        except voicememos.NoAccess:
+            raise PendantError(
+                "macOS is not letting this program read your Voice Memos. In System Settings, Privacy & "
+                f"Security, Full Disk Access, add and switch on:\n  {voicememos.program()}") from None
+        except voicememos.NoLibrary:
+            raise PendantError("no Voice Memos library was found on this Mac") from None
+    finally:
+        store.close()
+    print(f"Added {found.added} Voice Memo(s)." + (f" {found.failed} could not be read." if found.failed else ""))
+    if found.added:
+        print("Run `uv run limitful transcribe` to turn them into text.")
+    return 0
+
+
 async def _cmd_import(args) -> int:
     from .importer import import_limitless
 
@@ -774,6 +803,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("files", type=Path, nargs="+", help="audio files: .m4a, .mp3, .wav and most others")
     data_args(p)
     p.set_defaults(func=_cmd_add)
+
+    p = sub.add_parser("voice-memos", help="add the Voice Memos this Mac has synced from your iPhone (macOS)")
+    p.add_argument("--since", metavar="YYYY-MM-DD", help="only memos recorded on or after this day (default: all)")
+    data_args(p)
+    p.set_defaults(func=_cmd_voice_memos)
 
     p = sub.add_parser("ask", help="ask a question about what was said (uses Claude)")
     p.add_argument("question")

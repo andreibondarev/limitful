@@ -192,24 +192,31 @@ class Library:
         threading.Thread(target=self._transcribe_job, daemon=True).start()
         return {"waiting": waiting}
 
+    def _transcribe_waiting(self, store) -> tuple[int, int]:
+        """Transcribe what is waiting, then summarise if a model is chosen. Returns (recordings, lines)."""
+        waiting = len(store.pending_transcription())
+        self.job.update(what="Transcribing", done=0, total=0)
+        lines, _files = store.transcribe_pending(
+            self._transcriber(), lambda done, total: self.job.update(done=done, total=total))
+        provider = config.provider()
+        if provider:
+            self.job.update(what="Summarising conversations", done=0, total=0)
+            store.digest_pending(digest_mod.make_summarizer(provider, None, config.api_key()))
+        return waiting, lines
+
     def _transcribe_job(self) -> None:
         from .store import Store
 
         try:
             store = Store(self.data_dir)
             try:
-                waiting = len(store.pending_transcription())
-                lines, _files = store.transcribe_pending(
-                    self._transcriber(), lambda done, total: self.job.update(done=done, total=total))
-                self.job["note"] = (f"Transcribed {waiting} recording{'' if waiting == 1 else 's'}: "
-                                    f"{lines} line{'' if lines == 1 else 's'} of speech.")
-                provider = config.provider()
-                if provider:
-                    self.job.update(what="Summarising conversations", done=0, total=0)
-                    try:
-                        store.digest_pending(digest_mod.make_summarizer(provider, None, config.api_key()))
-                    except digest_mod.DigestError as err:
-                        self.job["note"] += f" Summaries are waiting: {err}."
+                try:
+                    waiting, lines = self._transcribe_waiting(store)
+                except digest_mod.DigestError as err:
+                    self.job["note"] = f"Transcribed, but summaries are waiting: {err}."
+                else:
+                    self.job["note"] = (f"Transcribed {waiting} recording{'' if waiting == 1 else 's'}: "
+                                        f"{lines} line{'' if lines == 1 else 's'} of speech.")
             finally:
                 store.close()
         except Exception as err:  # shown in the page; the audio is kept and can be tried again
@@ -217,6 +224,64 @@ class Library:
             self.job["note"] = None
         finally:
             self.job.update(running=False, what="")
+
+    # --- recordings made elsewhere, and Voice Memos on this Mac -------------------------
+
+    def recordings(self) -> dict:
+        from . import voicememos
+        from .recordings import added_recordings
+
+        enabled, since = config.voice_memos()
+        state = voicememos.status() if voicememos.supported() else {"state": "unsupported", "memos": 0}
+        return {
+            "recordings": self._with_store(added_recordings),
+            "voice_memos": dict(state, enabled=enabled, since=since, program=voicememos.program()),
+        }
+
+    def remove_recording(self, path: str) -> dict:
+        from .recordings import remove_recording
+
+        self._with_store(lambda store: remove_recording(store, path))
+        return self.recordings()
+
+    def move_recording(self, path: str, start_ms: int) -> dict:
+        from .recordings import move_recording
+
+        self._with_store(lambda store: move_recording(store, path, start_ms))
+        return self.recordings()
+
+    def set_voice_memos(self, enabled: bool, older: bool = False) -> dict:
+        """Turn bringing in Voice Memos on or off. Unless `older`, only memos recorded from now on."""
+        was, since = config.voice_memos()
+        if enabled and older:
+            since = 0
+        elif enabled and not was:
+            since = int(time.time() * 1000)
+        config.update(voice_memos=enabled, voice_memos_since=since)
+        return self.recordings()
+
+    def _voice_memos_step(self) -> str | None:
+        """Add new Voice Memos and transcribe them. Returns a note for the page, if any arrived."""
+        from . import voicememos
+        from .store import Store
+
+        enabled, since = config.voice_memos()
+        if not enabled or not voicememos.supported():
+            return None
+        store = Store(self.data_dir)
+        try:
+            try:
+                found = voicememos.sync(store, since)
+            except (voicememos.NoAccess, voicememos.NoLibrary):
+                return None  # Settings says why; a sync should not fail over it
+            if not found.added:
+                return None
+            self.job.update(what="Transcribing Voice Memos", done=0, total=0)
+            _waiting, lines = self._transcribe_waiting(store)
+        finally:
+            store.close()
+        return (f"Added {found.added} Voice Memo{'' if found.added == 1 else 's'}: "
+                f"{lines} line{'' if lines == 1 else 's'} of speech.")
 
     def _index_new_lines(self) -> bool:
         """Start adding new lines to search by meaning, if the user has set it up.
@@ -393,7 +458,7 @@ class Library:
 
         return self._with_radio(apply)
 
-    def start_sync(self, quiet: bool = False) -> None:
+    def start_sync(self, quiet: bool = False, memos_only: bool = False) -> None:
         """Pull new audio off the pendant, then transcribe and summarise it, in the background.
 
         `quiet` is for syncing by itself: a pendant that is away is normal, not an error.
@@ -401,8 +466,9 @@ class Library:
         with self._lock:
             if self.job["running"]:
                 raise RuntimeError("Something is already running. Wait for it to finish.")
-            self.job.update(running=True, what="Syncing the pendant", done=0, total=0, error=None, note=None)
-        threading.Thread(target=self._sync_job, args=(quiet,), daemon=True).start()
+            self.job.update(running=True, what="Checking Voice Memos" if memos_only else "Syncing the pendant",
+                            done=0, total=0, error=None, note=None)
+        threading.Thread(target=self._sync_job, args=(quiet, memos_only), daemon=True).start()
 
     def set_auto_sync(self, every: float) -> None:
         """Sync by itself every `every` seconds; 0 stops it."""
@@ -451,7 +517,29 @@ class Library:
             raise ValueError(str(err)) from None
         return self.autostart()
 
-    def _sync_job(self, quiet: bool = False) -> None:
+    def _sync_job(self, quiet: bool = False, memos_only: bool = False) -> None:
+        """The pendant first, then Voice Memos if they are turned on. One failing does not stop the other."""
+        try:
+            try:
+                if not memos_only:
+                    self._pendant_sync(quiet)
+            except Exception as err:  # shown in the page
+                self.job["error"] = f"Sync stopped: {err}"
+                self.job["note"] = None
+            try:
+                memos = self._voice_memos_step()
+            except Exception as err:
+                if not self.job["error"]:
+                    self.job["error"] = f"Voice Memos stopped: {err}"
+            else:
+                if memos and not self.job["error"]:
+                    self.job["note"] = f"{self.job['note']} {memos}" if self.job["note"] else memos
+                elif memos_only and not memos:
+                    self.job["note"] = "No new Voice Memos."
+        finally:
+            self.job.update(running=False, what="")
+
+    def _pendant_sync(self, quiet: bool = False) -> None:
         from . import watch as watch_mod
         from .store import Store
 
@@ -487,11 +575,9 @@ class Library:
                                 f"{result.lines} lines of speech."
                                 + (f" Deleted {result.pages_discarded} pages recorded while paused."
                                    if result.pages_discarded else ""))
-        except Exception as err:  # shown in the page
-            self.job["error"] = f"Sync stopped: {err}"
+        except Exception:
             self.job["note"] = None
-        finally:
-            self.job.update(running=False, what="")
+            raise
 
     def settings(self) -> dict:
         """What the Settings page shows. The key itself never leaves the server."""
@@ -854,6 +940,8 @@ def make_handler(library: Library):
                     return self._json(library.welcome())
                 if path == "/api/settings":
                     return self._json(library.settings())
+                if path == "/api/recordings":
+                    return self._json(library.recordings())
                 if path == "/api/pendant":
                     return self._json(library.pendant())
                 if path == "/api/upkeep":
@@ -895,6 +983,31 @@ def make_handler(library: Library):
                 return self._import()
             if path == "/api/recordings":
                 return self._recording()
+            if path in ("/api/recordings/remove", "/api/recordings/move", "/api/voicememos"):
+                try:
+                    length = max(0, min(int(self.headers.get("Content-Length") or 0), 4096))
+                    body = json.loads(self.rfile.read(length) or b"{}")
+                    if not isinstance(body, dict):
+                        raise ValueError("send an object")
+                    if path == "/api/voicememos":
+                        return self._json(library.set_voice_memos(
+                            body.get("enabled") is True, body.get("older") is True))
+                    if not isinstance(body.get("path"), str):
+                        raise ValueError("say which recording")
+                    if path == "/api/recordings/remove":
+                        return self._json(library.remove_recording(body["path"]))
+                    start = body.get("start_ms")
+                    if isinstance(start, bool) or not isinstance(start, int):
+                        raise ValueError("say when it began")
+                    return self._json(library.move_recording(body["path"], start))
+                except (ValueError, OSError, sqlite3.Error) as err:
+                    return self._text(HTTPStatus.BAD_REQUEST, str(err))
+            if path == "/api/voicememos/sync":
+                try:
+                    library.start_sync(memos_only=True)
+                    return self._json({"started": True})
+                except RuntimeError as err:
+                    return self._text(HTTPStatus.CONFLICT, str(err))
             if path == "/api/transcribe":
                 try:
                     return self._json(library.start_transcribing())
