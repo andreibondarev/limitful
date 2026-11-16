@@ -14,6 +14,12 @@ NOW = int(datetime(2026, 11, 15, 12, 0, 0).timestamp() * 1000)
 APPLE_EPOCH = 978_307_200
 
 
+@pytest.fixture(autouse=True)
+def on_a_mac(monkeypatch):
+    """The reading is the same anywhere; only the real library is a Mac's."""
+    monkeypatch.setattr(voicememos, "supported", lambda: True)
+
+
 def apple(when: datetime) -> float:
     return when.timestamp() - APPLE_EPOCH
 
