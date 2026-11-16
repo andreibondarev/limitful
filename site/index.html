@@ -385,8 +385,16 @@
       document.querySelectorAll("[data-after]").forEach(function (n) { n.textContent = n.dataset.after; });
     }
   })();
+  // Counted with Plausible when its script is on the page: no cookies, nothing personal.
+  function count(name) { if (window.plausible) window.plausible(name); }
+  document.querySelectorAll('a[href="#install"]').forEach(function (a) {
+    a.addEventListener("click", function () { count("Install click"); });
+  });
+  var tour = document.querySelector("video");
+  if (tour) tour.addEventListener("play", function () { count("Tour play"); }, { once: true });
   document.querySelectorAll(".copy").forEach(function (b) {
     b.addEventListener("click", function () {
+      count("Copy commands");
       if (!navigator.clipboard) return;
       navigator.clipboard.writeText(b.dataset.copy).then(function () {
         b.textContent = "Copied";
