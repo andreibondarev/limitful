@@ -97,6 +97,8 @@ def test_rename_and_merge(tmp_path):
     assert store.rename_speaker(3, "andrei") == 1
     assert [(name, lines) for _id, name, lines in store.speakers()] == [("Andrei", 8), ("Speaker 2", 4)]
     assert "Speaker 3" not in transcript.read_text()
+    # Only speakers somebody named are offered as suggestions.
+    assert [(name, lines) for name, lines, _last in store.named_speakers()] == [("Andrei", 8)]
     with pytest.raises(ValueError):
         store.rename_speaker(1, "   ")
     with pytest.raises(ValueError):

@@ -876,6 +876,11 @@ class Library:
     def reminders(self, include_done: bool = False) -> list[dict]:
         return self._with_store(lambda store: store.reminders(include_done))
 
+    def people(self) -> list[dict]:
+        """The speakers who have been named, for suggesting a name while one is typed."""
+        return [{"name": name, "lines": lines, "last": last}
+                for name, lines, last in self._with_store(lambda store: store.named_speakers())]
+
     def set_reminder_status(self, reminder_id: int, status: str) -> None:
         self._with_store(lambda store: store.set_reminder_status(reminder_id, status))
 
@@ -950,6 +955,8 @@ def make_handler(library: Library):
                 if path == "/api/reminders":
                     done = parse_qs(url.query).get("done", ["0"])[0] == "1"
                     return self._json(library.reminders(include_done=done))
+                if path == "/api/people":
+                    return self._json(library.people())
                 if path == "/api/status":
                     return self._json(dict(library.job, advice=pendant_advice(library.job.get("error"))))
                 if path == "/api/autostart":

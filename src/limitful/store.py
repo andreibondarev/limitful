@@ -895,6 +895,17 @@ class Store:
             "LEFT JOIN utterances u ON u.speaker_id = s.id "
             "GROUP BY s.id ORDER BY COUNT(u.id) DESC, s.id").fetchall()
 
+    def named_speakers(self) -> list[tuple[str, int, int | None]]:
+        """(name, lines, when last heard) for every speaker somebody named, most recently heard first.
+
+        Speakers still carrying a number ("Speaker 2") are left out.
+        """
+        return self.db.execute(
+            "SELECT s.name, COUNT(u.id), MAX(u.start_ms) FROM speakers s "
+            "LEFT JOIN utterances u ON u.speaker_id = s.id "
+            "WHERE s.name NOT GLOB 'Speaker [0-9]*' "
+            "GROUP BY s.id ORDER BY MAX(u.start_ms) DESC, s.name").fetchall()
+
     @staticmethod
     def _clean_name(name: str) -> str:
         name = " ".join(name.split())
