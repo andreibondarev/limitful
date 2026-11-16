@@ -273,10 +273,10 @@
   .glance .recap ul { font-size: 0.92rem; }
   .glance ul.plain { list-style: none; margin: 0; padding: 0; }
   .glance ul.plain li { border-top: 1px solid var(--rule); }
-  .glance ul.plain button {
+  .glance ul.plain .go {
     display: block; width: 100%; padding: 0.5rem 0; border: 0; background: none; text-align: left; cursor: pointer; line-height: 1.4;
   }
-  .glance ul.plain button:hover span { color: var(--accent); }
+  .glance ul.plain .go:hover span { color: var(--accent); }
   .glance ul.plain small { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 0.1rem; }
   .dot { display: inline-block; width: 0.55rem; height: 0.55rem; margin-right: 0.45rem; border-radius: 50%; background: var(--who, var(--muted)); }
   @media (max-width: 1100px) {
@@ -317,9 +317,6 @@
     border-radius: 12px; background: color-mix(in srgb, var(--accent) 6%, transparent);
   }
   .card .brief > ul { margin: 0; padding-left: 1.1rem; line-height: 1.5; }
-  .card .brief > ul + .todo { margin-top: 0.8rem; }
-  .card .brief > .todo { max-width: none; }
-  .card .brief > .todo:first-child { margin-top: 0; }
   .card .copy { margin-left: var(--gutter); }
   .card .copy { margin-top: 0.4rem; }
   .card h3 {
@@ -330,16 +327,10 @@
     margin: 1rem 0 0.1rem var(--gutter); max-width: 68ch;
     font-size: 0.92rem; font-weight: 600; color: var(--muted);
   }
-  .todo {
-    display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap;
-    margin-top: 0.5rem; padding: 0.45rem 0.7rem;
-    border-left: 3px solid var(--mark); background: color-mix(in srgb, var(--mark) 14%, transparent);
-    border-radius: 0 4px 4px 0; max-width: 68ch;
-  }
-  .todo p { margin: 0; flex: 1 1 14rem; }
-  .todo small { color: var(--muted); flex-basis: 100%; }
-  .todo small.failed { color: var(--bad); }
-  .todo .jump { border-style: dashed; }
+  /* What can be done with a reminder, under it in the list beside the day. */
+  .acts { display: flex; flex-wrap: wrap; gap: 0.4rem; padding-bottom: 0.65rem; }
+  .acts small.failed { color: var(--bad); flex-basis: 100%; font-size: 0.8rem; }
+  .acts .jump { border-style: dashed; }
   .recap { margin: 0 0 1.8rem; padding: 1.3rem 1.5rem 1.2rem; max-width: 46rem; border-left: 3px solid var(--mark); background: color-mix(in srgb, var(--accent) 5%, transparent); border-radius: 0 14px 14px 0; }
   .recap.bare { padding: 0; border: 0; background: none; }
   .recap .headline { margin: 0; font-family: var(--voice); font-size: 1.45rem; line-height: 1.3; text-wrap: balance; }
@@ -389,7 +380,6 @@
     .remind { grid-template-columns: 1fr; gap: 2rem; }
     .mine { position: static; order: -1; }
   }
-  .todo.accepted { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
   #status {
     margin: 0.7rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.9rem;
     border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent);
@@ -449,12 +439,13 @@
   .welcome fieldset { border: 0; margin: 0; padding: 0; }
   @media (max-width: 560px) { .welcome .pairing { grid-template-columns: 1fr; justify-items: center; } .welcome h2 { font-size: 1.8rem; } }
   #status.failed { border-left-color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
-  .todo button, #remind, #settings, #ask, .pill {
+  .acts button, #remind, #settings, #ask, .pill {
     border: 1px solid var(--rule); border-radius: 999px; background: transparent;
     padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
   }
-  .todo button.away:hover { border-color: var(--bad); color: var(--bad); }
-  .todo button:not(.away):hover, #remind:hover, #settings:hover, .pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .acts button { padding: 0.12rem 0.6rem; font-size: 0.8rem; }
+  .acts button.away:hover { border-color: var(--bad); color: var(--bad); }
+  .acts button:not(.away):hover, #remind:hover, #settings:hover, .pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   #remind, #settings, #ask, .pill { padding: 0.4rem 0.85rem; font-size: inherit; }
   #ask:hover { border-color: var(--accent); color: var(--accent); }
   #paused {
@@ -1451,9 +1442,9 @@ async function showDemoBar() {
   bar.replaceChildren("These conversations are made up, to show what Limitful does. ", remove);
 }
 
-/* A reminder with the actions that fit its state. `after` runs once it is saved. */
-function todoRow(r, after, source) {
-  const row = el("div", { className: `todo ${r.status}` }, el("p", { textContent: r.text }));
+/* The actions that fit a reminder's state, as a row of buttons. `after` runs once it is saved. */
+function reminderActs(r, after, source) {
+  const row = el("div", { className: "acts" });
   const act = (label, status) => {
     const b = el("button", { textContent: label, className: status === "dismissed" ? "away" : "" });
     b.addEventListener("click", async () => {
@@ -1777,13 +1768,24 @@ function followUps() {
   if (!open.length) return [];
   const list = el("ul", { className: "plain" });
   for (const { r, g } of open) {
-    const go = el("button", {}, el("span", { textContent: r.text }),
+    const said = r.line && g.own.some((u) => u.id === r.line);
+    const go = el("button", { className: "go", title: said ? "Show where this was said" : "Open the conversation" },
+      el("span", { textContent: r.text }),
       el("small", { textContent: `${clock.format(new Date(g.start))}${r.status === "suggested" ? ", suggested" : ""}` }));
     go.addEventListener("click", () => {
-      if (r.line && g.own.some((u) => u.id === r.line)) reveal(r.line, true);
+      if (said) reveal(r.line, true);
       else { g.setOpen(true); $(`g${g.key}`).scrollIntoView({ block: "start" }); }
     });
-    list.append(el("li", {}, go));
+    let jump = null;
+    if (said) {
+      jump = el("button", { className: "jump", textContent: "Play the line" });
+      jump.addEventListener("click", () => {
+        reveal(r.line, true);
+        const from = lines.find((u) => u.id === r.line);
+        if (from) play(from);
+      });
+    }
+    list.append(el("li", {}, go, reminderActs(r, () => { renderDay(); countReminders(); }, jump)));
   }
   return [el("section", {}, el("h3", { textContent: "Reminders" }), list)];
 }
@@ -1802,7 +1804,7 @@ function people() {
   if (!heard.size) return [];
   const list = el("ul", { className: "plain" });
   for (const p of [...heard.values()].sort((a, b) => b.ms - a.ms)) {
-    const go = el("button", { title: `Open the first conversation with ${p.speaker.name}` },
+    const go = el("button", { className: "go", title: `Open the first conversation with ${p.speaker.name}` },
       el("span", {}, el("i", { className: "dot" }), p.speaker.name),
       el("small", { textContent: p.ms < 60000 ? "under a minute" : `${lengthOf(p.ms)} speaking` }));
     go.style.setProperty("--who", dayTint(p.speaker));
@@ -2086,19 +2088,6 @@ function cardBody(g) {
   // What the conversation came to, before the words themselves.
   const brief = el("div", { className: "brief" });
   if (!g.sections.length && g.summary.length) brief.append(el("ul", {}, ...g.summary.map((t) => el("li", { textContent: t }))));
-  const open = g.reminders.filter((r) => r.status === "suggested" || r.status === "accepted");
-  brief.append(...open.map((r) => {
-    let jump = null;
-    if (r.line && g.own.some((u) => u.id === r.line)) {
-      jump = el("button", { className: "jump", textContent: "Play the line" });
-      jump.addEventListener("click", () => {
-        reveal(r.line, true);
-        const from = lines.find((u) => u.id === r.line);
-        if (from) play(from);
-      });
-    }
-    return todoRow(r, () => { renderDay(); countReminders(); }, jump);
-  }));
   if (brief.childElementCount) nodes.push(brief);
 
   const copy = el("button", { className: "copy", textContent: "Copy as Markdown" });
