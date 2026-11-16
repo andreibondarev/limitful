@@ -104,9 +104,14 @@
   }
   .step:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .step:disabled { opacity: 0.35; cursor: default; }
-  #when { position: relative; }
-  #pick { cursor: pointer; display: inline-flex; align-items: center; font-variant-numeric: tabular-nums; }
-  #pick:hover, #pick[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+  /* One control for the day: an arrow either side of the date, which opens the calendar. */
+  #when { position: relative; display: inline-flex; align-items: center; border: 1px solid var(--rule); border-radius: 999px; }
+  #when .step { border: 0; width: 2rem; height: calc(2.25rem - 2px); border-radius: 999px; }
+  /* A fixed width, so the arrows stay put while stepping through days. */
+  #pick { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #when #pick { border: 0; padding-inline: 0.15rem; min-width: 6.5rem; }
+  header.plain #when #pick { padding-inline: 0.85rem; min-width: 0; }
+  #pick:hover, #pick[aria-expanded="true"] { color: var(--accent); }
   #calendar {
     position: absolute; top: calc(100% + 0.5rem); left: 0; z-index: 5; width: 20.5rem; padding: 0.9rem 1rem 1rem;
     background: var(--paper); border: 1px solid var(--rule); border-radius: 14px;
@@ -770,10 +775,10 @@
   <div class="bar">
     <a id="home" href="#" aria-label="Limitful: go to the latest day" title="Limitful (*limits apply)"><svg class="star" viewBox="4 8 124 124" width="34" height="34" aria-hidden="true"><use href="#wordmark"/></svg></a>
     <h1 id="title">Lifelog</h1>
-    <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
-    <button class="step" id="next" aria-label="Next day with recordings">›</button>
     <div id="when">
+      <button class="step" id="prev" aria-label="Previous day with recordings">‹</button>
       <button id="pick" aria-haspopup="dialog" aria-expanded="false" title="Open the calendar"></button>
+      <button class="step" id="next" aria-label="Next day with recordings">›</button>
       <div id="calendar" role="dialog" aria-label="Calendar" hidden></div>
     </div>
     <button id="paused" hidden title="Audio is not being kept. Click to open Settings."><span>Paused</span></button>
@@ -1663,7 +1668,7 @@ const monthName = new Intl.DateTimeFormat([], { month: "long", year: "numeric" }
 const weekdayName = new Intl.DateTimeFormat([], { weekday: "narrow" });
 let calendarMonth = null;  // first day of the month on show
 function showPicked() {
-  $("pick").replaceChildren(icon("day", 16), day ? shortDay.format(new Date(dayStart(day))) : "Calendar");
+  $("pick").textContent = day ? shortDay.format(new Date(dayStart(day))) : "Calendar";
 }
 function closeCalendar() {
   $("calendar").hidden = true;
@@ -1808,9 +1813,8 @@ function people() {
 }
 
 function renderDay() {
-  // The year is in the date field beside it; only spell it out for other years.
-  const shown = new Date(dayStart(day));
-  $("title").textContent = (shown.getFullYear() === new Date().getFullYear() ? thisYearDay : longDay).format(shown);
+  // The year is in the date control beside it.
+  $("title").textContent = thisYearDay.format(new Date(dayStart(day)));
   document.title = `Lifelog, ${day}`;
   showPicked();
   const known = days.map((d) => d.day);
