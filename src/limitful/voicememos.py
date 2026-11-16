@@ -160,10 +160,14 @@ def program() -> str:
     return str(Path(sys.executable).resolve())
 
 
-def sync(store: Store, since_ms: int = 0, where: Path | None = None, now_ms: int | None = None) -> Synced:
-    """Add every memo that began at or after `since_ms` and has not been added before."""
+def sync(store: Store, since_ms: int = 0, where: Path | None = None, now_ms: int | None = None,
+         on_progress=None) -> Synced:
+    """Add every memo that began at or after `since_ms` and has not been added before.
+
+    `on_progress(done, total)` is called before each memo and once at the end.
+    """
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
-    added = failed = 0
+    waiting = []
     for memo in look(where):
         if memo.deleted:
             continue
@@ -178,6 +182,11 @@ def sync(store: Store, since_ms: int = 0, where: Path | None = None, now_ms: int
             continue  # empty, or still being recorded or downloaded
         if (memo.start_ms if memo.start_ms is not None else modified_ms) < since_ms:
             continue
+        waiting.append((memo, modified_ms))
+    added = failed = 0
+    for done, (memo, modified_ms) in enumerate(waiting):
+        if on_progress:
+            on_progress(done, len(waiting))
         try:
             result = add_recording(store, memo.file, memo.file.name, modified_ms, now_ms,
                                    start_ms=memo.start_ms, origin="voicememos", also_key=memo.key,
@@ -188,4 +197,6 @@ def sync(store: Store, since_ms: int = 0, where: Path | None = None, now_ms: int
         except PermissionError:
             raise NoAccess from None
         added += result.new
+    if on_progress and waiting:
+        on_progress(len(waiting), len(waiting))
     return Synced(added, failed)

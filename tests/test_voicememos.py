@@ -62,7 +62,10 @@ def test_sync_adds_each_memo_once_from_the_chosen_moment_on(tmp_path):
     store = Store(tmp_path / "data")
     try:
         since = int(datetime(2026, 11, 12).timestamp() * 1000)
-        assert voicememos.sync(store, since, folder, NOW) == voicememos.Synced(added=1)
+        steps = []
+        found = voicememos.sync(store, since, folder, NOW, on_progress=lambda *step: steps.append(step))
+        assert found == voicememos.Synced(added=1)
+        assert steps == [(0, 1), (1, 1)]  # counts only the memos that will be added
         (only,) = added_recordings(store)
         assert (only["name"], only["source"]) == ("Dr. Ruiz, follow-up", "voicememos")
         assert only["start_ms"] == int(datetime(2026, 11, 14, 9, 30, 12).timestamp() * 1000)

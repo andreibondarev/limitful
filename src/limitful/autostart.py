@@ -46,7 +46,7 @@ def job(data_dir: Path, port: int, sync_every: float = SYNC_EVERY_S, label: str 
                              "--port", str(port), "--sync-every", str(int(sync_every))],
         "RunAtLoad": True,
         "KeepAlive": True,          # start it again if it stops
-        "ProcessType": "Background",
+        # No ProcessType: "Background" has macOS throttle it, and transcribing crawls.
         "StandardOutPath": str(data_dir / "limitful.log"),
         "StandardErrorPath": str(data_dir / "limitful.log"),
     }

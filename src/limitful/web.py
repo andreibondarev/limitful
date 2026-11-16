@@ -284,7 +284,8 @@ class Library:
         store = Store(self.data_dir)
         try:
             try:
-                found = voicememos.sync(store, since)
+                found = voicememos.sync(store, since, on_progress=lambda done, total: self.job.update(
+                    what="Bringing in Voice Memos", done=done, total=total))
             except (voicememos.NoAccess, voicememos.NoLibrary):
                 return None  # Settings says why; a sync should not fail over it
             if not found.added:
