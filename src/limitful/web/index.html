@@ -108,7 +108,7 @@
   #when { position: relative; display: inline-flex; align-items: center; border: 1px solid var(--rule); border-radius: 999px; }
   #when .step { border: 0; width: 2rem; height: calc(2.25rem - 2px); border-radius: 999px; }
   /* A fixed width, so the arrows stay put while stepping through days. */
-  #pick { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #pick { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 500; color: var(--ink); }
   #when #pick { border: 0; padding-inline: 0.15rem; min-width: 6.5rem; }
   header.plain #when #pick { padding-inline: 0.85rem; min-width: 0; }
   #pick:hover, #pick[aria-expanded="true"] { color: var(--accent); }
@@ -1695,8 +1695,13 @@ const shortDay = new Intl.DateTimeFormat([], { day: "numeric", month: "short", y
 const monthName = new Intl.DateTimeFormat([], { month: "long", year: "numeric" });
 const weekdayName = new Intl.DateTimeFormat([], { weekday: "narrow" });
 let calendarMonth = null;  // first day of the month on show
+// The date control names the day on show: weekday first, the year only when it is not this one.
+const pickDay = new Intl.DateTimeFormat([], { weekday: "short", day: "numeric", month: "short" });
+const pickDayYear = new Intl.DateTimeFormat([], { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 function showPicked() {
-  $("pick").textContent = day ? shortDay.format(new Date(dayStart(day))) : "Calendar";
+  const date = day ? new Date(dayStart(day)) : null;
+  $("pick").textContent = !date ? "Calendar" : (date.getFullYear() === new Date().getFullYear() ? pickDay : pickDayYear).format(date);
+  $("pick").setAttribute("aria-label", date ? `${longDay.format(date)}. Open the calendar` : "Open the calendar");
 }
 function closeCalendar() {
   $("calendar").hidden = true;
@@ -1852,8 +1857,8 @@ function people() {
 }
 
 function renderDay() {
-  // The year is in the date control beside it.
-  $("title").textContent = thisYearDay.format(new Date(dayStart(day)));
+  // The date is in the control beside it.
+  $("title").textContent = "Lifelog";
   document.title = `Lifelog, ${day}`;
   showPicked();
   const known = days.map((d) => d.day);
