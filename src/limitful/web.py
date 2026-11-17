@@ -245,7 +245,8 @@ class Library:
         from .recordings import added_recordings
 
         enabled, since = config.voice_memos()
-        state = voicememos.status() if voicememos.supported() else {"state": "unsupported", "memos": 0}
+        state = (self._with_store(lambda store: voicememos.status(store=store)) if voicememos.supported()
+                 else {"state": "unsupported", "memos": 0})
         return {
             "recordings": self._with_store(added_recordings),
             "voice_memos": dict(state, enabled=enabled, since=since, program=voicememos.program()),

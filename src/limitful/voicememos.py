@@ -142,8 +142,11 @@ def look(where: Path | None = None) -> list[Memo]:
     return sorted(memos, key=lambda memo: (memo.start_ms is None, memo.start_ms or 0, memo.file.name))
 
 
-def status(where: Path | None = None) -> dict:
-    """What Settings shows: whether the library can be read, and how many memos are in it."""
+def status(where: Path | None = None, store: Store | None = None) -> dict:
+    """What Settings shows: whether the library can be read, and how many memos are in it.
+
+    With a store, also how many of them have not been brought in yet.
+    """
     if not supported():
         return {"state": "unsupported", "memos": 0}
     try:
@@ -152,7 +155,12 @@ def status(where: Path | None = None) -> dict:
         return {"state": "denied", "memos": 0}
     except NoLibrary:
         return {"state": "missing", "memos": 0}
-    return {"state": "ok", "memos": len(memos)}
+    found = {"state": "ok", "memos": len(memos)}
+    if store is not None:
+        found["waiting"] = sum(
+            1 for memo in memos
+            if not store.db.execute("SELECT 1 FROM imports WHERE key = ?", (memo.key,)).fetchone())
+    return found
 
 
 def program() -> str:

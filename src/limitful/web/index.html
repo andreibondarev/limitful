@@ -1373,12 +1373,17 @@ function recordingsPanel() {
         const check = el("button", { className: "pill busy-off" }, ...withIcon("refresh", "Check now", 16));
         check.addEventListener("click", async () => { try { await post("/api/voicememos/sync", {}); watchJob(); } catch (err) { problem.textContent = sentence(err.message); } });
         if (vm.enabled) row.append(check);
-        if (vm.memos && !(vm.enabled && !vm.since)) {
-          row.append(twice(`Bring in all ${count(vm.memos, "memo")}, older ones too`, `Add and transcribe all ${vm.memos}? Click again`, async () => {
+        // Offered only while some memos are not here: all of them the first time, the rest after that.
+        const rest = vm.waiting ?? vm.memos, some = rest < vm.memos;
+        if (rest && !(vm.enabled && !vm.since)) {
+          row.append(twice(some ? `Bring in the other ${count(rest, "memo")} too` : `Bring in all ${count(rest, "memo")}, older ones too`,
+            `Add and transcribe ${some ? "the other" : "all"} ${rest}? Click again`, async () => {
             if (await act("/api/voicememos", { enabled: true, older: true }, problem)) { try { await post("/api/voicememos/sync", {}); watchJob(); } catch { /* the next sync does it */ } }
           }));
         }
-        parts.push(el("p", { className: "note", textContent: `${count(vm.memos, "memo")} in the library.` }), row);
+        const here = vm.memos - rest;
+        parts.push(el("p", { className: "note", textContent: `${count(vm.memos, "memo")} in the library${
+          !vm.memos || !here ? "" : rest ? `, ${here} of them brought in` : vm.memos === 1 ? ", already brought in" : ", all brought in"}.` }), row);
       }
       parts.push(problem);
     }

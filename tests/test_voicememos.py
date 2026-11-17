@@ -78,7 +78,9 @@ def test_sync_adds_each_memo_once_from_the_chosen_moment_on(tmp_path):
         assert voicememos.sync(store, since, folder, NOW) == voicememos.Synced()
 
         # Asking for older ones too brings in the rest, but never one in Recently Deleted.
+        assert voicememos.status(folder, store) == {"state": "ok", "memos": 2, "waiting": 1}
         assert voicememos.sync(store, 0, folder, NOW) == voicememos.Synced(added=1)
+        assert voicememos.status(folder, store)["waiting"] == 0
         assert [r["name"] for r in added_recordings(store)] == ["Dr. Ruiz, follow-up", "Idea for the newsletter"]
 
         # One removed here does not come back at the next sync.
