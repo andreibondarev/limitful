@@ -751,13 +751,16 @@ class Library:
             db.close()
         return [_utterance(r) for r in rows]
 
-    def search(self, query: str) -> list[dict]:
+    def search(self, query: str, by: str | None = None) -> list[dict]:
+        """Lines containing `query`, newest first. `by` keeps only what that named person said;
+        with no query it lists everything they said."""
         escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        said_by, who = ("AND p.name = ? COLLATE NOCASE ", (by,)) if by else ("", ())
         db = self._db()
         try:
             rows = db.execute(
-                _SELECT + "WHERE u.text LIKE ? ESCAPE '\\' ORDER BY u.start_ms DESC LIMIT ?",
-                (f"%{escaped}%", _SEARCH_LIMIT),
+                _SELECT + "WHERE u.text LIKE ? ESCAPE '\\' " + said_by + "ORDER BY u.start_ms DESC LIMIT ?",
+                (f"%{escaped}%", *who, _SEARCH_LIMIT),
             ).fetchall()
             out = []
             for r in rows:
@@ -779,8 +782,9 @@ class Library:
             db.close()
         return out
 
-    def search_meaning(self, query: str) -> dict:
+    def search_meaning(self, query: str, by: str | None = None) -> dict:
         """Lines close in meaning to `query`, best first, once the index has been built.
+        `by` keeps only moments where that named person said the matching line.
 
         Served apart from the exact-word search so those results never wait for,
         or change because of, this one; the page lists these underneath.
@@ -796,7 +800,12 @@ class Library:
             # No cut-off by score: measured on real transcripts, right answers (0.57 to
             # 0.79) and unrelated lines (median 0.68) score alike, so a floor would
             # hide as many good hits as bad. The page labels these as near, not exact.
-            hits = search_mod.spread(index.search(search_mod.make_embedder(), query, limit=200),
+            only = None
+            if by:
+                only = {uid for (uid,) in db.execute(
+                    "SELECT u.id FROM utterances u JOIN speakers p ON p.id = u.speaker_id "
+                    "WHERE p.name = ? COLLATE NOCASE", (by,))}
+            hits = search_mod.spread(index.search(search_mod.make_embedder(), query, limit=200, only=only),
                                      start_of, _MEANING_LIMIT, apart_ms=search_mod.NEIGHBOUR_GAP_MS)
             # A hit is a line that matched together with its neighbours, and on its own
             # it can be a bare "Yeah.", so each is shown as that moment: the same few lines.
@@ -981,11 +990,13 @@ def make_handler(library: Library):
                 if found:
                     return self._json(library.chat(int(found.group(1))))
                 if path == "/api/search":
-                    query = parse_qs(url.query).get("q", [""])[0].strip()
-                    return self._json(library.search(query) if query else [])
+                    asked = parse_qs(url.query)
+                    query, by = asked.get("q", [""])[0].strip(), asked.get("by", [""])[0].strip() or None
+                    return self._json(library.search(query, by) if query or by else [])
                 if path == "/api/search/meaning":
-                    query = parse_qs(url.query).get("q", [""])[0].strip()
-                    return self._json(library.search_meaning(query) if query else {"ready": True, "lines": []})
+                    asked = parse_qs(url.query)
+                    query, by = asked.get("q", [""])[0].strip(), asked.get("by", [""])[0].strip() or None
+                    return self._json(library.search_meaning(query, by) if query else {"ready": True, "lines": []})
                 if path.startswith("/audio/"):
                     return self._audio(library.audio_path(path))
             except ValueError as err:

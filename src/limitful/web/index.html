@@ -626,6 +626,12 @@
   .halt:hover:not(:disabled) { background: var(--accent); color: var(--paper); }
   .halt:disabled { opacity: 0.5; cursor: default; }
   .tally { margin: 0 0 0.4rem; color: var(--muted); font-size: 0.9rem; }
+  .saidby {
+    display: inline-flex; align-items: center; gap: 0.35rem; margin-right: 0.3rem; padding: 0.1rem 0.3rem 0.1rem 0.65rem;
+    border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink);
+  }
+  .saidby button { border: 0; background: none; padding: 0 0.3rem; color: var(--muted); cursor: pointer; font-size: 0.8rem; }
+  .saidby button:hover { color: var(--ink); }
   .hit {
     display: grid; grid-template-columns: var(--gutter) minmax(0, 1fr); align-items: baseline;
     width: 100%; padding: 0.7rem 0; border: 0; border-top: 1px solid var(--rule); background: none; text-align: left; cursor: pointer;
@@ -2324,6 +2330,29 @@ function step(direction) {
   if (target) openDay(target);
 }
 
+/* Search can be kept to what one person said: `from:elena pilot`, or `from:"Elena Ruiz" pilot`.
+   Only speakers somebody has named can be asked for. */
+let named = [];  // their names, most recently heard first
+async function loadPeople() {
+  try { named = (await get("/api/people")).map((p) => p.name); } catch { /* search still works without names */ }
+}
+function peopleLike(typed) {
+  const low = typed.toLowerCase();
+  const exact = named.filter((name) => name.toLowerCase() === low);
+  if (exact.length) return exact;
+  return named.filter((name) => name.toLowerCase().startsWith(low) || name.toLowerCase().split(/\s+/).some((word) => word.startsWith(low)));
+}
+/* What was typed, taken apart: the words to look for, and whose lines (`by`) if `from:` names one person. */
+function readQuery(text) {
+  const found = text.match(/(?:^|\s)from:(?:"([^"]*)"|(\S+))/i);
+  if (!found) return { words: text.trim(), typed: null, by: null, fits: [] };
+  const typed = (found[1] || found[2] || "").trim();
+  const fits = typed ? peopleLike(typed) : [];
+  return { words: text.replace(found[0], " ").replace(/\s+/g, " ").trim(), typed, by: fits.length === 1 ? fits[0] : null, fits };
+}
+const searchUrl = (path, q) => `${path}?q=${encodeURIComponent(q.words)}${q.by ? `&by=${encodeURIComponent(q.by)}` : ""}`;
+const fromText = (name, words = "") => `from:${/\s/.test(name) ? `"${name}"` : name}${words ? ` ${words}` : ""}`;
+
 async function runSearch(query) {
   leaveWelcome();
   document.title = "Lifelog, search";
@@ -2337,9 +2366,17 @@ async function runSearch(query) {
   $("settings").setAttribute("aria-pressed", "false");
   $("title").textContent = "Search";
   strip.replaceChildren();
+  if (query.toLowerCase().includes("from:")) await loadPeople();
+  const q = readQuery(query);
+  if (q.typed !== null && !q.by) {
+    const why = q.fits.length > 1 ? `Several people fit “${q.typed}”: ${q.fits.join(", ")}. Type more of the name.`
+      : `No one you have named fits “${q.typed}”. Name a speaker in a conversation first, then search what they said.`;
+    main.replaceChildren(el("p", { className: "empty", textContent: why }));
+    return;
+  }
   let results;
   try {
-    results = await get(`/api/search?q=${encodeURIComponent(query)}`);
+    results = await get(searchUrl("/api/search", q));
   } catch (err) {
     main.replaceChildren(el("p", { className: "empty", textContent: `Search failed. ${sentence(err.message)}` }));
     return;
@@ -2362,8 +2399,8 @@ async function runSearch(query) {
     return nodes;
   };
   // Exact matches: the words marked, with the line before and after and the conversation it is from.
-  const words = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig");
-  const marked = (text) => text.split(words).map((part, n) => n % 2 ? el("mark", { textContent: part }) : part);
+  const words = new RegExp(`(${q.words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig");
+  const marked = (text) => q.words ? text.split(words).map((part, n) => n % 2 ? el("mark", { textContent: part }) : part) : [text];
   const clip = (text) => text.length > 140 ? `${text.slice(0, 140)}…` : text;
   const hits = (found) => {
     const nodes = [];
@@ -2388,14 +2425,27 @@ async function runSearch(query) {
     }
     return nodes;
   };
-  const tally = results.length ? [el("p", { className: "tally", textContent: `${results.length} line${results.length === 1 ? "" : "s"} with “${query}”, newest first.` })] : [];
-  main.replaceChildren(...(results.length ? [...tally, ...hits(results)]
-    : [el("p", { className: "empty", textContent: `Nothing found for “${query}”.` })]));
+  // Whose lines these are, when the search is kept to one person; the cross takes that away.
+  const chip = [];
+  if (q.by) {
+    const drop = el("button", { title: "Search everyone", ariaLabel: `Stop keeping to ${q.by}` }, "✕");
+    drop.addEventListener("click", () => {
+      if (!q.words) { openDay(day); return; }
+      $("search").value = q.words; runSearch(q.words);
+    });
+    chip.push(el("span", { className: "saidby" }, `Said by ${q.by}`, drop), " ");
+  }
+  const what = q.words ? ` with “${q.words}”` : "";
+  const tally = el("p", { className: "tally" }, ...chip,
+    results.length ? `${count(results.length, "line")}${what}, newest first.` : "");
+  main.replaceChildren(...(results.length ? [tally, ...hits(results)]
+    : [...(q.by ? [tally] : []), el("p", { className: "empty", textContent: q.words ? `Nothing found for “${q.words}”${q.by ? ` in what ${q.by} said` : ""}.` : `Nothing ${q.by} said is on record.` })]));
+  if (!q.words) return;  // nothing to be close in meaning to
   /* Lines that say it in other words, if the index has been built (Settings). They go
      under the exact matches, labelled, so those are never pushed down or mixed up. */
   let near;
   try {
-    near = await get(`/api/search/meaning?q=${encodeURIComponent(query)}`);
+    near = await get(searchUrl("/api/search/meaning", q));
   } catch (err) {
     return;  // the exact matches are already on the page
   }
@@ -3404,23 +3454,31 @@ function quickDraw() {
     addPages(pages.filter(([name]) => low.length >= 2 && name.toLowerCase().startsWith(low)));
     if (like.sure) addDays(like.days);
     const fresh = quickFound.query === query;
-    add("Find", "find", wide(`Search everything for “${query}”`, fresh && quickFound.words.length ? count(quickFound.words.length, "line") : ""),
+    const q = readQuery(query);
+    const find = q.by ? (q.words ? `Search what ${q.by} said for “${q.words}”` : `Everything ${q.by} said`)
+      : q.typed !== null ? (q.fits.length > 1 ? `Several people fit “${q.typed}”: type more of the name` : `No one you have named fits “${q.typed}”`)
+      : `Search everything for “${query}”`;
+    add("Find", "find", wide(find, fresh && quickFound.words.length ? count(quickFound.words.length, "line") : ""),
       () => { $("search").value = query; runSearch(query); });
+    // A name typed on its own offers that person's lines.
+    if (q.typed === null && low.length >= 2) peopleLike(low).slice(0, 3).forEach((name) => add("Said by", `who ${name}`,
+      wide(`Everything ${name} said`, `or type ${fromText(name, "a word")}`), () => { const text = fromText(name); $("search").value = text; runSearch(text); }));
     if (!like.sure) addDays(like.days);
     const thisYear = String(new Date().getFullYear());
     $("quickList").classList.toggle("years", fresh
       && [...quickFound.words.slice(0, 5), ...quickFound.near].some((u) => u.day.slice(0, 4) !== thisYear));
     if (fresh) {
-      const words = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig");
+      const sought = q.words.toLowerCase();
+      const words = new RegExp(`(${q.words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "ig");
       const when = (u) => `${(u.day.slice(0, 4) === String(new Date().getFullYear()) ? briefDay : briefDayYear).format(new Date(dayStart(u.day)))}, ${clock.format(new Date(u.start))}`;
       const hit = (group, u, mark) => {
         // Long lines start a little before the words, so the match is in view.
-        const at = mark ? u.text.toLowerCase().indexOf(low) : 0;
+        const at = mark ? u.text.toLowerCase().indexOf(sought) : 0;
         const text = at > 50 ? `…${u.text.slice(at - 35)}` : u.text;
         const said = el("p", { title: u.text }, ...(mark ? text.split(words).map((part, n) => n % 2 ? el("mark", { textContent: part }) : part) : [text]));
         add(group, `line ${u.id}`, el("div", { className: "row" }, el("time", { textContent: when(u) }), said), () => openDay(u.day, u.id));
       };
-      quickFound.words.slice(0, 5).forEach((u) => hit("Said in these words", u, true));
+      quickFound.words.slice(0, 5).forEach((u) => hit(q.by ? `Said by ${q.by}` : "Said in these words", u, Boolean(q.words)));
       const exact = new Set(quickFound.words.map((u) => u.id));
       quickFound.near.filter((u) => !exact.has(u.id)).slice(0, 3).forEach((u) => hit("Close in meaning", u, false));
     }
@@ -3465,6 +3523,7 @@ function openQuick(words = "") {
   quickOn = null;
   quickFound = { query: null, words: [], near: [] };
   quickDraw();
+  loadPeople();  // names may have been given since the page loaded
   quick.showModal();
   quickIn.focus();
   if (words) { quickIn.select(); quickIn.dispatchEvent(new Event("input")); }
@@ -3479,12 +3538,15 @@ quickIn.addEventListener("input", () => {
   if (!query) return;
   quickTimer = setTimeout(async () => {
     try {
-      const words = await get(`/api/search?q=${encodeURIComponent(query)}`);
+      const q = readQuery(query);
+      if (q.typed !== null && !q.by) return;  // the row says why; there is nothing to look up
+      const words = await get(searchUrl("/api/search", q));
       if (seq !== quickSeq || !quick.open) return;
       quickFound = { query, words, near: [] };
       quickDraw();
+      if (!q.words) return;
       // Lines that say it in other words, if the index has been built (Settings).
-      const near = await get(`/api/search/meaning?q=${encodeURIComponent(query)}`);
+      const near = await get(searchUrl("/api/search/meaning", q));
       if (seq !== quickSeq || !quick.open) return;
       quickFound = { query, words, near: near.lines };
       quickDraw();
@@ -3566,6 +3628,7 @@ window.addEventListener("hashchange", () => {
 });
 
 (async () => {
+  loadPeople();
   try {
     days = await get("/api/days");
   } catch (err) {

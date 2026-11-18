@@ -87,6 +87,20 @@ def test_search_is_literal_and_case_insensitive(site):
     assert json.loads(site("/api/search?q=%25")[2]) != [] and json.loads(site("/api/search?q=")[2]) == []
 
 
+def test_search_can_be_kept_to_one_named_person(site):
+    assert len(json.loads(site("/api/search?q=JOSEPH")[2])) == 2
+    site("/api/speakers/1", JSON, b'{"name": "Andrei"}')
+    mine = json.loads(site("/api/search?q=&by=andrei")[2])  # no words: everything that person said
+    assert mine and {hit["speaker"]["name"] for hit in mine} == {"Andrei"}
+    both = json.loads(site("/api/search?q=buy&by=Andrei")[2])
+    assert both and all("buy" in hit["text"].lower() and hit["speaker"]["name"] == "Andrei" for hit in both)
+    assert len(both) <= len(mine)
+    assert json.loads(site("/api/search?q=buy&by=Nobody")[2]) == []
+    assert json.loads(site("/api/search?q=&by=")[2]) == []
+    # A name is matched whole: "%" in it is not a wildcard.
+    assert json.loads(site("/api/search?q=&by=%25")[2]) == []
+
+
 def test_audio_supports_ranges(site):
     path = json.loads(site("/api/day/2026-11-13")[2])[0]["audio"]
     status, headers, body = site(path)

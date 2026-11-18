@@ -65,6 +65,13 @@ there, or any words to see the first lines that contain them, with lines
 close in meaning underneath if that index is built. Arrow keys move, Enter
 opens, and the last row hands what you typed to Ask as a question, unsent.
 
+**What one person said.** Start a search with `from:` and the name of someone
+you have named, as in `from:elena pilot` or `from:"Elena Ruiz" pilot`, to see
+only their lines; `from:elena` alone lists everything they said. Typing a
+name in quick find offers the same. The "Said by" chip above the results
+takes the filter off. It finds only lines tagged with that name, and a name
+given in one recording does not yet carry to that voice elsewhere.
+
 **Appearance.** Light or dark follows your computer, or choose one under
 Settings, Appearance. The layout adapts to a phone-sized window.
 
