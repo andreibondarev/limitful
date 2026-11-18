@@ -41,10 +41,14 @@ where each open reminder came up. Pointing at a conversation lights up its
 stretch of the strip, and pointing at the strip names the conversation there.
 Click the strip to jump to that moment; click a pin to go to the line.
 
-**A conversation.** Open one to read it: the transcript under its section
-headings, each speaker's turn set as a paragraph in that speaker's colour.
-Its summary takes the recap's place beside it while you read, above the
-day's reminders, which are kept, dismissed or ticked off right there. Click a
+**A conversation.** Open one and it shows its **Notes**: what it came to, and
+an outline of what it covered, each topic opening the transcript where it
+begins. Switch to **Transcript** to read it all, under its section headings,
+each speaker's turn set as a paragraph in that speaker's colour; the side you
+choose is where the next conversation opens. A conversation with no notes
+opens on its transcript. While you read the transcript its summary takes the
+recap's place beside it, above the day's reminders, which are kept, dismissed
+or ticked off right there. Click a
 speaker's name to say who it is; people you have already named are suggested
 as you type. The pencil beside the title renames the conversation. Click any sentence to hear it; playback
 carries on through the conversation, with a timeline to jump around in. The

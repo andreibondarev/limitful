@@ -275,7 +275,6 @@
   /* Beside the day, an open conversation's summary takes the recap's place. Where the
      side column sits above the conversations instead, the summary stays inside its card. */
   @media (min-width: 1101px) {
-    .card .brief { display: none; }
     .glance.talking > .recap:not(.talk) { display: none; }
   }
   @media (max-width: 1100px) { .glance > .recap.talk { display: none; } }
@@ -329,13 +328,26 @@
   .card .body { padding: 0 0 1.4rem; }
   /* An open conversation keeps its title in view while you read down it. */
   .card[open] > summary { position: sticky; top: var(--head, 10rem); z-index: 1; background: var(--paper); box-shadow: 0 1px 0 var(--rule); }
-  .card .brief {
-    margin: 0.2rem 0 0.7rem var(--gutter); padding: 0.8rem 1rem; max-width: 68ch;
-    border-radius: 12px; background: color-mix(in srgb, var(--accent) 6%, transparent);
+  /* Above an open conversation: Notes or Transcript, and what can be done with it. */
+  .card .viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.4rem 0 0 var(--gutter); }
+  .card .seg { display: inline-flex; padding: 3px; border: 1px solid var(--rule); border-radius: 999px; }
+  .card .seg button { border: 0; border-radius: 999px; background: none; padding: 0.15rem 0.8rem; cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+  .card .seg button:hover { color: var(--ink); }
+  .card .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  /* Notes: what the conversation came to, and what it covered. */
+  .card .notes { margin: 0.9rem 0 0 var(--gutter); max-width: 68ch; }
+  .card .notes .points { margin: 0 0 0.4rem; padding-left: 1.2rem; font-family: var(--voice); font-size: 1.15rem; line-height: 1.5; }
+  .card .notes .points li { margin-bottom: 0.3rem; }
+  .card .notes h4 { margin: 1.1rem 0 0.3rem; }
+  .card .notes .covered { list-style: none; margin: 0; padding: 0; }
+  .card .notes .covered button {
+    display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 0.5rem; align-items: baseline; width: 100%;
+    border: 0; background: none; padding: 0.22rem 0; cursor: pointer; text-align: left; color: var(--ink);
   }
-  .card .brief > ul { margin: 0; padding-left: 1.1rem; line-height: 1.5; }
-  .card .copy { margin-left: var(--gutter); }
-  .card .copy { margin-top: 0.4rem; }
+  .card .notes .covered time { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+  .card .notes .covered span { font-family: var(--voice); font-size: 1.12rem; line-height: 1.35; }
+  .card .notes .covered .sub span { padding-left: 1rem; font-size: 1.02rem; color: var(--muted); }
+  .card .notes .covered button:hover span { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
   .card h3 {
     margin: 1.6rem 0 0.2rem var(--gutter); max-width: 68ch;
     font-family: var(--voice); font-size: 1.18rem; font-weight: 600; line-height: 1.3;
@@ -1944,7 +1956,7 @@ function renderDay() {
     const line = document.querySelector("header").getBoundingClientRect().bottom + 48;
     let reading = null, below = null;
     for (const g of groups) {
-      if (!openCards.has(g.key) || !hasBrief(g)) continue;
+      if (!openCards.has(g.key) || !hasBrief(g) || viewOf(g) !== "transcript") continue;  // in Notes it is already in the card
       const at = $(`g${g.key}`)?.getBoundingClientRect();
       if (!at) continue;
       if (at.top <= line && at.bottom > line) { reading = g; break; }
@@ -2128,6 +2140,15 @@ function lengthOf(ms) {
 const PART_ICONS = { Morning: "morning", Afternoon: "bright", Evening: "evening", Night: "night" };
 /* A conversation with a summary of its own to show. */
 const hasBrief = (g) => !g.sections.length && g.summary.length > 0;
+/* An open conversation shows its Notes (what it came to, what it covered) or its Transcript.
+   The side last chosen is where the next one opens; one sent to a line shows its transcript. */
+// An imported conversation's "summary" is only its topic headings over again; those go in the outline.
+const pointsOf = (g) => g.summary.filter((t) => !g.sections.some((heading) => heading.title === t));
+const hasNotes = (g) => pointsOf(g).length > 0 || g.sections.length > 0;
+let viewWanted = "notes";
+try { if (localStorage.getItem("limitful-view") === "transcript") viewWanted = "transcript"; } catch { /* notes first */ }
+const viewChosen = new Map();  // conversation key -> the side it was last put on, while the page is open
+const viewOf = (g) => hasNotes(g) ? (viewChosen.get(g.key) || viewWanted) : "transcript";
 let refreshTalk = () => {};  // set by the day view: shows the summary of the conversation being read
 let talkTick = 0;
 window.addEventListener("scroll", () => {
@@ -2218,19 +2239,14 @@ function saying(u) {
 const TURN_PAUSE_MS = 3000, TURN_CHARS = 480;  // a pause, or this much text, starts a new paragraph
 
 function cardBody(g) {
-  const nodes = [];
-  // What the conversation came to, before the words themselves.
-  const brief = el("div", { className: "brief" });
-  if (hasBrief(g)) brief.append(el("ul", {}, ...g.summary.map((t) => el("li", { textContent: t }))));
-  if (brief.childElementCount) nodes.push(brief);
-
+  const nodes = [];  // the transcript
+  const marks = [];  // its headings, in order, for the outline in Notes to jump to
   const copy = el("button", { className: "copy", textContent: "Copy as Markdown" });
   copy.addEventListener("click", async () => {
     try { await navigator.clipboard.writeText(asMarkdown(g)); copy.textContent = "Copied"; }
     catch { copy.textContent = "Could not copy"; }
     setTimeout(() => { copy.textContent = "Copy as Markdown"; }, 2000);
   });
-  nodes.push(copy);
 
   const labelled = g.own.some((u) => u.speaker);
   const tint = dayTint;
@@ -2242,7 +2258,9 @@ function cardBody(g) {
     let fresh = !before;
     while (headings.length && headings[0].start <= u.start) {
       const heading = headings.shift();
-      nodes.push(el(heading.level === 2 ? "h3" : "h4", { textContent: heading.title }));
+      const mark = el(heading.level === 2 ? "h3" : "h4", { textContent: heading.title });
+      marks.push(mark);
+      nodes.push(mark);
       fresh = true;
     }
     const gap = before && u.start - before.end > QUIET_MS;
@@ -2265,7 +2283,36 @@ function cardBody(g) {
     turn.lastChild.append(saying(u), " ");
     chars += u.text.length;
   });
-  return nodes;
+  const words = el("div", { className: "words" }, ...nodes);
+  if (!hasNotes(g)) return [el("div", { className: "viewbar" }, copy), words];
+
+  const notes = el("div", { className: "notes" });
+  const sides = { notes: el("button", { textContent: "Notes" }), transcript: el("button", { textContent: "Transcript" }) };
+  g.show = (view) => {
+    viewChosen.set(g.key, view);
+    notes.hidden = view !== "notes";
+    words.hidden = view === "notes";
+    for (const [name, button] of Object.entries(sides)) button.setAttribute("aria-pressed", String(name === view));
+    refreshTalk();
+  };
+  for (const [name, button] of Object.entries(sides)) button.addEventListener("click", () => {
+    viewWanted = name;
+    try { localStorage.setItem("limitful-view", name); } catch { /* applies until the page closes */ }
+    g.show(name);
+  });
+  const points = pointsOf(g);
+  if (points.length) notes.append(el("ul", { className: "points" }, ...points.map((t) => el("li", { textContent: t }))));
+  if (g.sections.length) {
+    // The outline: each topic opens the transcript where it begins.
+    notes.append(el("h4", { textContent: "What it covered" }), el("ul", { className: "covered" }, ...g.sections.map((heading, n) => {
+      const to = el("button", { className: heading.level === 2 ? "" : "sub", title: "Read from here" },
+        el("time", { textContent: clock.format(new Date(heading.start)) }), el("span", { textContent: heading.title }));
+      to.addEventListener("click", () => { g.show("transcript"); marks[n]?.scrollIntoView({ block: "center" }); });
+      return el("li", {}, to);
+    })));
+  }
+  g.show(viewOf(g));
+  return [el("div", { className: "viewbar" }, el("div", { className: "seg", role: "group", ariaLabel: "What to show" }, sides.notes, sides.transcript), copy), notes, words];
 }
 
 function asMarkdown(g) {
@@ -2286,6 +2333,7 @@ function reveal(id, mark) {
   const g = groups.find((x) => x.own.some((u) => u.id === id));
   if (!g) return;
   g.setOpen(true);
+  if (g.show) g.show("transcript");  // a line is in the transcript, whichever side was showing
   const node = $(`u${id}`);
   if (!node) return;
   node.scrollIntoView({ block: "center" });
