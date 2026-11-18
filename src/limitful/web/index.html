@@ -339,6 +339,25 @@
   .card .notes .points { margin: 0 0 0.4rem; padding-left: 1.2rem; font-family: var(--voice); font-size: 1.15rem; line-height: 1.5; }
   .card .notes .points li { margin-bottom: 0.3rem; }
   .card .notes h4 { margin: 1.1rem 0 0.3rem; }
+  .card .notes .taken { list-style: none; margin: 0 0 0.4rem; padding: 0; }
+  .card .notes .taken li { display: grid; grid-template-columns: 6.4rem minmax(0, 1fr) auto; gap: 0.7rem; align-items: baseline; padding: 0.3rem 0; }
+  .card .notes .taken b { font-size: 0.8rem; font-weight: 600; color: var(--kind); }
+  .card .notes .taken span { font-family: var(--voice); font-size: 1.15rem; line-height: 1.42; }
+  .card .notes .taken .at {
+    border: 1px dashed var(--rule); border-radius: 999px; background: none; padding: 0.05rem 0.55rem; cursor: pointer;
+    font-size: 0.78rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .card .notes .taken .at:hover { border-color: var(--accent); color: var(--accent); }
+  .kind-decided { --kind: var(--accent); } .kind-todo { --kind: var(--who-4); } .kind-open { --kind: var(--who-1); } .kind-noted { --kind: var(--muted); }
+  @media (max-width: 600px) {
+    .card .notes .taken li { grid-template-columns: minmax(0, 1fr) auto; }
+    .card .notes .taken b { grid-column: 1 / -1; }
+    .card .notes .taken b:empty { display: none; }
+  }
+  .card .notes .nothing { margin: 0; color: var(--muted); }
+  .card .notes .topics { margin-top: 1rem; }
+  .card .notes .topics > summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+  .card .notes .topics[open] > summary { margin-bottom: 0.3rem; }
   .card .notes .covered { list-style: none; margin: 0; padding: 0; }
   .card .notes .covered button {
     display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: 0.5rem; align-items: baseline; width: 100%;
@@ -2144,7 +2163,9 @@ const hasBrief = (g) => !g.sections.length && g.summary.length > 0;
    The side last chosen is where the next one opens; one sent to a line shows its transcript. */
 // An imported conversation's "summary" is only its topic headings over again; those go in the outline.
 const pointsOf = (g) => g.summary.filter((t) => !g.sections.some((heading) => heading.title === t));
-const hasNotes = (g) => pointsOf(g).length > 0 || g.sections.length > 0;
+// Notes proper, once written: what was decided, what is to do, what is still open, what is worth noting.
+const NOTE_KINDS = [["decided", "Decided"], ["todo", "To do"], ["open", "Still open"], ["noted", "Worth noting"]];
+const hasNotes = (g) => (g.notes || []).length > 0 || pointsOf(g).length > 0 || g.sections.length > 0;
 let viewWanted = "notes";
 try { if (localStorage.getItem("limitful-view") === "transcript") viewWanted = "transcript"; } catch { /* notes first */ }
 const viewChosen = new Map();  // conversation key -> the side it was last put on, while the page is open
@@ -2301,15 +2322,34 @@ function cardBody(g) {
     g.show(name);
   });
   const points = pointsOf(g);
-  if (points.length) notes.append(el("ul", { className: "points" }, ...points.map((t) => el("li", { textContent: t }))));
+  const written = g.notes || [];
+  if (written.length) {
+    // By kind, each with the moment it was said: a note can always be checked against the words.
+    const rows = [];
+    for (const [kind, label] of NOTE_KINDS) written.filter((note) => note.kind === kind).forEach((note, n) => {
+      const row = el("li", { className: `kind-${kind}` }, el("b", { textContent: n ? "" : label }), el("span", { textContent: note.text }));
+      const said = note.line && g.own.find((u) => u.id === note.line);
+      if (said) {
+        const at = el("button", { className: "at", title: "Read where this was said" }, clock.format(new Date(said.start)));
+        at.addEventListener("click", () => reveal(said.id, true));
+        row.append(at);
+      }
+      rows.push(row);
+    });
+    notes.append(el("ul", { className: "taken" }, ...rows));
+  } else if (points.length) notes.append(el("ul", { className: "points" }, ...points.map((t) => el("li", { textContent: t }))));
+  else if (g.notes) notes.append(el("p", { className: "nothing", textContent: "Nothing in this one was worth a note." }));
   if (g.sections.length) {
     // The outline: each topic opens the transcript where it begins.
-    notes.append(el("h4", { textContent: "What it covered" }), el("ul", { className: "covered" }, ...g.sections.map((heading, n) => {
+    const outline = el("ul", { className: "covered" }, ...g.sections.map((heading, n) => {
       const to = el("button", { className: heading.level === 2 ? "" : "sub", title: "Read from here" },
         el("time", { textContent: clock.format(new Date(heading.start)) }), el("span", { textContent: heading.title }));
       to.addEventListener("click", () => { g.show("transcript"); marks[n]?.scrollIntoView({ block: "center" }); });
       return el("li", {}, to);
-    })));
+    }));
+    // Beside notes proper the outline is only a way around, so it stays folded.
+    if (g.notes) notes.append(el("details", { className: "topics" }, el("summary", { textContent: count(g.sections.length, "topic") }), outline));
+    else notes.append(el("h4", { textContent: "What it covered" }), outline);
   }
   g.show(viewOf(g));
   return [el("div", { className: "viewbar" }, el("div", { className: "seg", role: "group", ariaLabel: "What to show" }, sides.notes, sides.transcript), copy), notes, words];

@@ -326,3 +326,43 @@ def test_clean_day():
     for bad in ({}, {"headline": " "}, ["x"], {"headline": 3}):
         with pytest.raises(DigestError):
             clean_day(bad)
+
+
+def test_notes_are_written_for_a_day_and_cite_their_lines(store):
+    say(store, 0, LONG); say(store, 1, LONG)
+    say(store, 600, "later")
+    store.digest_pending(Canned())
+    # An imported conversation can be done and still hold too little to note.
+    store.db.execute("INSERT INTO conversations (start_ms, end_ms, status, title, summary) VALUES (?, ?, 'done', 'Hi', '[]')",
+                     (T0 + 30 * MIN, T0 + 31 * MIN))
+    say(store, 30, "hello")
+
+    class Noter:
+        name = "noter"
+        seen = 0
+
+        def notes(self, transcript):
+            Noter.seen += 1
+            return digest.clean_notes({"notes": [
+                {"kind": "decided", "text": "  The report  stays under ten pages. ", "line": 2},
+                {"kind": "nonsense", "text": "Tables go in an appendix.", "line": 99},
+                {"kind": "todo", "text": "   ", "line": 1},
+            ]})
+
+    day = int(datetime(2026, 11, 13).timestamp() * 1000)
+    before = store.conversations(day, day + 24 * 60 * MIN)
+    assert [talk["notes"] for talk in before] == [None, None]  # not written yet
+    assert store.write_notes(Noter(), day, day + 24 * 60 * MIN) == 2 and Noter.seen == 1
+    first, short = store.conversations(day, day + 24 * 60 * MIN)
+    second_line = store.db.execute("SELECT id FROM utterances ORDER BY start_ms LIMIT 1 OFFSET 1").fetchone()[0]
+    assert first["notes"] == [
+        {"kind": "decided", "text": "The report stays under ten pages.", "line": second_line},
+        {"kind": "noted", "text": "Tables go in an appendix.", "line": None},  # an unknown kind, a line that is not there
+    ]
+    assert short["notes"] == []  # looked at, nothing to note
+    assert (first["title"], first["summary"]) == (before[0]["title"], before[0]["summary"])
+    # Written once: a second run leaves them alone unless asked to redo.
+    assert store.write_notes(Noter(), day, day + 24 * 60 * MIN) == 0
+    assert store.write_notes(Noter(), day, day + 24 * 60 * MIN, redo=True) == 2
+    with pytest.raises(digest.DigestError):
+        digest.clean_notes({"notes": "none"})

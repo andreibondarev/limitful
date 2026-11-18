@@ -461,6 +461,37 @@ def _summarizer(args):
         raise PendantError(str(err)) from None
 
 
+async def _cmd_notes(args) -> int:
+    from datetime import datetime, timedelta
+
+    from .digest import DigestError
+
+    summarizer = _summarizer(args)
+    store = Store(args.data_dir)
+    try:
+        total = 0
+        for day in args.day:
+            try:
+                start = datetime.strptime(day, "%Y-%m-%d")
+            except ValueError:
+                raise PendantError(f"{day} is not a day; write it as YYYY-MM-DD") from None
+            lo, hi = int(start.timestamp() * 1000), int((start + timedelta(days=1)).timestamp() * 1000)
+
+            def progress(done: int, of: int, day: str = day) -> None:
+                print(f"\r  {day}: {done}/{of} conversations", end="", file=sys.stderr, flush=True)
+
+            try:
+                total += await asyncio.to_thread(store.write_notes, summarizer, lo, hi, args.redo, progress)
+            except DigestError as err:
+                print(file=sys.stderr)
+                raise PendantError(f"{err}. Notes already written were kept.") from None
+            print(file=sys.stderr)
+        print(f"Wrote notes for {total} conversation(s) with {summarizer.name}.")
+        return 0
+    finally:
+        store.close()
+
+
 async def _cmd_digest(args) -> int:
     from .digest import DigestError
 
@@ -788,6 +819,13 @@ def main(argv: list[str] | None = None) -> int:
                    help="also write a recap for every finished day that lacks one, imported history "
                         "included (sends those days' titles and summaries to the provider)")
     p.set_defaults(func=_cmd_digest)
+
+    p = sub.add_parser("notes", help="write notes (decided, to do, still open) for a day's conversations")
+    data_args(p)
+    llm_args(p)
+    p.add_argument("day", nargs="+", help="the day or days, as YYYY-MM-DD")
+    p.add_argument("--redo", action="store_true", help="write them again for conversations that have notes")
+    p.set_defaults(func=_cmd_notes)
 
     p = sub.add_parser("demo", help="make a folder of made-up conversations to try the Lifelog with")
     p.add_argument("--data-dir", type=Path, default=Path.home() / "Limitful-demo",

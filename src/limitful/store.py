@@ -155,6 +155,8 @@ _MIGRATIONS = [
     # Which lines share a set of per-conversation speaker numbers: an imported
     # conversation, or one request to a hosted transcription service.
     ("utterances", "speaker_group", "TEXT"),
+    # A conversation's notes, once written: JSON [{"kind", "text", "line": utterance id or null}].
+    ("conversations", "notes", "TEXT"),
 ]
 
 # A hosted service's speaker numbers only hold within one request, so recordings
@@ -1046,6 +1048,43 @@ class Store:
         )
         return transcript, sum(len(row[2].split()) for row in rows), [row[0] for row in rows]
 
+    def write_notes(
+        self,
+        summarizer: Summarizer,
+        lo_ms: int,
+        hi_ms: int,
+        redo: bool = False,
+        on_progress: Callable[[int, int], None] | None = None,
+    ) -> int:
+        """Write notes for the conversations that began in [lo_ms, hi_ms) and have none.
+
+        Returns how many were written. Titles, summaries and reminders are left
+        alone. A DigestError stops the run; notes already written are kept.
+        """
+        rows = self.db.execute(
+            "SELECT id, start_ms, end_ms FROM conversations WHERE status = 'done' "
+            "AND start_ms >= ? AND start_ms < ?" + ("" if redo else " AND notes IS NULL") + " ORDER BY start_ms",
+            (lo_ms, hi_ms)).fetchall()
+        done = 0
+        for n, (cid, start_ms, end_ms) in enumerate(rows, 1):
+            text, words, line_ids = self.conversation_text(start_ms, end_ms)
+            notes: list[dict] = []
+            if words >= MIN_DIGEST_WORDS:
+                try:
+                    notes = summarizer.notes(text)
+                except DigestDeclined:
+                    notes = []
+                for note in notes:
+                    # The model cites a line number; keep the line's own id.
+                    cited = note["line"]
+                    note["line"] = line_ids[cited - 1] if cited and 1 <= cited <= len(line_ids) else None
+            self.db.execute("UPDATE conversations SET notes = ? WHERE id = ?", (json.dumps(notes), cid))
+            self.db.commit()
+            done += 1
+            if on_progress:
+                on_progress(n, len(rows))
+        return done
+
     def link_reminders_to_lines(self) -> int:
         """Find the line each unlinked reminder came from, by its wording."""
         linked = 0
@@ -1202,18 +1241,19 @@ class Store:
 
     def conversations(self, lo_ms: int, hi_ms: int) -> list[dict]:
         rows = self.db.execute(
-            "SELECT id, start_ms, end_ms, title, summary FROM conversations "
+            "SELECT id, start_ms, end_ms, title, summary, notes FROM conversations "
             "WHERE status = 'done' AND start_ms >= ? AND start_ms < ? ORDER BY start_ms",
             (lo_ms, hi_ms),
         ).fetchall()
         out = []
-        for cid, start_ms, end_ms, title, summary in rows:
+        for cid, start_ms, end_ms, title, summary, notes in rows:
             (line_count,) = self.db.execute(
                 "SELECT COUNT(*) FROM utterances WHERE start_ms >= ? AND start_ms <= ?",
                 (start_ms, end_ms)).fetchone()
             out.append({
                 "id": cid, "start": start_ms, "end": end_ms, "title": title,
                 "summary": json.loads(summary or "[]"),
+                "notes": json.loads(notes) if notes is not None else None,  # None: not written yet
                 "lines": line_count,
                 "sections": [
                     {"start": at, "level": level, "title": heading}
