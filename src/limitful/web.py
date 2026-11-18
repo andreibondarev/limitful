@@ -831,6 +831,9 @@ class Library:
     def rename_speaker(self, speaker_id: int, name: str) -> int:
         return self._with_store(lambda store: store.rename_speaker(speaker_id, name))
 
+    def rename_conversation(self, conversation_id: int, title: str) -> str:
+        return self._with_store(lambda store: store.rename_conversation(conversation_id, title))
+
     def chats(self) -> list[dict]:
         return self._with_store(lambda store: store.chats())
 
@@ -992,7 +995,8 @@ def make_handler(library: Library):
             self._text(HTTPStatus.NOT_FOUND, "Not found.")
 
         def _post(self) -> None:
-            """POST /api/speakers/<id> {"name": ...} or /api/reminders/<id> {"status": ...}."""
+            """POST /api/speakers/<id> {"name": ...}, /api/reminders/<id> {"status": ...}
+            or /api/conversations/<id> {"title": ...}."""
             host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
             if host not in _LOCAL_HOSTS:
                 return self._text(HTTPStatus.FORBIDDEN, "This app only answers on localhost.")
@@ -1130,7 +1134,7 @@ def make_handler(library: Library):
                     return self._text(HTTPStatus.CONFLICT, str(err))
                 except ValueError as err:
                     return self._text(HTTPStatus.BAD_REQUEST, str(err))
-            match = (re.match(r"^/api/(speakers|reminders)/(\d+)$", path)
+            match = (re.match(r"^/api/(speakers|reminders|conversations)/(\d+)$", path)
                      or re.match(r"^/api/(lines)/(\d+)/speaker$", path))
             if not match:
                 return self._text(HTTPStatus.NOT_FOUND, "Not found.")
@@ -1146,6 +1150,11 @@ def make_handler(library: Library):
                         raise ValueError("a speaker needs a name")
                     change = library.rename_speaker if kind == "speakers" else library.assign_line_speaker
                     return self._json({"id": change(item, name[:80])})
+                if kind == "conversations":
+                    title = body.get("title", "")
+                    if not isinstance(title, str):
+                        raise ValueError("a conversation needs a title")
+                    return self._json({"id": item, "title": library.rename_conversation(item, title[:200])})
                 status = body.get("status")
                 if not isinstance(status, str):
                     raise ValueError("a reminder needs a status")

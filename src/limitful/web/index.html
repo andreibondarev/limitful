@@ -316,6 +316,15 @@
   .card > summary h2.untitled { color: var(--muted); font-style: italic; font-size: 1.12rem; }
   .card > summary:hover h2 { color: var(--accent); }
   .card[open] > summary h2 { color: var(--accent); }
+  /* Renaming: a pencil beside the title of an open conversation, then the title becomes a field. */
+  .card .rename { display: none; margin-left: 0.5rem; padding: 0.15rem; border: 0; border-radius: 4px; background: none; color: var(--muted); cursor: pointer; vertical-align: -0.1rem; }
+  .card[open] > summary .rename { display: inline-block; }
+  .card .rename:hover, .card .rename:focus-visible { color: var(--accent); }
+  .card > summary input.retitle {
+    display: block; width: 100%; max-width: 68ch; box-sizing: border-box; margin: -0.2rem 0 0 -0.4rem; padding: 0.1rem 0.35rem;
+    border: 1px solid var(--accent); border-radius: 4px; background: transparent; color: var(--ink);
+    font-family: var(--voice); font-size: 1.35rem; line-height: 1.25;
+  }
   .card .meta { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
   .card .body { padding: 0 0 1.4rem; }
   /* An open conversation keeps its title in view while you read down it. */
@@ -873,6 +882,7 @@ const ICONS = {
   ask: "M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z",
   reminders: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z M8 12.5l2.8 2.8L16 9.5",
   settings: "M4 7h9 M17 7h3 M4 17h3 M11 17h9 M15 4.5v5 M9 14.5v5",
+  rename: "M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z",
   refresh: "M20 12a8 8 0 1 1-2.6-5.9 M20 4v5h-5",
   sync: "M12 3v12 M7 10.5l5 5 5-5 M4 20h16",
   wave: "M3 12v0 M7 8.5v7 M11 5v14 M15 9v6 M19 11v2",
@@ -2127,12 +2137,13 @@ function card(g, longest = 0) {
   const body = el("div", { className: "body" });
   const length = el("i", { className: "len", hidden: !longest, title: lengthOf(g.end - g.start) });
   if (longest) length.style.width = `${Math.max(6, 100 * (g.end - g.start) / longest)}%`;
+  const heading = el("h2", { textContent: title, className: g.title ? "" : "untitled" });
+  const about = el("p", { className: "meta", textContent: meta.join(", ") });
+  if (g.id) heading.append(renameButton(g, heading, about));  // runs of lines with no summary have nothing to rename
   const box = el("details", { className: "card", id: `g${g.key}` },
     el("summary", {},
       el("div", { className: "when" }, el("time", { textContent: clock.format(new Date(g.start)) }), length),
-      el("div", {},
-        el("h2", { textContent: title, className: g.title ? "" : "untitled" }),
-        el("p", { className: "meta", textContent: meta.join(", ") }))),
+      el("div", {}, heading, about)),
     body);
   // The transcript is only built when the card is first opened: days can hold thousands of lines.
   const fill = () => { if (!body.childElementCount) { body.append(...cardBody(g)); markPlaying(); } };
@@ -2147,6 +2158,44 @@ function card(g, longest = 0) {
   box.firstChild.addEventListener("focus", () => lightUp(g));
   box.firstChild.addEventListener("blur", () => lightUp(null));
   return box;
+}
+
+/* The pencil beside an open conversation's title. It turns the title into a field: Enter keeps
+   what was typed, Escape or clicking away leaves the title as it was. */
+function renameButton(g, heading, about) {
+  const button = el("button", { className: "rename", title: "Rename this conversation", ariaLabel: "Rename this conversation" }, icon("rename", 16));
+  button.addEventListener("click", (e) => {
+    e.preventDefault(); e.stopPropagation();  // the title sits in the part that opens and closes the card
+    const input = el("input", { className: "retitle", value: g.title || "", maxLength: 200, ariaLabel: "Conversation title" });
+    const was = about.textContent;
+    let busy = false;
+    const cancel = () => { if (!busy && input.isConnected) { input.replaceWith(heading); about.textContent = was; } };
+    const save = async () => {
+      const value = input.value.trim().replace(/\s+/g, " ");
+      if (!value || value === g.title) { cancel(); return; }
+      busy = true;
+      try {
+        await post(`/api/conversations/${g.id}`, { title: value });
+        talks = await get(`/api/conversations/${day}`);
+        renderDay();
+      } catch (err) {
+        busy = false;
+        about.textContent = `Could not rename. ${sentence(err.message)}`;
+      }
+    };
+    heading.replaceWith(input);
+    about.textContent = "Enter to rename, Esc to leave it as it was.";
+    input.focus(); input.select();
+    input.addEventListener("click", (e) => e.preventDefault());  // typing here must not close the card
+    input.addEventListener("keyup", (e) => { if (e.key === " ") e.preventDefault(); });  // Firefox toggles on Space
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") cancel();
+      else if (e.key === "Enter") { e.preventDefault(); save(); }
+    });
+    input.addEventListener("blur", cancel);
+  });
+  return button;
 }
 
 /* One thing somebody said, set inline so a speaker's turn reads as a paragraph. Click to play. */
@@ -3487,7 +3536,7 @@ setInterval(async () => {
   try {
     days = await get("/api/days");
     const [fresh, freshTalks] = await Promise.all([get(`/api/day/${at}`), get(`/api/conversations/${at}`)]);
-    if (!onDay(at) || main.querySelector(".who input")) return;  // moved on, or a name is being typed
+    if (!onDay(at) || main.querySelector(".who input, input.retitle")) return;  // moved on, or a name or title is being typed
     if (fresh.length !== lines.length || freshTalks.length !== talks.length) {
       lines = fresh; talks = freshTalks; renderDay(); countReminders();
     }

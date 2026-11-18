@@ -46,7 +46,7 @@ headings, each speaker's turn set as a paragraph in that speaker's colour.
 Its summary takes the recap's place beside it while you read, above the
 day's reminders, which are kept, dismissed or ticked off right there. Click a
 speaker's name to say who it is; people you have already named are suggested
-as you type. Click any sentence to hear it; playback
+as you type. The pencil beside the title renames the conversation. Click any sentence to hear it; playback
 carries on through the conversation, with a timeline to jump around in. The
 title stays in view as you scroll, and the whole thing can be copied as
 Markdown.

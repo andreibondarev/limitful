@@ -935,6 +935,24 @@ class Store:
         self._rewrite_days("speaker_id = ?", (keep,))
         return keep
 
+    def rename_conversation(self, conversation_id: int, title: str) -> str:
+        """Give a conversation the title the user typed. Returns the title as kept.
+
+        Summarising only titles conversations it has not seen, so this is never overwritten.
+        """
+        title = " ".join(title.split())
+        if not title:
+            raise ValueError("a conversation needs a title")
+        found = self.db.execute(
+            "SELECT start_ms, end_ms FROM conversations WHERE id = ? AND status = 'done'",
+            (conversation_id,)).fetchone()
+        if found is None:
+            raise ValueError(f"there is no conversation {conversation_id}")
+        self.db.execute("UPDATE conversations SET title = ? WHERE id = ?", (title, conversation_id))
+        self.db.commit()
+        self._rewrite_days("start_ms >= ? AND start_ms <= ?", found)  # the title heads its lines in the transcript
+        return title
+
     def assign_line_speaker(self, utterance_id: int, name: str) -> int:
         """Say who spoke a line, here only.
 

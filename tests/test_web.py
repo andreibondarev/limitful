@@ -143,6 +143,19 @@ def test_rename_rejects_bad_requests(site):
     assert json.loads(site("/api/day/2026-11-13")[2])[0]["speaker"]["name"] == "Speaker 1"
 
 
+def test_a_conversation_can_be_renamed(site, tmp_path):
+    (talk,) = json.loads(site("/api/conversations/2026-11-13")[2])
+    status, _h, body = site(f"/api/conversations/{talk['id']}", JSON, b'{"title": "  Groceries,   then Joseph "}')
+    assert (status, json.loads(body)) == (200, {"id": talk["id"], "title": "Groceries, then Joseph"})
+    (after,) = json.loads(site("/api/conversations/2026-11-13")[2])
+    assert (after["title"], after["summary"]) == ("Groceries, then Joseph", talk["summary"])
+    assert site(f"/api/conversations/{talk['id']}", JSON, b'{"title": "   "}')[0] == 400
+    assert site(f"/api/conversations/{talk['id']}", JSON, b'{"title": 7}')[0] == 400
+    assert site("/api/conversations/999999", JSON, b'{"title": "X"}')[0] == 400
+    assert site(f"/api/conversations/{talk['id']}", dict(JSON, Host="evil.example"), b'{"title": "X"}')[0] == 403
+    assert json.loads(site("/api/conversations/2026-11-13")[2])[0]["title"] == "Groceries, then Joseph"
+
+
 def test_conversations_and_reminders(site):
     (talk,) = json.loads(site("/api/conversations/2026-11-13")[2])
     assert (talk["title"], talk["summary"], talk["start"]) == ("Shopping and a call", ["Oat milk is needed."], T0)
