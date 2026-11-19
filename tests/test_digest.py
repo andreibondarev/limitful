@@ -344,10 +344,10 @@ def test_notes_are_written_for_a_day_and_cite_their_lines(store):
         def notes(self, transcript):
             Noter.seen += 1
             return digest.clean_notes({"notes": [
-                {"kind": "decided", "text": "  The report  stays under ten pages. ", "line": 2},
-                {"kind": "nonsense", "text": "Tables go in an appendix.", "line": 99},
-                {"kind": "todo", "text": "   ", "line": 1},
-            ]})
+                {"text": "  The report  stays under ten pages. ", "line": 2},
+                {"text": "Tables go in an appendix.", "line": 99},
+                {"text": "   ", "line": 1},
+            ], "todos": [{"text": "Send the report by Thursday", "line": 1}]})
 
     day = int(datetime(2026, 11, 13).timestamp() * 1000)
     before = store.conversations(day, day + 24 * 60 * MIN)
@@ -356,13 +356,22 @@ def test_notes_are_written_for_a_day_and_cite_their_lines(store):
     first, short = store.conversations(day, day + 24 * 60 * MIN)
     second_line = store.db.execute("SELECT id FROM utterances ORDER BY start_ms LIMIT 1 OFFSET 1").fetchone()[0]
     assert first["notes"] == [
-        {"kind": "decided", "text": "The report stays under ten pages.", "line": second_line},
-        {"kind": "noted", "text": "Tables go in an appendix.", "line": None},  # an unknown kind, a line that is not there
+        {"text": "The report stays under ten pages.", "line": second_line},
+        {"text": "Tables go in an appendix.", "line": None},  # a line that is not there
     ]
     assert short["notes"] == []  # looked at, nothing to note
+    # The first already had a reminder from its summary, so its todo is not suggested twice.
+    assert [r["text"] for r in first["reminders"]] == ["Send the template"]
     assert (first["title"], first["summary"]) == (before[0]["title"], before[0]["summary"])
     # Written once: a second run leaves them alone unless asked to redo.
     assert store.write_notes(Noter(), day, day + 24 * 60 * MIN) == 0
     assert store.write_notes(Noter(), day, day + 24 * 60 * MIN, redo=True) == 2
     with pytest.raises(digest.DigestError):
         digest.clean_notes({"notes": "none"})
+    # A conversation with no reminders gets its todos as suggestions, each with its line.
+    store.db.execute("DELETE FROM reminders")
+    store.write_notes(Noter(), day, day + 24 * 60 * MIN, redo=True)
+    first = store.conversations(day, day + 24 * 60 * MIN)[0]
+    first_line = store.db.execute("SELECT id FROM utterances ORDER BY start_ms LIMIT 1").fetchone()[0]
+    assert [(r["text"], r["status"], r["line"]) for r in first["reminders"]] == [
+        ("Send the report by Thursday", "suggested", first_line)]

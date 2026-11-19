@@ -155,7 +155,7 @@ _MIGRATIONS = [
     # Which lines share a set of per-conversation speaker numbers: an imported
     # conversation, or one request to a hosted transcription service.
     ("utterances", "speaker_group", "TEXT"),
-    # A conversation's notes, once written: JSON [{"kind", "text", "line": utterance id or null}].
+    # A conversation's notes, once written: JSON [{"text", "line": utterance id or null}].
     ("conversations", "notes", "TEXT"),
 ]
 
@@ -1058,8 +1058,10 @@ class Store:
     ) -> int:
         """Write notes for the conversations that began in [lo_ms, hi_ms) and have none.
 
-        Returns how many were written. Titles, summaries and reminders are left
-        alone. A DigestError stops the run; notes already written are kept.
+        Returns how many were written. Titles and summaries are left alone. What
+        is still to be done becomes suggested reminders, but only for a
+        conversation that has none, so nothing is suggested twice. A DigestError
+        stops the run; notes already written are kept.
         """
         rows = self.db.execute(
             "SELECT id, start_ms, end_ms FROM conversations WHERE status = 'done' "
@@ -1068,17 +1070,22 @@ class Store:
         done = 0
         for n, (cid, start_ms, end_ms) in enumerate(rows, 1):
             text, words, line_ids = self.conversation_text(start_ms, end_ms)
-            notes: list[dict] = []
+            found: dict = {"notes": [], "todos": []}
             if words >= MIN_DIGEST_WORDS:
                 try:
-                    notes = summarizer.notes(text)
+                    found = summarizer.notes(text)
                 except DigestDeclined:
-                    notes = []
-                for note in notes:
-                    # The model cites a line number; keep the line's own id.
-                    cited = note["line"]
-                    note["line"] = line_ids[cited - 1] if cited and 1 <= cited <= len(line_ids) else None
-            self.db.execute("UPDATE conversations SET notes = ? WHERE id = ?", (json.dumps(notes), cid))
+                    pass
+            for item in [*found["notes"], *found["todos"]]:
+                # The model cites a line number; keep the line's own id.
+                cited = item["line"]
+                item["line"] = line_ids[cited - 1] if cited and 1 <= cited <= len(line_ids) else None
+            self.db.execute("UPDATE conversations SET notes = ? WHERE id = ?", (json.dumps(found["notes"]), cid))
+            if not self.db.execute("SELECT 1 FROM reminders WHERE conversation_id = ?", (cid,)).fetchone():
+                for todo in found["todos"]:
+                    self.db.execute(
+                        "INSERT INTO reminders (conversation_id, text, created_ms, utterance_id) VALUES (?, ?, ?, ?)",
+                        (cid, todo["text"], start_ms, todo["line"]))
             self.db.commit()
             done += 1
             if on_progress:

@@ -46,10 +46,11 @@ an outline of what it covered, each topic opening the transcript where it
 begins. Switch to **Transcript** to read it all, under its section headings,
 each speaker's turn set as a paragraph in that speaker's colour; the side you
 choose is where the next conversation opens. A conversation with no notes
-opens on its transcript. Notes proper sort what a conversation came to into
-Decided, To do, Still open and Worth noting, each with the moment it was said;
-for now they are written a day at a time with `limitful notes 2026-11-09`,
-which sends those conversations to the summary provider you chose. While you read the transcript its summary takes the
+opens on its transcript. Notes proper are a few sentences on what a
+conversation came to, the most important first, each with the moment it was
+said, and what is still to be done is suggested as reminders. For now they
+are written a day at a time with `limitful notes 2026-11-09`, which sends
+those conversations to the summary provider you chose. While you read the transcript its summary takes the
 recap's place beside it, above the day's reminders, which are kept, dismissed
 or ticked off right there. Click a
 speaker's name to say who it is; people you have already named are suggested
