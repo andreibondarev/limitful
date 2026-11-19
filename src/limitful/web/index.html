@@ -2350,7 +2350,7 @@ function cardBody(g) {
   else if (g.notes) notes.append(el("p", { className: "nothing", textContent: "Nothing in this one was worth a note." }));
   // What is still to be done after it: this conversation's reminders, kept or dismissed here too.
   const owed = g.reminders.filter((r) => r.status === "suggested" || r.status === "accepted");
-  if (g.notes && owed.length) notes.append(el("h4", { textContent: "To do" }), el("ul", { className: "owed" }, ...owed.map((r) =>
+  if (g.notes && owed.length) notes.append(el("h4", { textContent: "Reminders" }), el("ul", { className: "owed" }, ...owed.map((r) =>
     el("li", {}, el("span", { textContent: r.text }), reminderActs(r, () => { renderDay(); countReminders(); }, null)))));
   if (g.sections.length) {
     // The outline: each topic opens the transcript where it begins.
