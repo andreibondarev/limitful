@@ -22,8 +22,10 @@ All under `src/limitful/`.
 - `hosted.py`: hosted transcription with speaker labels (Deepgram).
 - `scoring.py`: scoring a service's speaker labels against Limitless's.
 - `speakers.py`: voice fingerprints for speaker labels.
-- `digest.py`: titles, summaries and reminders from a language model.
+- `digest.py`: titles, summaries, notes and reminders from a language model.
 - `ask.py`: question answering over the transcripts, with citations.
+- `mcp_server.py`: the same lookups, and a few more, offered to other apps over the Model
+  Context Protocol.
 - `search.py`: search by meaning: the local model and its index.
 - `upkeep.py`: long jobs the Lifelog can start and stop (re-timing, indexing).
 - `config.py`: saved settings, including the API keys.

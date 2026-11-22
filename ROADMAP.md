@@ -7,7 +7,8 @@ says what already works and what has not been verified.
 
 - Start at login on Linux and Windows (macOS is done).
 - Let Ask search reminders.
-- An MCP server, so other assistants can query the Lifelog.
+- Let an assistant act through the MCP server (keep or dismiss a reminder, rename a
+  conversation). Today it only reads.
 - Open firmware. Research only so far.
 - Import the chats in a Limitless export. They are already in the zip; only
   requesting the export has the December 1, 2026 deadline.

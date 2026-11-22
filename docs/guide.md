@@ -378,7 +378,9 @@ that your computer holds the only copy, so back up the data folder.
 | `--model`, `--language` | `transcribe`, `watch`, `retime` | Another Whisper model, or a fixed language such as `en` |
 | `--redo` | `transcribe` | Transcribe the pendant's recordings again |
 | `--reset`, `--unlink-imported` | `speakers` | Start speaker grouping over, or undo `--link-imported` |
-| `--provider`, `--llm-model` | `digest`, `watch`, `ask` | Use another summary writer or model for this run |
+| `--provider`, `--llm-model` | `digest`, `notes`, `watch`, `ask` | Use another summary writer or model for this run |
+| `--redo` | `notes` | Write notes again for conversations that have them |
+| `--data-dir` | `mcp` | Serve another Lifelog than the default |
 | `--interval`, `--no-transcribe` | `watch` | Seconds between attempts; download only |
 | `--port` | `serve`, `autostart` | Port for the Lifelog |
 
