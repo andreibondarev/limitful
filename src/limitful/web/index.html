@@ -335,6 +335,12 @@
   .card .seg button { border: 0; border-radius: 999px; background: none; padding: 0.15rem 0.8rem; cursor: pointer; font-size: 0.85rem; color: var(--muted); }
   .card .seg button:hover { color: var(--ink); }
   .card .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .card .viewbar .away { margin-left: auto; color: var(--muted); }
+  .card .viewbar .away:hover { border-color: var(--bad); color: var(--bad); }
+  .card .viewbar .danger { border-color: var(--bad); color: var(--bad); }
+  .card .viewbar .danger:hover:not(:disabled) { background: var(--bad); color: var(--paper); }
+  .card .viewbar .asking { flex: 1 1 16rem; font-size: 0.9rem; line-height: 1.4; }
+  .card .viewbar { max-width: 68ch; }
   /* Notes: what the conversation came to, and what it covered. */
   .card .notes { margin: 0.9rem 0 0 var(--gutter); max-width: 68ch; }
   .card .notes .points { margin: 0 0 0.4rem; padding-left: 1.2rem; font-family: var(--voice); font-size: 1.15rem; line-height: 1.5; }
@@ -2367,6 +2373,45 @@ function saying(u) {
 
 const TURN_PAUSE_MS = 3000, TURN_CHARS = 480;  // a pause, or this much text, starts a new paragraph
 
+/* "Delete…" on an open conversation. It asks first, in place, saying what goes: this cannot
+   be undone, and the audio goes with the words. */
+function deleteButton(g) {
+  const button = el("button", { className: "copy away", textContent: "Delete…" });
+  button.addEventListener("click", () => {
+    const bar = button.parentElement, was = [...bar.childNodes];
+    const sure = el("button", { className: "copy danger", textContent: "Delete for good" });
+    const no = el("button", { className: "copy", textContent: "Cancel" });
+    const what = g.id ? "this conversation" : "these lines";
+    const ask = el("span", { className: "asking", textContent: `Delete ${what}? Its audio, lines, notes and reminders go, and cannot be brought back.` });
+    bar.replaceChildren(ask, sure, no);
+    no.addEventListener("click", () => bar.replaceChildren(...was));
+    no.focus();
+    sure.addEventListener("click", async () => {
+      sure.disabled = no.disabled = true;
+      sure.textContent = "Deleting…";
+      try {
+        const last = g.own[g.own.length - 1];
+        await post("/api/forget", { start_ms: g.start, end_ms: Math.max(g.end, last ? last.start : g.end) });
+        if (playing && g.own.some((u) => u.id === playing.id)) { $("audio")?.pause?.(); playing = null; track = null; }
+        openCards.delete(g.key);
+        const at = day;
+        days = await get("/api/days");
+        [lines, talks] = await Promise.all([get(`/api/day/${at}`), get(`/api/conversations/${at}`)]);
+        if (!onDay(at)) return;
+        renderDay();
+        countReminders();
+        sayDone(g.id ? "Conversation deleted." : "Lines deleted.");
+      } catch (err) {
+        ask.textContent = `Could not delete. ${sentence(err.message)}`;
+        sure.remove();
+        no.disabled = false;
+        no.textContent = "Close";
+      }
+    });
+  });
+  return button;
+}
+
 function cardBody(g) {
   const nodes = [];  // the transcript
   const marks = [];  // its headings, in order, for the outline in Notes to jump to
@@ -2413,7 +2458,8 @@ function cardBody(g) {
     chars += u.text.length;
   });
   const words = el("div", { className: "words" }, ...nodes);
-  if (!hasNotes(g)) return [el("div", { className: "viewbar" }, copy), words];
+  const remove = deleteButton(g);
+  if (!hasNotes(g)) return [el("div", { className: "viewbar" }, copy, remove), words];
 
   const notes = el("div", { className: "notes" });
   const sides = { notes: el("button", { textContent: "Notes" }), transcript: el("button", { textContent: "Transcript" }) };
@@ -2462,7 +2508,7 @@ function cardBody(g) {
     else notes.append(el("h4", { textContent: "What it covered" }), outline);
   }
   g.show(viewOf(g));
-  return [el("div", { className: "viewbar" }, el("div", { className: "seg", role: "group", ariaLabel: "What to show" }, sides.notes, sides.transcript), copy), notes, words];
+  return [el("div", { className: "viewbar" }, el("div", { className: "seg", role: "group", ariaLabel: "What to show" }, sides.notes, sides.transcript), copy, remove), notes, words];
 }
 
 function asMarkdown(g) {

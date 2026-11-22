@@ -66,6 +66,14 @@ opens quick find (below); its "Search everything" row lists every hit across
 all days, each with the words marked, the line before and
 after, and the conversation it is from.
 
+**Deleting.** "Delete…" on an open conversation, or on a short moment, asks
+once and then removes it for good: the lines, the title, notes and reminders,
+its entries in search, and the audio. A recording that runs past the
+conversation has that part replaced with silence, so the rest keeps its
+timing. What is deleted stays deleted: syncing the pendant again does not
+bring it back. There is no undo, and it is refused while something else is
+running.
+
 **People.** The People button lists everyone you have named, most recently
 heard first, with how many conversations and days each was heard in and how
 long they spoke. Open a person for those conversations, or to search what

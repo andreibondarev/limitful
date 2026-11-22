@@ -24,6 +24,7 @@ All under `src/limitful/`.
 - `speakers.py`: voice fingerprints for speaker labels.
 - `digest.py`: titles, summaries, notes and reminders from a language model.
 - `ask.py`: question answering over the transcripts, with citations.
+- `forget.py`: deleting a stretch for good: lines, notes, reminders and the audio.
 - `mcp_server.py`: the same lookups, and a few more, offered to other apps over the Model
   Context Protocol.
 - `search.py`: search by meaning: the local model and its index.
