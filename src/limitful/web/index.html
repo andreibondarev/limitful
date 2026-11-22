@@ -484,15 +484,15 @@
   .welcome fieldset { border: 0; margin: 0; padding: 0; }
   @media (max-width: 560px) { .welcome .pairing { grid-template-columns: 1fr; justify-items: center; } .welcome h2 { font-size: 1.8rem; } }
   #status.failed { border-left-color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
-  .acts button, #remind, #settings, #ask, .pill {
+  .acts button, #remind, #who, #settings, #ask, .pill {
     border: 1px solid var(--rule); border-radius: 999px; background: transparent;
     padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
   }
   .acts button { padding: 0.12rem 0.6rem; font-size: 0.8rem; }
   .acts button.away:hover { border-color: var(--bad); color: var(--bad); }
   .acts button:not(.away):hover, #remind:hover, #settings:hover, .pill:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  #remind, #settings, #ask, .pill { padding: 0.4rem 0.85rem; font-size: inherit; }
-  #ask:hover { border-color: var(--accent); color: var(--accent); }
+  #remind, #who, #settings, #ask, .pill { padding: 0.4rem 0.85rem; font-size: inherit; }
+  #ask:hover, #who:hover { border-color: var(--accent); color: var(--accent); }
   #paused {
     border: 0; border-radius: 999px; padding: 0.4rem 0.85rem; cursor: pointer; font-weight: 600;
     background: var(--mark); color: var(--mark-ink);
@@ -704,7 +704,37 @@
   .setup .row.light input { flex: 0 1 16rem; accent-color: var(--accent); }
   .setup .row.light output { min-width: 3rem; color: var(--ink); font-variant-numeric: tabular-nums; }
   .setup .small, .settings > div > .small { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
-  #remind[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  #remind[aria-pressed="true"], #who[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  /* People: everyone who has been named, and where each was heard. */
+  .folk { max-width: 52rem; }
+  .folk .lede { margin: 0 0 0.3rem; font-family: var(--voice); font-size: 1.45rem; line-height: 1.3; }
+  .folk .small { margin: 0 0 1.4rem; color: var(--muted); font-size: 0.9rem; line-height: 1.45; max-width: 44rem; }
+  .folk details { border-top: 1px solid var(--rule); }
+  .folk details:last-of-type { border-bottom: 1px solid var(--rule); }
+  .folk summary { display: grid; grid-template-columns: minmax(0, 1fr) 9rem 5.5rem; gap: 1rem; align-items: center; padding: 0.8rem 0; cursor: pointer; list-style: none; }
+  .folk summary::-webkit-details-marker { display: none; }
+  .folk summary b { display: block; font-family: var(--voice); font-size: 1.3rem; font-weight: 400; line-height: 1.25; }
+  .folk summary:hover b, .folk details[open] summary b { color: var(--accent); }
+  .folk summary small { display: block; margin-top: 0.1rem; color: var(--muted); font-size: 0.85rem; }
+  .folk summary time { color: var(--muted); font-size: 0.85rem; text-align: right; }
+  .folk .share { height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .folk .share i { display: block; height: 100%; border-radius: 3px; background: color-mix(in srgb, var(--accent) 65%, transparent); }
+  .folk .heard { padding: 0 0 1rem; }
+  .folk .heard .copy { margin: 0 0 0.5rem; }
+  .folk .heard ul { list-style: none; margin: 0; padding: 0; }
+  .folk .heard li button {
+    display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) auto; gap: 0.8rem; align-items: baseline; width: 100%;
+    border: 0; background: none; padding: 0.3rem 0; cursor: pointer; text-align: left; color: var(--ink);
+  }
+  .folk .heard li time, .folk .heard li small { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+  .folk .heard li span { font-family: var(--voice); font-size: 1.1rem; line-height: 1.35; }
+  .folk .heard li button:hover span { color: var(--accent); }
+  @media (max-width: 620px) {
+    .folk summary { grid-template-columns: minmax(0, 1fr) 4.5rem; }
+    .folk .share { display: none; }
+    .folk .heard li button { grid-template-columns: minmax(0, 1fr) auto; }
+    .folk .heard li time { grid-column: 1 / -1; }
+  }
   .quiet {
     margin: 0.9rem 0 0.9rem var(--gutter);
     color: var(--muted); font-size: 0.82rem;
@@ -844,6 +874,7 @@
     </div>
     <button id="paused" hidden title="Audio is not being kept. Click to open Settings."><span>Paused</span></button>
     <button id="ask" aria-pressed="false"><span>Ask</span></button>
+    <button id="who" aria-pressed="false"><span>People</span></button>
     <button id="remind" aria-pressed="false"><span id="remindLabel">Reminders</span></button>
     <button id="settings" aria-pressed="false" aria-label="Settings" title="Settings"></button>
     <input type="file" id="file" accept=".zip,application/zip" hidden>
@@ -899,6 +930,7 @@ let wanted = null;    // { line, talk }: what to reveal after loading a day
 let searching = false;
 let talks = [];       // summarised conversations of the day
 let reminding = false;
+let peopling = false;   // the People page is showing
 let configuring = false;
 let asking = false;
 let chat = [];        // the Ask thread: [{ role, content, lines }]
@@ -1051,7 +1083,7 @@ function pendantDrawing(width = 108) {
 async function showWelcome(step = "start", fromSettings = false) {
   leaveWelcome();
   welcoming = true;
-  searching = reminding = configuring = asking = false;
+  searching = reminding = peopling = configuring = asking = false;
   document.querySelector("header").classList.add("plain");
   for (const id of ["ask", "remind", "settings"]) $(id).setAttribute("aria-pressed", "false");
   visit("#welcome");
@@ -1547,14 +1579,79 @@ async function countReminders() {
 }
 
 /* Reminders: suggestions to sort through on the left, your own list on the right. */
+/* People: everyone who has been named, most recently heard first. Opening one lists the
+   conversations they were heard in. */
+async function showPeople() {
+  leaveWelcome();
+  document.title = "Lifelog, people";
+  document.querySelector("header").classList.add("plain");
+  searching = reminding = configuring = asking = false;
+  peopling = true;
+  for (const id of ["ask", "remind", "settings"]) $(id).setAttribute("aria-pressed", "false");
+  $("who").setAttribute("aria-pressed", "true");
+  visit("#people");
+  $("title").textContent = "People";
+  $("search").value = "";
+  strip.replaceChildren();
+  let all;
+  try { all = await get("/api/persons"); }
+  catch (err) {
+    main.replaceChildren(el("p", { className: "empty", textContent: `Could not load people. ${sentence(err.message)}` }));
+    return;
+  }
+  if (!peopling) return;  // moved on while it loaded
+  if (!all.length) {
+    main.replaceChildren(el("p", { className: "empty", textContent: "No one has been named yet. Open a conversation and click a speaker's name to say who it is." }));
+    return;
+  }
+  const most = Math.max(...all.map((p) => p.ms));
+  const when = (ms) => {
+    const key = dayKey(new Date(ms)), today = dayKey(new Date());
+    return key === today ? "Today" : (key.slice(0, 4) === today.slice(0, 4) ? briefDay : briefDayYear).format(new Date(ms));
+  };
+  const rows = all.map((p) => {
+    const heard = el("div", { className: "heard" });
+    const box = el("details", {},
+      el("summary", {},
+        el("div", {}, el("b", { textContent: p.name }),
+          el("small", { textContent: `${count(p.conversations, "conversation")} on ${count(p.days, "day")}, ${p.ms < 60000 ? "under a minute" : lengthOf(p.ms)} speaking` })),
+        el("div", { className: "share", title: `${lengthOf(p.ms)} speaking` }, el("i", { style: `width: ${Math.max(2, 100 * p.ms / most)}%` })),
+        el("time", { textContent: when(p.last), title: "Last heard" })),
+      heard);
+    box.addEventListener("toggle", async () => {
+      if (!box.open || heard.childElementCount) return;
+      let one;
+      try { one = await get(`/api/persons/${p.id}`); }
+      catch (err) { heard.replaceChildren(el("p", { className: "small", textContent: `Could not load. ${sentence(err.message)}` })); return; }
+      const said = el("button", { className: "copy", textContent: `Search what ${p.name} said` });
+      said.addEventListener("click", () => { const text = fromText(p.name); $("search").value = text; runSearch(text); });
+      heard.replaceChildren(said, el("ul", {}, ...one.conversations.map((t) => {
+        const go = el("button", { title: "Open this conversation" },
+          el("time", { textContent: when(t.start) }), el("span", { textContent: t.title || "Untitled conversation" }),
+          el("small", { textContent: t.ms < 60000 ? "under a minute" : lengthOf(t.ms) }));
+        go.addEventListener("click", () => openDay(t.day, null, t.id));
+        return el("li", {}, go);
+      })));
+    });
+    return box;
+  });
+  const total = all.reduce((sum, p) => sum + p.ms, 0);
+  main.replaceChildren(el("div", { className: "folk" },
+    el("p", { className: "lede", textContent: `${all.length === 1 ? "1 person" : `${all.length} people`} named, with ${lengthOf(total)} of speech between them.` }),
+    el("p", { className: "small", textContent: "Most recently heard first. Only lines that carry a name are counted: a name given in one recording does not yet carry to that voice elsewhere, so the real figures are higher." }),
+    ...rows));
+}
+
 async function showReminders() {
   leaveWelcome();
   document.title = "Lifelog, reminders";
   document.querySelector("header").classList.add("plain");
   reminding = true;
+  peopling = false;
   configuring = false;
   asking = false;
   $("ask").setAttribute("aria-pressed", "false");
+  $("who").setAttribute("aria-pressed", "false");
   visit("#reminders");
   $("remind").setAttribute("aria-pressed", "true");
   $("settings").setAttribute("aria-pressed", "false");
@@ -2395,17 +2492,19 @@ function reveal(id, mark) {
 }
 
 /* True while the day view is showing this day: answers that arrive after leaving it are dropped. */
-const onDay = (key) => day === key && !searching && !reminding && !configuring && !asking && !welcoming;
+const onDay = (key) => day === key && !searching && !reminding && !peopling && !configuring && !asking && !welcoming;
 
 async function openDay(key, revealId, revealTalk, startPlaying) {
   leaveWelcome();
   document.querySelector("header").classList.remove("plain");
   searching = false;
   reminding = false;
+  peopling = false;
   configuring = false;
   asking = false;
   $("ask").setAttribute("aria-pressed", "false");
   $("remind").setAttribute("aria-pressed", "false");
+  $("who").setAttribute("aria-pressed", "false");
   $("settings").setAttribute("aria-pressed", "false");
   $("search").value = "";
   day = key;
@@ -2460,10 +2559,12 @@ async function runSearch(query) {
   document.querySelector("header").classList.add("plain");
   searching = true;
   reminding = false;
+  peopling = false;
   configuring = false;
   asking = false;
   $("ask").setAttribute("aria-pressed", "false");
   $("remind").setAttribute("aria-pressed", "false");
+  $("who").setAttribute("aria-pressed", "false");
   $("settings").setAttribute("aria-pressed", "false");
   $("title").textContent = "Search";
   strip.replaceChildren();
@@ -2792,7 +2893,7 @@ async function watchJob() {
     if (showNext && !job.error) { day = showNext; showNext = null; }
     if (configuring) showSettings();
     try { days = await get("/api/days"); } catch { /* keep what we had */ }
-    if (!searching && !reminding && !configuring && !asking && !welcoming) openDay(day);
+    if (!searching && !reminding && !peopling && !configuring && !asking && !welcoming) openDay(day);
   } else if (job.error && job.error !== toldError) {
     toldError = job.error;  // an old failure is shown once, not on every visit to Settings
     say(withAdvice(job.error, job.advice), true);
@@ -2887,12 +2988,14 @@ async function showSettings() {
   document.querySelector("header").classList.add("plain");
   configuring = true;
   reminding = false;
+  peopling = false;
   searching = false;
   asking = false;
   $("ask").setAttribute("aria-pressed", "false");
   visit(`#settings/${settingsPane}`);
   $("settings").setAttribute("aria-pressed", "true");
   $("remind").setAttribute("aria-pressed", "false");
+  $("who").setAttribute("aria-pressed", "false");
   $("title").textContent = "Settings";
   strip.replaceChildren();
   let now;
@@ -3299,7 +3402,7 @@ function showAsk(question) {
   leaveWelcome();
   document.title = "Lifelog, ask";
   asking = true;
-  searching = false; reminding = false; configuring = false;
+  searching = false; reminding = false; peopling = false; configuring = false;
   visit("#ask");
   for (const [id, on] of [["ask", true], ["remind", false], ["settings", false]]) $(id).setAttribute("aria-pressed", String(on));
   $("title").textContent = "Ask";
@@ -3471,6 +3574,8 @@ function showAsk(question) {
 $("ask").addEventListener("click", () => asking ? openDay(day) : showAsk());
 
 for (const id of ["ask", "remind", "settings"]) $(id).prepend(icon(id === "remind" ? "reminders" : id, 16));
+$("who").prepend(icon("people", 16));
+$("who").addEventListener("click", () => peopling ? openDay(day) : showPeople());
 $("paused").prepend(icon("pause", 16));
 $("paused").addEventListener("click", () => { settingsPane = "pendant"; showSettings(); });
 /* Show on every page when audio is not being kept: it is easy to forget. */
@@ -3545,6 +3650,7 @@ function quickDraw() {
   const dayName = (key) => (key.slice(0, 4) === String(new Date().getFullYear()) ? thisYearDay : longDay).format(new Date(dayStart(key)));
   const pages = [
     ["Latest day", dayName(latest), () => openDay(latest)],
+    ["People", "", () => showPeople()],
     ["Reminders", "", () => showReminders()],
     ["Ask", "", () => showAsk()],
     ["Settings", "", () => showSettings()],
@@ -3687,7 +3793,7 @@ $("search").addEventListener("keydown", (e) => {
 document.addEventListener("keydown", (e) => {
   const typing = e.target.matches("input, textarea");
   // Escape goes back to the day, but not out of a field with something typed in it (search aside).
-  if (e.key === "Escape" && (searching || reminding || configuring || asking) && (!typing || e.target.id === "search")) { openDay(day); return; }
+  if (e.key === "Escape" && (searching || reminding || peopling || configuring || asking) && (!typing || e.target.id === "search")) { openDay(day); return; }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === "/") { e.preventDefault(); openQuick(); }
   else if (e.shiftKey && track && e.key === "ArrowLeft") jumpTo(position() - 10);
@@ -3700,7 +3806,7 @@ document.addEventListener("keydown", (e) => {
 /* New lines arrive while `limitful watch` runs; pick them up quietly. */
 setInterval(async () => {
   showPaused();
-  if (searching || reminding || configuring || asking || welcoming || document.hidden || !day) return;
+  if (searching || reminding || peopling || configuring || asking || welcoming || document.hidden || !day) return;
   const at = day;
   try {
     days = await get("/api/days");
@@ -3728,6 +3834,7 @@ window.addEventListener("hashchange", () => {
   arriving = true;  // every view sets the address before its first wait
   if (/^\d{4}-\d{2}-\d{2}$/.test(where)) openDay(where, id && Number(id));
   else if (where === "reminders") showReminders();
+  else if (where === "people") showPeople();
   else if (where === "settings") { if (id) settingsPane = id; showSettings(); }
   else if (where === "ask") showAsk();
   else if (where === "welcome") showWelcome();
@@ -3749,6 +3856,7 @@ window.addEventListener("hashchange", () => {
     : days.length ? days[days.length - 1].day : dayKey(new Date());
   await openDay(start, hashId && Number(hashId));
   if (hashDay === "reminders") showReminders();
+  if (hashDay === "people") showPeople();
   if (hashDay === "settings") { if (hashId) settingsPane = hashId; showSettings(); }
   if (hashDay === "ask") showAsk();
   showDemoBar();

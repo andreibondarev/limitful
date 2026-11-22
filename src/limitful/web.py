@@ -894,6 +894,12 @@ class Library:
         return [{"name": name, "lines": lines, "last": last}
                 for name, lines, last in self._with_store(lambda store: store.named_speakers())]
 
+    def people_page(self) -> list[dict]:
+        return self._with_store(lambda store: store.people())
+
+    def person(self, speaker_id: int) -> dict:
+        return self._with_store(lambda store: store.person(speaker_id))
+
     def set_reminder_status(self, reminder_id: int, status: str) -> None:
         self._with_store(lambda store: store.set_reminder_status(reminder_id, status))
 
@@ -989,6 +995,11 @@ def make_handler(library: Library):
                 found = re.match(r"^/api/chats/(\d+)$", path)
                 if found:
                     return self._json(library.chat(int(found.group(1))))
+                if path == "/api/persons":
+                    return self._json(library.people_page())
+                found = re.match(r"^/api/persons/(\d+)$", path)
+                if found:
+                    return self._json(library.person(int(found.group(1))))
                 if path == "/api/search":
                     asked = parse_qs(url.query)
                     query, by = asked.get("q", [""])[0].strip(), asked.get("by", [""])[0].strip() or None

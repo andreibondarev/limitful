@@ -897,6 +897,66 @@ class Store:
             "LEFT JOIN utterances u ON u.speaker_id = s.id "
             "GROUP BY s.id ORDER BY COUNT(u.id) DESC, s.id").fetchall()
 
+    def _named_lines(self, speaker_id: int | None = None) -> list[tuple[int, str, int, int, int | None]]:
+        """(speaker id, name, start, end, conversation id or None) for every line of a named
+        person, oldest first. A line belongs to the titled conversation whose span holds it."""
+        from bisect import bisect_right
+
+        talks = self.db.execute(
+            "SELECT start_ms, end_ms, id FROM conversations WHERE status = 'done' ORDER BY start_ms").fetchall()
+        starts = [talk[0] for talk in talks]
+        only, who = ("AND s.id = ? ", (speaker_id,)) if speaker_id is not None else ("", ())
+        out = []
+        for sid, name, start, end in self.db.execute(
+                "SELECT s.id, s.name, u.start_ms, u.end_ms FROM utterances u JOIN speakers s ON s.id = u.speaker_id "
+                "WHERE s.name NOT GLOB 'Speaker [0-9]*' " + only + "ORDER BY u.start_ms", who):
+            at = bisect_right(starts, start) - 1
+            talk = talks[at][2] if at >= 0 and start <= talks[at][1] else None
+            out.append((sid, name, start, end, talk))
+        return out
+
+    def people(self) -> list[dict]:
+        """Every person somebody named, most recently heard first: how much they said, in how
+        many conversations and on how many days, and when they were first and last heard.
+
+        Only lines carrying the name count. A name given in one recording does not carry to
+        that voice elsewhere, so these are floors, not totals.
+        """
+        found: dict[int, dict] = {}
+        for sid, name, start, end, talk in self._named_lines():
+            p = found.setdefault(sid, {"id": sid, "name": name, "lines": 0, "ms": 0, "first": start, "last": start,
+                                       "talks": set(), "days": set()})
+            p["lines"] += 1
+            p["ms"] += max(0, end - start)
+            p["last"] = max(p["last"], start)
+            if talk is not None:
+                p["talks"].add(talk)
+            p["days"].add(datetime.fromtimestamp(start / 1000).strftime("%Y-%m-%d"))
+        return [
+            {"id": p["id"], "name": p["name"], "lines": p["lines"], "ms": p["ms"], "first": p["first"],
+             "last": p["last"], "conversations": len(p["talks"]), "days": len(p["days"])}
+            for p in sorted(found.values(), key=lambda p: (-p["last"], p["name"]))]
+
+    def person(self, speaker_id: int) -> dict:
+        """One named person: the conversations they were heard in, newest first, with how long
+        they spoke in each."""
+        row = self.db.execute("SELECT name FROM speakers WHERE id = ?", (speaker_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"there is no speaker {speaker_id}")
+        spoke: dict[int, list[int]] = {}
+        for _sid, _name, start, end, talk in self._named_lines(speaker_id):
+            if talk is not None:
+                entry = spoke.setdefault(talk, [0, 0])
+                entry[0] += max(0, end - start)
+                entry[1] += 1
+        talks = []
+        for cid, (ms, lines) in spoke.items():
+            start, end, title = self.db.execute(
+                "SELECT start_ms, end_ms, title FROM conversations WHERE id = ?", (cid,)).fetchone()
+            talks.append({"id": cid, "title": title, "start": start, "end": end, "ms": ms, "lines": lines,
+                          "day": datetime.fromtimestamp(start / 1000).strftime("%Y-%m-%d")})
+        return {"id": speaker_id, "name": row[0], "conversations": sorted(talks, key=lambda t: -t["start"])}
+
     def named_speakers(self) -> list[tuple[str, int, int | None]]:
         """(name, lines, when last heard) for every speaker somebody named, most recently heard first.
 

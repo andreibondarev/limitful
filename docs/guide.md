@@ -66,6 +66,13 @@ opens quick find (below); its "Search everything" row lists every hit across
 all days, each with the words marked, the line before and
 after, and the conversation it is from.
 
+**People.** The People button lists everyone you have named, most recently
+heard first, with how many conversations and days each was heard in and how
+long they spoke. Open a person for those conversations, or to search what
+they said. Only lines that carry the name are counted, and a name given in
+one recording does not yet carry to that voice elsewhere, so the figures are
+floors.
+
 **Quick find.** Click the search box, or press ⌘K (Ctrl+K on Linux and Windows) or `/` anywhere, for one box
 that goes places. Type a date ("yesterday", "12 nov", "thursday", "march
 2025") to open that day, the start of "reminders", "ask" or "settings" to go

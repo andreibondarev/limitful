@@ -101,6 +101,20 @@ def test_search_can_be_kept_to_one_named_person(site):
     assert json.loads(site("/api/search?q=&by=%25")[2]) == []
 
 
+def test_people_are_listed_with_where_each_was_heard(site):
+    assert json.loads(site("/api/persons")[2]) == []  # nobody named yet: "Speaker 1" is not a name
+    site("/api/speakers/1", JSON, b'{"name": "Andrei"}')
+    people = json.loads(site("/api/persons")[2])
+    (andrei,) = people  # Joseph is named but has said nothing, so there is nothing to show for him
+    assert andrei["lines"] >= 1 and andrei["ms"] > 0 and andrei["days"] == 1 and andrei["first"] <= andrei["last"]
+    assert andrei["conversations"] == 1
+    one = json.loads(site(f"/api/persons/{andrei['id']}")[2])
+    assert one["name"] == "Andrei"
+    (talk,) = one["conversations"]
+    assert (talk["title"], talk["day"]) == ("Shopping and a call", "2026-11-13") and talk["ms"] > 0 and talk["lines"] >= 1
+    assert site("/api/persons/999999")[0] == 400
+
+
 def test_audio_supports_ranges(site):
     path = json.loads(site("/api/day/2026-11-13")[2])[0]["audio"]
     status, headers, body = site(path)
