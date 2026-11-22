@@ -461,6 +461,20 @@ def _summarizer(args):
         raise PendantError(str(err)) from None
 
 
+async def _cmd_mcp(args) -> int:
+    from . import mcp_server
+
+    data_dir = Path(args.data_dir).resolve()
+    if args.config:
+        # The same Python that runs this, by its full path: the app that starts the server has no idea where it lives.
+        print(mcp_server.describe(data_dir, [sys.executable, "-m", "limitful"]))
+        return 0
+    if not (data_dir / "pendant.db").is_file():
+        raise PendantError(f"there is no Lifelog in {data_dir} yet")
+    await mcp_server.build(data_dir).run_stdio_async()
+    return 0
+
+
 async def _cmd_notes(args) -> int:
     from datetime import datetime, timedelta
 
@@ -820,7 +834,13 @@ def main(argv: list[str] | None = None) -> int:
                         "included (sends those days' titles and summaries to the provider)")
     p.set_defaults(func=_cmd_digest)
 
-    p = sub.add_parser("notes", help="write notes (decided, to do, still open) for a day's conversations")
+    p = sub.add_parser("mcp", help="let another app read the Lifelog: a Model Context Protocol server on stdin and stdout")
+    data_args(p)
+    p.add_argument("--config", action="store_true",
+                   help="print what to paste into the app's MCP settings, and stop")
+    p.set_defaults(func=_cmd_mcp)
+
+    p = sub.add_parser("notes", help="write notes for a day's conversations: what each came to, and what is still to do")
     data_args(p)
     llm_args(p)
     p.add_argument("day", nargs="+", help="the day or days, as YYYY-MM-DD")

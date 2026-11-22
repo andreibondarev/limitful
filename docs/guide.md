@@ -245,6 +245,44 @@ Once the index exists:
 
 How well it works was measured: see [Experiments](experiments.md#search-by-meaning).
 
+## Using it from other apps (MCP)
+
+Limitful can serve the Lifelog to an assistant over the Model Context
+Protocol, so that Claude Desktop, Claude Code, Cursor or any other MCP client
+can answer from what was said. Print the settings for your Lifelog:
+
+```
+uv run limitful mcp --config
+```
+
+and paste the result into the app's MCP settings (in Claude Desktop:
+Settings, Developer, Edit Config). In Claude Code, the same thing is:
+
+```
+claude mcp add limitful -- /path/to/limitful/.venv/bin/python3 -m limitful mcp
+```
+
+with the path that `--config` printed. The app starts the server itself when
+it needs it; the Lifelog page does not have to be open.
+
+The assistant gets eight tools, and every one only reads:
+
+| Tool | What it answers |
+|---|---|
+| `limitful_overview` | What the Lifelog holds, and the most recent days |
+| `limitful_get_day` | A day's recap, conversations with their notes, and open reminders |
+| `limitful_list_conversations` | The conversations in a range of dates |
+| `limitful_read_conversation` | A conversation's transcript, 250 lines at a time |
+| `limitful_search_lines` | Lines containing given words or names |
+| `limitful_search_meaning` | Moments about a subject, once that index is built |
+| `limitful_list_reminders` | Reminders, open or otherwise |
+| `limitful_list_people` | The people you have named |
+
+Nothing is changed through it: no reminder is kept or dismissed, nothing is
+renamed or deleted. But whatever a tool returns goes to the app that asked and
+on to the model that app uses, so connect only apps you would hand your
+transcripts to. A hosted assistant sees every line it reads.
+
 ## The pendant, from the app
 
 The Lifelog's Settings page has a Pendant section:

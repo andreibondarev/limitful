@@ -28,6 +28,7 @@ https://github.com/user-attachments/assets/4c651f8a-7ab8-4a4d-a4d8-974244b0b999
   behind the answer.
 - **Imports your Limitless export**: transcripts, audio and reminders.
 - **Takes other recordings**: drop any audio file on the page, or let it bring in the Voice Memos your Mac syncs from your iPhone.
+- **Works with other apps**: an MCP server lets an assistant such as Claude search and read your Lifelog.
 - **Pendant controls**: battery, storage, light, pause, pair and unpair.
 
 ## Install

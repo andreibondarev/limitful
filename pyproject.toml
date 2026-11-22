@@ -18,6 +18,8 @@ dependencies = [
     "onnxruntime>=1.17",
     "tokenizers>=0.15",
     "huggingface-hub>=0.23",
+    # The Model Context Protocol server (`limitful mcp`), so other apps can read the Lifelog.
+    "mcp>=1.12",
 ]
 
 [project.urls]
