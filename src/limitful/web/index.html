@@ -262,6 +262,15 @@
     padding: 0.2rem 0.7rem; cursor: pointer; font-size: 0.85rem;
   }
   #all:hover, .copy:hover { border-color: var(--accent); color: var(--accent); }
+  /* Choosing conversations to delete: a tick box before each time, and the row above acts on those ticked. */
+  .tools { flex-wrap: wrap; row-gap: 0.5rem; }
+  .tools .copy:disabled { opacity: 0.5; cursor: default; border-color: var(--rule); color: inherit; }
+  .tools .away:hover:not(:disabled), .tools .danger { border-color: var(--bad); color: var(--bad); }
+  .tools .danger:hover:not(:disabled) { background: var(--bad); color: var(--paper); }
+  .tools .asking { flex: 1 1 16rem; max-width: 46ch; color: var(--ink); font-size: 0.9rem; line-height: 1.4; }
+  .tools .asking.failed { color: var(--bad); }
+  .talks.picking { --gutter: 6.4rem; }
+  .pick { width: 1rem; height: 1rem; margin: 0 0.6rem 0 0; vertical-align: -0.18rem; accent-color: var(--accent); cursor: pointer; }
   /* The day: conversations on the left, the day at a glance on the right. */
   .daygrid { display: grid; grid-template-columns: minmax(0, 1fr) 21rem; gap: 3.5rem; align-items: start; }
   .daygrid.solo { grid-template-columns: minmax(0, 1fr); }
@@ -800,6 +809,7 @@
 
   @media (max-width: 560px) {
     :root { --gutter: 4.4rem; }
+    .talks.picking { --gutter: 6rem; }
     .line span, .turn p { font-size: 1.08rem; }
   }
   /* On a phone the header scrolls away with the page: it is too tall to pin. */
@@ -945,6 +955,10 @@ let threads = [];     // saved threads: [{ id, title, updated, questions }]
 let chatBusy = false;
 let groups = [];              // the day's conversation cards
 const openCards = new Set();  // cards the reader has opened, kept across refreshes
+/* Choosing several conversations to delete at once: the day they are chosen on, the keys of
+   those ticked, and what to redraw when a tick changes. Null when not choosing. */
+let picking = null;  // { day, keys: Set, watch: [fn], trouble: "" }
+const tickChanged = () => { if (picking) { picking.trouble = ""; picking.watch.forEach((redraw) => redraw()); } };
 const TALK_GAP_MS = 300000;   // a silence this long separates unsummarised conversations
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -1948,9 +1962,23 @@ function scraps(run) {
   const first = clock.format(new Date(run[0].start)), last = clock.format(new Date(run[run.length - 1].start));
   const said = run.map((g) => g.own.map((u) => u.text).join(" ")).join(" · ");
   const key = `s${run[0].key}`;
+  const all = picking ? el("input", { type: "checkbox", className: "pick", ariaLabel: `Select ${run.length === 1 ? "this short moment" : `these ${run.length} short moments`}` }) : null;
+  if (all) {
+    const show = () => {
+      const ticked = run.filter((g) => picking.keys.has(g.key)).length;
+      all.checked = ticked === run.length;
+      all.indeterminate = ticked > 0 && ticked < run.length;
+    };
+    all.addEventListener("change", () => {
+      for (const g of run) { if (all.checked) picking.keys.add(g.key); else picking.keys.delete(g.key); }
+      tickChanged();
+    });
+    picking.watch.push(show);
+    show();
+  }
   const box = el("details", { className: "scraps" },
     el("summary", {},
-      el("span", {}),
+      el("span", {}, ...(all ? [all] : [])),
       el("span", {},
         el("b", { textContent: `${run.length} short moment${run.length === 1 ? "" : "s"}` }),
         ` ${run.length === 1 || first === last ? first : `${first} to ${last}`}`,
@@ -2019,6 +2047,76 @@ function people() {
   return [el("section", {}, el("h3", { textContent: "People" }), list)];
 }
 
+/* From when to when a conversation's lines run, as the server deletes it. */
+const spanOf = (g) => { const last = g.own[g.own.length - 1]; return [g.start, Math.max(g.end, last ? last.start : g.end)]; };
+
+/* After deleting: stop what was playing if it went, and show the day as it now is.
+   False if the reader has moved to another day meanwhile. */
+async function showWithout(gone) {
+  if (playing && gone.some((g) => g.own.some((u) => u.id === playing.id))) { $("audio")?.pause?.(); playing = null; track = null; }
+  gone.forEach((g) => openCards.delete(g.key));
+  const at = day;
+  days = await get("/api/days");
+  [lines, talks] = await Promise.all([get(`/api/day/${at}`), get(`/api/conversations/${at}`)]);
+  if (!onDay(at)) return false;
+  renderDay();
+  countReminders();
+  return true;
+}
+
+/* The row above a day's conversations: how many there are and "Open all"; or, after "Select",
+   how many are ticked and "Delete…" for those. Deleting asks first, in place, as it does for one. */
+function pickTools(count, toggleAll, stray) {
+  const row = el("div", { className: "tools" });
+  const make = (text, className, act) => { const b = el("button", { className, textContent: text }); b.addEventListener("click", act); return b; };
+  if (!picking) {
+    row.append(el("span", { textContent: count }), toggleAll,
+      make("Select", "copy", () => { picking = { day, keys: new Set(), watch: [], trouble: "" }; renderDay(); }));
+    return row;
+  }
+  const chosen = () => groups.filter((g) => picking.keys.has(g.key));
+  const draw = () => {
+    const n = picking.keys.size;
+    const remove = make("Delete…", "copy away", ask);
+    remove.disabled = !n;
+    row.replaceChildren(
+      el("span", { textContent: n ? `${n} selected` : "Tick what to delete" }),
+      n < groups.length
+        ? make("Select all", "copy", () => { groups.forEach((g) => picking.keys.add(g.key)); tickChanged(); })
+        : make("Select none", "copy", () => { picking.keys.clear(); tickChanged(); }),
+      remove,
+      make("Done", "copy", () => { picking = null; renderDay(); }),
+      ...(picking.trouble ? [el("span", { className: "asking failed", role: "alert", textContent: picking.trouble })] : []));
+  };
+  function ask() {
+    const going = chosen();
+    const moments = going.filter(stray).length, real = going.length - moments;
+    const what = [real && `${real} conversation${real === 1 ? "" : "s"}`, moments && `${moments} short moment${moments === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
+    const sure = make("Delete for good", "copy danger", async () => {
+      sure.disabled = no.disabled = true;
+      sure.textContent = "Deleting…";
+      try {
+        await post("/api/forget", { spans: going.map(spanOf) });
+      } catch (err) {
+        // Some may have gone before it stopped: show the day as it now is, still choosing.
+        picking.trouble = `Could not delete. ${sentence(err.message)}`;
+        try { await showWithout([]); } catch { draw(); }
+        return;
+      }
+      picking = null;
+      if (await showWithout(going)) sayDone(`Deleted ${what}.`);
+    });
+    const no = make("Cancel", "copy", draw);
+    row.replaceChildren(
+      el("span", { className: "asking", textContent: `Delete ${what}? ${going.length === 1 ? "Its" : "Their"} audio, lines, notes and reminders go, and cannot be brought back.` }),
+      sure, no);
+    no.focus();
+  }
+  picking.watch.push(draw);
+  draw();
+  return row;
+}
+
 function renderDay() {
   // The date is in the control beside it.
   $("title").textContent = "Lifelog";
@@ -2038,6 +2136,11 @@ function renderDay() {
     return;
   }
   groups = buildGroups();
+  if (picking && picking.day !== day) picking = null;  // choosing is for one day; leaving it ends it
+  if (picking) {
+    picking.watch = [];
+    picking.keys = new Set(groups.filter((g) => picking.keys.has(g.key)).map((g) => g.key));
+  }
   dayTint = tinter();
   const peopleList = people();  // first, so whoever spoke most gets first pick of colour
   drawStrip();
@@ -2077,7 +2180,7 @@ function renderDay() {
   const side = [talk, recap, ...followUps(), ...peopleList];
   const glance = el("aside", { className: "glance", ariaLabel: "This day at a glance" }, ...side);
   const grid = el("div", { className: "daygrid" },
-    el("div", { className: "talks" }, el("div", { className: "tools" }, el("span", { textContent: count }), toggleAll), ...rows),
+    el("div", { className: picking ? "talks picking" : "talks" }, pickTools(count, toggleAll, (g) => fold && stray(g)), ...rows),
     glance);
   main.replaceChildren(grid);
   // With nothing to put beside them, the conversations take the full width.
@@ -2307,6 +2410,16 @@ function card(g, longest = 0) {
       el("div", { className: "when" }, el("time", { textContent: clock.format(new Date(g.start)) }), length),
       el("div", {}, heading, about)),
     body);
+  if (picking) {
+    const tick = el("input", { type: "checkbox", className: "pick", ariaLabel: `Select ${g.title ? `“${g.title}”` : `the lines at ${clock.format(new Date(g.start))}`}` });
+    tick.addEventListener("change", () => {
+      if (tick.checked) picking.keys.add(g.key); else picking.keys.delete(g.key);
+      tickChanged();
+    });
+    picking.watch.push(() => { tick.checked = picking.keys.has(g.key); });
+    tick.checked = picking.keys.has(g.key);
+    box.firstChild.firstChild.prepend(tick);
+  }
   // The transcript is only built when the card is first opened: days can hold thousands of lines.
   const fill = () => { if (!body.childElementCount) { body.append(...cardBody(g)); markPlaying(); } };
   box.addEventListener("toggle", () => {
@@ -2390,17 +2503,9 @@ function deleteButton(g) {
       sure.disabled = no.disabled = true;
       sure.textContent = "Deleting…";
       try {
-        const last = g.own[g.own.length - 1];
-        await post("/api/forget", { start_ms: g.start, end_ms: Math.max(g.end, last ? last.start : g.end) });
-        if (playing && g.own.some((u) => u.id === playing.id)) { $("audio")?.pause?.(); playing = null; track = null; }
-        openCards.delete(g.key);
-        const at = day;
-        days = await get("/api/days");
-        [lines, talks] = await Promise.all([get(`/api/day/${at}`), get(`/api/conversations/${at}`)]);
-        if (!onDay(at)) return;
-        renderDay();
-        countReminders();
-        sayDone(g.id ? "Conversation deleted." : "Lines deleted.");
+        const [start_ms, end_ms] = spanOf(g);
+        await post("/api/forget", { start_ms, end_ms });
+        if (await showWithout([g])) sayDone(g.id ? "Conversation deleted." : "Lines deleted.");
       } catch (err) {
         ask.textContent = `Could not delete. ${sentence(err.message)}`;
         sure.remove();

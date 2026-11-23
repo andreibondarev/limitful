@@ -85,3 +85,49 @@ def test_what_is_deleted_is_bounded(tmp_path):
         assert forget(store, 1000, 2000).lines == 0  # nothing there: nothing happens
     finally:
         store.close()
+
+
+def test_several_conversations_can_be_deleted_at_once(site, tmp_path):  # noqa: F811
+    (talk,) = json.loads(site("/api/conversations/2026-11-13")[2])
+    before = json.loads(site("/api/day/2026-11-13")[2])
+    later = [line for line in before if line["start"] > talk["end"]]
+    assert later  # the day also holds a recording an hour on, outside the conversation
+    spans = [[talk["start"], talk["end"]], [later[0]["start"], later[-1]["start"]]]
+
+    for bad in ({"spans": []}, {"spans": [[5]]}, {"spans": "all"}, {"spans": [[talk["start"], True]]},
+                {"spans": [spans[0], [talk["end"], talk["start"]]]},  # one bad stretch refuses them all
+                {"spans": [[n, n] for n in range(501)]}):
+        assert site("/api/forget", JSON, json.dumps(bad).encode())[0] == 400
+    assert json.loads(site("/api/day/2026-11-13")[2]) == before
+
+    status, _headers, body = site("/api/forget", JSON, json.dumps({"spans": spans}).encode())
+    gone = json.loads(body)
+    assert status == 200 and gone["conversations"] == 1 and gone["lines"] == len(before)
+    assert json.loads(site("/api/day/2026-11-13")[2]) == []
+    assert json.loads(site("/api/conversations/2026-11-13")[2]) == []
+    assert gone["recordings_removed"] + gone["recordings_silenced"] >= 2
+
+
+def test_a_failure_part_way_keeps_what_was_already_deleted_in_step(tmp_path, monkeypatch):
+    """If the second stretch cannot be deleted, the first is still gone from the written transcript."""
+    from limitful import forget as module
+
+    store = Store(tmp_path)
+    try:
+        real, seen = module._forget_span, []
+
+        def failing(store, start_ms, end_ms, days):
+            seen.append(start_ms)
+            if len(seen) == 2:
+                raise OSError("the file could not be rewritten")
+            return real(store, start_ms, end_ms, days)
+
+        monkeypatch.setattr(module, "_forget_span", failing)
+        written = []
+        monkeypatch.setattr(store, "write_transcript", written.append)
+        with pytest.raises(OSError):
+            module.forget_all(store, [(T0 + 5000, T0 + 6000), (T0, T0 + 1000)])
+        assert seen == [T0, T0 + 5000]  # earliest first
+        assert len(written) == 1  # the day the first stretch touched was written out again
+    finally:
+        store.close()

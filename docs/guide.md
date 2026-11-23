@@ -72,7 +72,10 @@ its entries in search, and the audio. A recording that runs past the
 conversation has that part replaced with silence, so the rest keeps its
 timing. What is deleted stays deleted: syncing the pendant again does not
 bring it back. There is no undo, and it is refused while something else is
-running.
+running. To delete several at once, click **Select** above the day's
+conversations, tick the ones to go (the box on a row of short moments ticks
+all of them), then **Delete…**. It asks once for the lot. Choosing is for one
+day at a time and ends when you leave the day or click **Done**.
 
 **People.** The People button lists everyone you have named, most recently
 heard first, with how many conversations and days each was heard in and how

@@ -252,14 +252,14 @@ class Library:
             "voice_memos": dict(state, enabled=enabled, since=since, program=voicememos.program()),
         }
 
-    def forget(self, start_ms: int, end_ms: int) -> dict:
-        """Delete what was said in a stretch, and its audio. Not while a job is rewriting lines."""
-        from .forget import forget
+    def forget(self, spans: list[tuple[int, int]]) -> dict:
+        """Delete what was said in each stretch, and its audio. Not while a job is rewriting lines."""
+        from .forget import forget_all
 
         with self._lock:
             if self.job["running"]:
                 raise RuntimeError("Something is already running. Wait for it to finish.")
-        gone = self._with_store(lambda store: forget(store, start_ms, end_ms))
+        gone = self._with_store(lambda store: forget_all(store, spans))
         return {"lines": gone.lines, "conversations": gone.conversations,
                 "recordings_removed": gone.recordings_removed, "recordings_silenced": gone.recordings_silenced}
 
@@ -1047,14 +1047,19 @@ def make_handler(library: Library):
             if path == "/api/recordings":
                 return self._recording()
             if path == "/api/forget":
-                # Delete a stretch for good: {"start_ms": ..., "end_ms": ...}.
+                # Delete for good: one stretch as {"start_ms": ..., "end_ms": ...}, or several
+                # as {"spans": [[start_ms, end_ms], ...]}.
                 try:
-                    length = max(0, min(int(self.headers.get("Content-Length") or 0), 4096))
+                    length = max(0, min(int(self.headers.get("Content-Length") or 0), 65536))
                     body = json.loads(self.rfile.read(length) or b"{}")
-                    span = [body.get(key) if isinstance(body, dict) else None for key in ("start_ms", "end_ms")]
-                    if any(isinstance(ms, bool) or not isinstance(ms, int) or ms < 0 for ms in span):
+                    body = body if isinstance(body, dict) else {}
+                    spans = body["spans"] if "spans" in body else [[body.get("start_ms"), body.get("end_ms")]]
+                    if not isinstance(spans, list) or not spans or any(
+                            not isinstance(span, list) or len(span) != 2
+                            or any(isinstance(ms, bool) or not isinstance(ms, int) or ms < 0 for ms in span)
+                            for span in spans):
                         raise ValueError("say when it starts and ends")
-                    return self._json(library.forget(*span))
+                    return self._json(library.forget([(start, end) for start, end in spans]))
                 except RuntimeError as err:
                     return self._text(HTTPStatus.CONFLICT, str(err))
                 except (ValueError, OSError, sqlite3.Error) as err:

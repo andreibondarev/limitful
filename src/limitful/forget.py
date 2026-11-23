@@ -17,7 +17,8 @@ from pathlib import Path
 
 from .store import Store
 
-MAX_SPAN_MS = 24 * 60 * 60 * 1000  # one request never takes more than a day
+MAX_SPAN_MS = 24 * 60 * 60 * 1000  # one stretch is never more than a day
+MAX_SPANS = 500  # one request never deletes more stretches than this
 
 
 @dataclass(frozen=True)
@@ -71,13 +72,43 @@ def silence(path: Path, from_s: float, to_s: float) -> None:
 
 def forget(store: Store, start_ms: int, end_ms: int) -> Forgotten:
     """Delete everything said from `start_ms` to `end_ms`, both included, and its audio."""
-    if end_ms < start_ms:
-        raise ValueError("the end is before the start")
-    if end_ms - start_ms > MAX_SPAN_MS:
-        raise ValueError("that is more than a day; delete it a day at a time")
+    return forget_all(store, [(start_ms, end_ms)])
+
+
+def forget_all(store: Store, spans: list[tuple[int, int]]) -> Forgotten:
+    """Delete several stretches, each as `forget` does, and say what went in total.
+
+    Every stretch is checked before any is touched. If one then fails part way (an audio
+    file that cannot be rewritten), the ones before it stay deleted and the error is raised.
+    """
+    if len(spans) > MAX_SPANS:
+        raise ValueError(f"that is more than {MAX_SPANS} at once; delete fewer at a time")
+    for start_ms, end_ms in spans:
+        if end_ms < start_ms:
+            raise ValueError("the end is before the start")
+        if end_ms - start_ms > MAX_SPAN_MS:
+            raise ValueError("that is more than a day; delete it a day at a time")
+    total, days = Forgotten(), set()
+    try:
+        for start_ms, end_ms in sorted(spans):
+            gone = _forget_span(store, start_ms, end_ms, days)
+            total = Forgotten(total.lines + gone.lines, total.conversations + gone.conversations,
+                              total.recordings_removed + gone.recordings_removed,
+                              total.recordings_silenced + gone.recordings_silenced)
+    finally:
+        for each in sorted(days):
+            store.write_transcript(each)
+        if days:
+            from . import search
+
+            search.update_if_built(store)  # drops the deleted lines from search by meaning
+    return total
+
+
+def _forget_span(store: Store, start_ms: int, end_ms: int, days: set[str]) -> Forgotten:
+    """Delete one stretch from the store and the disk, adding the days it touched to `days`."""
     db = store.db
     day = lambda ms: datetime.fromtimestamp(ms / 1000).strftime("%Y-%m-%d")  # noqa: E731
-    days = {day(start_ms), day(end_ms)}
 
     # The audio first: if a file cannot be rewritten, nothing else has been touched.
     removed, silenced, from_pendant = [], 0, False
@@ -119,11 +150,7 @@ def forget(store: Store, start_ms: int, end_ms: int) -> Forgotten:
         db.execute("INSERT INTO pauses (start_ms, end_ms) VALUES (?, ?)", (start_ms, end_ms))
     db.execute("DELETE FROM day_recaps WHERE day IN (?, ?)", (day(start_ms), day(end_ms)))  # it may say what was deleted
     db.commit()
+    days.update((day(start_ms), day(end_ms)))
     for _path, file in removed:
         file.unlink(missing_ok=True)
-    for each in sorted(days):
-        store.write_transcript(each)
-    from . import search
-
-    search.update_if_built(store)  # drops the deleted lines from search by meaning
     return Forgotten(lines, len(talks), len(removed), silenced)
